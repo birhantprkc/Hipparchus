@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from xml.etree.ElementTree import Element, ElementTree, SubElement
 
-from hipparchus.export.profiles import ExportDiagnostics
+from hipparchus.export.profiles import ExportDiagnostics, SVGExportProfile
 from hipparchus.rendering.geometry_adapter import geometry_to_svg_path_data
 from hipparchus.rendering.models import RenderScene
 
@@ -39,12 +39,29 @@ class CleanSVGExporter:
         destination: Path,
         width: int = 4096,
         height: int = 4096,
+        profile: SVGExportProfile | None = None,
     ) -> ExportDiagnostics:
-        diagnostics = ExportDiagnostics(mode="clean")
+        profile = profile or SVGExportProfile(mode="clean")
+        diagnostics = ExportDiagnostics(mode=profile.mode, export_profile=profile.mode)
 
         # Compute scene bounds and transform for lat/lon -> pixel coordinates
         bounds = self._compute_scene_bounds(scene)
         transform = self._compute_fit_transform(bounds, width, height) if bounds else None
+        diagnostics.bounds = bounds
+        diagnostics.crs = dict(scene.metadata.get("projection", {})) if isinstance(scene.metadata.get("projection"), dict) else {}
+        diagnostics.source_metadata = dict(scene.metadata)
+        diagnostics.clipped_geometries = int(scene.diagnostics.get("clipped_geometries", 0))
+        diagnostics.smoothed_geometries = int(scene.diagnostics.get("smoothed_geometries", 0))
+        diagnostics.invalid_geometries_fixed = int(scene.diagnostics.get("invalid_geometries", 0))
+        diagnostics.composition = {
+            "paper_preset": profile.composition.paper_preset,
+            "orientation": profile.composition.orientation,
+            "include_title": profile.composition.include_title,
+            "include_scale_bar": profile.composition.include_scale_bar,
+            "include_north_arrow": profile.composition.include_north_arrow,
+            "include_legend": profile.composition.include_legend,
+            "margin_ratio": profile.composition.margin_ratio,
+        }
 
         svg = Element(
             "svg",
@@ -56,9 +73,18 @@ class CleanSVGExporter:
                 "viewBox": f"0 0 {width} {height}",
             },
         )
+        if scene.metadata:
+            svg.set("data-hipparchus-quality", str(scene.metadata.get("quality_profile", "")))
+            projection = scene.metadata.get("projection")
+            if isinstance(projection, dict):
+                svg.set("data-hipparchus-crs", str(projection.get("render_crs", "")))
+        svg.set("data-hipparchus-paper", profile.composition.paper_preset)
+        svg.set("data-hipparchus-orientation", profile.composition.orientation)
+
+        map_group = SubElement(svg, "g", {"id": "map_layers"})
 
         for layer in scene.layers:
-            group = SubElement(svg, "g", {"id": layer.name, "opacity": _fmt_float(layer.style.opacity)})
+            group = SubElement(map_group, "g", {"id": _svg_id(layer.name), "data-layer-name": layer.name, "opacity": _fmt_float(layer.style.opacity)})
             if not layer.style.visible:
                 group.set("display", "none")
 
@@ -70,6 +96,27 @@ class CleanSVGExporter:
             )
 
             layer_paths = 0
+            geometries = list(layer.geometries)
+            if layer.style.casing_width > 0 and geometries:
+                casing_group = SubElement(group, "g", {"id": f"{_svg_id(layer.name)}_casing"})
+                casing_stroke = _color_to_hex(layer.style.casing_color.r, layer.style.casing_color.g, layer.style.casing_color.b)
+                for geometry in geometries:
+                    if transform:
+                        geometry = self._transform_geometry(geometry, transform)
+                    for path_data in geometry_to_svg_path_data(geometry, precision=self.precision):
+                        SubElement(
+                            casing_group,
+                            "path",
+                            {
+                                "d": path_data,
+                                "fill": "none",
+                                "stroke": casing_stroke,
+                                "stroke-width": _fmt_float(layer.style.casing_width),
+                                "vector-effect": "non-scaling-stroke",
+                                "stroke-linejoin": "round",
+                                "stroke-linecap": "round",
+                            },
+                        )
             for geometry in layer.geometries:
                 # Transform geometry coordinates if needed
                 if transform:
@@ -87,7 +134,7 @@ class CleanSVGExporter:
                             "stroke-width": _fmt_float(layer.style.stroke_width),
                             "vector-effect": "non-scaling-stroke",
                             "stroke-linejoin": "round",
-                            "stroke-linecap": "round",
+                            "stroke-linecap": "round" if layer.style.line_cap == "round" else "butt",
                         },
                     )
                 layer_paths += len(paths)
@@ -95,9 +142,195 @@ class CleanSVGExporter:
             diagnostics.layer_path_counts[layer.name] = layer_paths
             diagnostics.total_paths += layer_paths
 
+            if profile.include_labels and layer.labels:
+                label_group = SubElement(group, "g", {"id": f"{_svg_id(layer.name)}_labels"})
+                label_count = 0
+                for label in layer.labels:
+                    x, y = (label.x, label.y)
+                    if transform:
+                        x, y = transform.apply(label.x, label.y)
+                    attrs = {
+                        "x": _fmt_float(x),
+                        "y": _fmt_float(y),
+                        "font-family": "Arial, Helvetica, sans-serif",
+                        "font-size": "12",
+                        "text-anchor": "middle",
+                        "dominant-baseline": "central",
+                    }
+                    halo = SubElement(label_group, "text", attrs | {
+                        "fill": _color_to_hex(layer.style.label_halo_color.r, layer.style.label_halo_color.g, layer.style.label_halo_color.b),
+                        "stroke": _color_to_hex(layer.style.label_halo_color.r, layer.style.label_halo_color.g, layer.style.label_halo_color.b),
+                        "stroke-width": _fmt_float(layer.style.label_halo_width),
+                        "stroke-linejoin": "round",
+                    })
+                    halo.text = label.name
+                    text = SubElement(label_group, "text", attrs | {
+                        "fill": _color_to_hex(layer.style.stroke_color.r, layer.style.stroke_color.g, layer.style.stroke_color.b),
+                        "stroke": "none",
+                    })
+                    text.text = label.name
+                    label_count += 1
+                diagnostics.layer_label_counts[layer.name] = label_count
+
+        self._add_composition_furniture(svg, scene, width, height, transform, profile)
+
         destination.parent.mkdir(parents=True, exist_ok=True)
         ElementTree(svg).write(destination, encoding="utf-8", xml_declaration=True)
         return diagnostics
+
+    def _add_composition_furniture(
+        self,
+        svg: Element,
+        scene: RenderScene,
+        width: int,
+        height: int,
+        transform: _Transform | None,
+        profile: SVGExportProfile,
+    ) -> None:
+        composition = profile.composition
+        if not any((composition.include_title, composition.include_scale_bar, composition.include_north_arrow, composition.include_legend)):
+            return
+
+        group = SubElement(svg, "g", {"id": "map_furniture"})
+        margin = max(18.0, min(width, height) * max(0.02, min(0.18, composition.margin_ratio)))
+        text_color = "#222222"
+        halo = "#ffffff"
+
+        if composition.include_title and (composition.title or composition.subtitle):
+            title_group = SubElement(group, "g", {"id": "map_title"})
+            title_y = margin
+            if composition.title:
+                title = SubElement(
+                    title_group,
+                    "text",
+                    {
+                        "x": _fmt_float(margin),
+                        "y": _fmt_float(title_y),
+                        "font-family": "Arial, Helvetica, sans-serif",
+                        "font-size": _fmt_float(max(18.0, min(width, height) * 0.028)),
+                        "font-weight": "700",
+                        "fill": text_color,
+                    },
+                )
+                title.text = composition.title
+                title_y += max(18.0, min(width, height) * 0.032)
+            if composition.subtitle:
+                subtitle = SubElement(
+                    title_group,
+                    "text",
+                    {
+                        "x": _fmt_float(margin),
+                        "y": _fmt_float(title_y),
+                        "font-family": "Arial, Helvetica, sans-serif",
+                        "font-size": _fmt_float(max(11.0, min(width, height) * 0.015)),
+                        "fill": "#555555",
+                    },
+                )
+                subtitle.text = composition.subtitle
+
+        if composition.include_north_arrow:
+            arrow_size = max(36.0, min(width, height) * 0.055)
+            cx = width - margin - arrow_size * 0.5
+            cy = margin + arrow_size * 0.55
+            arrow_group = SubElement(group, "g", {"id": "north_arrow"})
+            points = [
+                (cx, cy - arrow_size * 0.55),
+                (cx - arrow_size * 0.22, cy + arrow_size * 0.28),
+                (cx, cy + arrow_size * 0.12),
+                (cx + arrow_size * 0.22, cy + arrow_size * 0.28),
+            ]
+            SubElement(
+                arrow_group,
+                "polygon",
+                {
+                    "points": " ".join(f"{_fmt_float(x)},{_fmt_float(y)}" for x, y in points),
+                    "fill": text_color,
+                    "stroke": halo,
+                    "stroke-width": _fmt_float(max(1.0, arrow_size * 0.035)),
+                    "stroke-linejoin": "round",
+                },
+            )
+            north = SubElement(
+                arrow_group,
+                "text",
+                {
+                    "x": _fmt_float(cx),
+                    "y": _fmt_float(cy + arrow_size * 0.62),
+                    "font-family": "Arial, Helvetica, sans-serif",
+                    "font-size": _fmt_float(max(10.0, arrow_size * 0.24)),
+                    "font-weight": "700",
+                    "text-anchor": "middle",
+                    "fill": text_color,
+                },
+            )
+            north.text = "N"
+
+        if composition.include_scale_bar and transform is not None:
+            scale_group = SubElement(group, "g", {"id": "scale_bar"})
+            bar_px = max(90.0, min(width, height) * 0.18)
+            world_distance = bar_px / max(transform.scale, 1e-9)
+            label = _format_distance(world_distance, scene)
+            x = margin
+            y = height - margin
+            SubElement(
+                scale_group,
+                "rect",
+                {
+                    "x": _fmt_float(x - 6),
+                    "y": _fmt_float(y - 28),
+                    "width": _fmt_float(bar_px + 12),
+                    "height": "38",
+                    "fill": "#ffffff",
+                    "opacity": "0.78",
+                },
+            )
+            SubElement(scale_group, "line", {"x1": _fmt_float(x), "y1": _fmt_float(y), "x2": _fmt_float(x + bar_px), "y2": _fmt_float(y), "stroke": text_color, "stroke-width": "3"})
+            SubElement(scale_group, "line", {"x1": _fmt_float(x), "y1": _fmt_float(y - 8), "x2": _fmt_float(x), "y2": _fmt_float(y + 8), "stroke": text_color, "stroke-width": "2"})
+            SubElement(scale_group, "line", {"x1": _fmt_float(x + bar_px), "y1": _fmt_float(y - 8), "x2": _fmt_float(x + bar_px), "y2": _fmt_float(y + 8), "stroke": text_color, "stroke-width": "2"})
+            text = SubElement(
+                scale_group,
+                "text",
+                {
+                    "x": _fmt_float(x + bar_px * 0.5),
+                    "y": _fmt_float(y - 12),
+                    "font-family": "Arial, Helvetica, sans-serif",
+                    "font-size": "12",
+                    "text-anchor": "middle",
+                    "fill": text_color,
+                },
+            )
+            text.text = label
+
+        if composition.include_legend:
+            visible_layers = [layer for layer in scene.layers if layer.style.visible and (layer.geometries or layer.labels)]
+            legend_layers = visible_layers[:10]
+            if legend_layers:
+                legend_group = SubElement(group, "g", {"id": "map_legend"})
+                row_h = 20.0
+                legend_w = min(260.0, width * 0.32)
+                legend_h = 22.0 + row_h * len(legend_layers)
+                x = width - margin - legend_w
+                y = height - margin - legend_h
+                SubElement(
+                    legend_group,
+                    "rect",
+                    {
+                        "x": _fmt_float(x),
+                        "y": _fmt_float(y),
+                        "width": _fmt_float(legend_w),
+                        "height": _fmt_float(legend_h),
+                        "fill": "#ffffff",
+                        "opacity": "0.84",
+                        "stroke": "#d0d0d0",
+                    },
+                )
+                for index, layer in enumerate(legend_layers):
+                    row_y = y + 18.0 + row_h * index
+                    stroke = _color_to_hex(layer.style.stroke_color.r, layer.style.stroke_color.g, layer.style.stroke_color.b)
+                    fill = _color_to_hex(layer.style.fill_color.r, layer.style.fill_color.g, layer.style.fill_color.b) if layer.style.fill_enabled else "none"
+                    SubElement(legend_group, "rect", {"x": _fmt_float(x + 12), "y": _fmt_float(row_y - 10), "width": "18", "height": "10", "fill": fill, "stroke": stroke, "stroke-width": "1"})
+                    item = SubElement(legend_group, "text", {"x": _fmt_float(x + 38), "y": _fmt_float(row_y), "font-family": "Arial, Helvetica, sans-serif", "font-size": "11", "fill": text_color})
+                    item.text = _legend_label(layer.name)
 
     @staticmethod
     def _compute_scene_bounds(scene: RenderScene) -> tuple[float, float, float, float] | None:
@@ -190,3 +423,56 @@ def _color_to_hex(r: int, g: int, b: int) -> str:
 def _fmt_float(value: float) -> str:
     text = f"{value:.6f}".rstrip("0").rstrip(".")
     return text if text else "0"
+
+
+def _svg_id(value: str) -> str:
+    return "".join(ch if ch.isalnum() or ch in {"_", "-"} else "_" for ch in value)
+
+
+def _format_distance(world_units: float, scene: RenderScene) -> str:
+    value = abs(world_units)
+    projection = scene.metadata.get("projection")
+    render_crs = ""
+    if isinstance(projection, dict):
+        render_crs = str(projection.get("render_crs", ""))
+    if render_crs == "EPSG:4326":
+        if value >= 1.0:
+            return f"{value:.2f} deg"
+        return f"{value:.4f} deg"
+    if value >= 1000.0:
+        km = value / 1000.0
+        if km >= 10.0:
+            return f"{km:.0f} km"
+        return f"{km:.1f} km"
+    if value >= 1.0:
+        return f"{value:.0f} m"
+    return f"{value:.2f} units"
+
+
+def _legend_label(layer_name: str) -> str:
+    labels = {
+        "roads_motorway": "Motorways",
+        "roads_trunk": "Trunk Roads",
+        "roads_primary": "Primary Roads",
+        "roads_secondary": "Secondary Roads",
+        "roads_tertiary": "Tertiary Roads",
+        "roads_residential": "Residential Roads",
+        "roads_service": "Service Roads",
+        "roads_other": "Other Roads",
+        "roads": "Roads",
+        "buildings": "Buildings",
+        "water": "Water",
+        "parks": "Parks",
+        "forests": "Forests",
+        "fields": "Fields",
+        "natural": "Natural Areas",
+        "coastline": "Coastline",
+        "railways": "Railways",
+        "places": "Places",
+        "shops": "Shops",
+        "amenities": "Amenities",
+        "landuse": "Land Use",
+        "terrain_contours": "Terrain Contours",
+        "admin_boundaries": "Admin Boundaries",
+    }
+    return labels.get(layer_name, layer_name.replace("_", " ").title())

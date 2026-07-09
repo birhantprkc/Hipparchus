@@ -173,9 +173,9 @@ During fetch:
 - Hipparchus builds a render scene.
 - The canvas updates.
 
-### Online-Only Behavior
+### Default Online Behavior
 
-Hipparchus does not use local OSM files. It uses Overpass API endpoints only.
+Hipparchus uses Overpass by default. Hipparchus 2 can also use configured local map-model sources such as GeoJSON, local OSM PBF, Natural Earth, Overture, vector-source exports, and terrain contour files.
 
 The default endpoint is:
 
@@ -189,6 +189,47 @@ Fallback endpoints are tried automatically if the first server fails:
 https://lz4.overpass-api.de/api/interpreter
 https://z.overpass-api.de/api/interpreter
 https://overpass.kumi.systems/api/interpreter
+```
+
+### Map Models And Local Sources
+
+The top bar includes a `Model` dropdown. `OSM Live` is the default and uses Overpass. Other models can use local source paths configured in the right sidebar:
+
+- `OSM Local`: local `.osm.pbf` when `osmium` is installed.
+- `Vector Tiles`: accepts GeoJSON/JSON exports directly and can decode MBTiles/MVT or PMTiles when optional map packages are installed.
+- `Natural Earth Atlas`: accepts GeoJSON/JSON directly and shapefiles when `fiona` is installed.
+- `Overture Places/Buildings`: accepts local GeoParquet when `pyarrow` is installed.
+- `Terrain Relief`: accepts contour/elevation GeoJSON/JSON directly and can extract contours from local GeoTIFF DEM files when `rasterio` and `scikit-image` are installed.
+- `Hybrid Atlas`: combines configured sources and falls back gracefully when optional sources are unavailable.
+
+You can also set source paths before launching:
+
+```bash
+HIPPARCHUS_LOCAL_OSM_PBF=/path/to/extract.osm.pbf
+HIPPARCHUS_VECTOR_TILES=/path/to/vector-source.geojson
+HIPPARCHUS_NATURAL_EARTH=/path/to/natural-earth.geojson
+HIPPARCHUS_OVERTURE=/path/to/overture.parquet
+HIPPARCHUS_TERRAIN_DEM=/path/to/contours.geojson
+```
+
+If a selected local model is not configured yet, Hipparchus reports provider status and keeps the app usable instead of failing startup.
+
+This machine also has local sample datasets installed in the repository:
+
+```bash
+HIPPARCHUS_VECTOR_TILES=datasets/pmtiles/firenze.pmtiles
+HIPPARCHUS_VECTOR_TILES=datasets/mbtiles/hipparchus_demo.mbtiles
+HIPPARCHUS_NATURAL_EARTH=datasets/natural_earth
+HIPPARCHUS_OVERTURE=datasets/overture/demo_overture_places_buildings.parquet
+HIPPARCHUS_TERRAIN_DEM=datasets/dem/athens_z11_1158_790.tif
+```
+
+The right sidebar `Source Library` selector can apply these source/model/AOI combinations without typing paths. Use `Apply Source Preset` to configure the source, or `Apply + Fetch Source Preset` to configure and render immediately.
+
+Install all optional map-source backends with:
+
+```bash
+python3 -m pip install --user "hipparchus[maps]"
 ```
 
 ### Why Fetches Can Fail
@@ -208,12 +249,16 @@ The best fix is usually to reduce the area and selected layers.
 
 The top bar has a `Quality` dropdown:
 
-- `preview`: optimized for interactive use.
-- `export`: intended for higher-quality geometry processing.
+- `Fast Preview`: optimized for interactive use.
+- `High Preview`: projected geometry with smoother screen rendering.
+- `Clean Export`: full-quality SVG-oriented scene settings.
+- `Print Export`: maximum precision SVG-oriented scene settings.
 
-Use `preview` while exploring. Use `export` when preparing a final SVG if performance allows it.
+Use `Fast Preview` while exploring. Use `High Preview` when judging visual quality on screen. Use `Clean Export` or `Print Export` before exporting final SVG artwork if performance allows it.
 
 Large AOIs are automatically sampled more aggressively to keep the preview responsive.
+
+Hipparchus 2 quality profiles also record projection, smoothing, clipping, layer counts, path counts, and source metadata in export diagnostics.
 
 ## 9. Presets
 
@@ -420,7 +465,8 @@ The right sidebar includes diagnostics:
 
 - Enable diagnostics logging.
 - Log path display.
-- Performance summary after fetches.
+- `Explain This Map` summary after fetches.
+- Copy and save buttons for the current diagnostics text.
 
 The default log path is:
 
@@ -428,7 +474,7 @@ The default log path is:
 ~/.hipparchus/cache/hipparchus_debug.log
 ```
 
-Diagnostics include fetch time, build time, layer counts, geometry counts, bounds, and cache state.
+Diagnostics include source, quality profile, CRS/projection, fetch/build time, layer counts, geometry counts, busiest layers, bounds, cache state, and warnings.
 
 ## 16. Cache
 
@@ -485,7 +531,7 @@ buildings
 water
 parks
 places
-voronoi_cells
+terrain_contours
 ```
 
 ### SVG Design Notes
@@ -497,6 +543,8 @@ Hipparchus exports:
 - Fill and stroke colors from the active style.
 - Non-scaling strokes.
 - Standard SVG path commands.
+- Optional map furniture from the right sidebar: title block, scale bar, north arrow, and simple legend.
+- Paper presets including canvas, square, A4, A3, and poster.
 
 The SVG export is designed to remain friendly to Illustrator and other vector-editing tools.
 

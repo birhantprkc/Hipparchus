@@ -8,7 +8,7 @@ from hipparchus.data_sources.provider import FeatureCollection
 
 
 class RenderSceneBuilderTests(unittest.TestCase):
-    def test_build_generates_base_and_derived_layers(self) -> None:
+    def test_build_generates_base_layers_without_experimental_derivatives(self) -> None:
         fc = FeatureCollection(
             geojson_by_layer={
                 "roads": {
@@ -57,11 +57,64 @@ class RenderSceneBuilderTests(unittest.TestCase):
         scene = RenderSceneBuilder().build(fc, preset.geometry_profile, preset.style_profile, "preview")
         names = [layer.name for layer in scene.layers]
 
-        # Check for roads or any road sub-type
         road_names = {"roads", "roads_motorway", "roads_trunk", "roads_primary", "roads_secondary",
                       "roads_tertiary", "roads_residential", "roads_service", "roads_other"}
         self.assertTrue(any(name in road_names for name in names), f"Expected road layer in {names}")
         self.assertIn("buildings", names)
+        self.assertNotIn("voronoi_cells", names)
+
+    def test_derived_layers_remain_available_for_future_experimental_mode(self) -> None:
+        fc = FeatureCollection(
+            geojson_by_layer={
+                "roads": {
+                    "type": "FeatureCollection",
+                    "features": [
+                        {
+                            "type": "Feature",
+                            "geometry": {"type": "LineString", "coordinates": [[0, 0], [10, 10]]},
+                            "properties": {},
+                        },
+                        {
+                            "type": "Feature",
+                            "geometry": {"type": "LineString", "coordinates": [[0, 10], [10, 0]]},
+                            "properties": {},
+                        },
+                    ],
+                },
+                "buildings": {
+                    "type": "FeatureCollection",
+                    "features": [
+                        {
+                            "type": "Feature",
+                            "geometry": {
+                                "type": "Polygon",
+                                "coordinates": [[[2, 2], [4, 2], [4, 4], [2, 2]]],
+                            },
+                            "properties": {},
+                        },
+                        {
+                            "type": "Feature",
+                            "geometry": {
+                                "type": "Polygon",
+                                "coordinates": [[[6, 6], [8, 6], [8, 8], [6, 6]]],
+                            },
+                            "properties": {},
+                        },
+                    ],
+                },
+            },
+            bbox=(0.0, 0.0, 10.0, 10.0),
+        )
+
+        preset = default_preset("Urban Structure")
+        experimental_profile = GeometryPipelineProfile(
+            simplify_tolerance_preview=preset.geometry_profile.simplify_tolerance_preview,
+            simplify_tolerance_export=preset.geometry_profile.simplify_tolerance_export,
+            derive_voronoi=True,
+        )
+        scene = RenderSceneBuilder().build(fc, experimental_profile, preset.style_profile, "preview")
+        names = [layer.name for layer in scene.layers]
+
         self.assertIn("voronoi_cells", names)
 
     def test_small_buildings_do_not_collapse_under_preview_simplification(self) -> None:

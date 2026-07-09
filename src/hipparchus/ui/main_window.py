@@ -20,11 +20,12 @@ from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 from hipparchus.application.controller import ApplicationController
-from hipparchus.application.presets import ArtisticPreset, QualityMode, default_preset, preset_names
+from hipparchus.application.presets import ArtisticPreset, GeometryPipelineProfile, QualityMode, default_preset, preset_names
+from hipparchus.application.quality import quality_menu_labels, quality_mode_key, quality_profile
 from hipparchus.application.preset_store import PresetStore
 from hipparchus.core.config import AppConfig
 from hipparchus.data_sources.provider import BBoxQuery
-from hipparchus.export.profiles import SVGExportProfile
+from hipparchus.export.profiles import MapComposition, SVGExportProfile
 from hipparchus.export.service import SVGExporter
 from hipparchus.plugins.interfaces import LoadedPlugin
 from hipparchus.rendering.engine import Renderer
@@ -41,6 +42,95 @@ LOCATION_PRESETS: dict[str, tuple[float, float, float, float]] = {
 LEFT_SIDEBAR_WIDTH = 360
 RIGHT_SIDEBAR_WIDTH = 300
 SIDEBAR_CONTENT_PADDING = 10
+
+SOURCE_HELP: dict[str, str] = {
+    "local_osm_pbf": "Local .osm.pbf extract, or GeoJSON fallback.",
+    "vector_tiles": "PMTiles, MBTiles, MVT export, GeoJSON, or JSON.",
+    "natural_earth": "Folder of Natural Earth shapefiles, or a vector file.",
+    "overture": "GeoParquet places/buildings extract, GeoJSON, or JSON.",
+    "terrain_dem": "GeoTIFF DEM for contours, or contour GeoJSON/JSON.",
+}
+
+SAMPLE_SOURCE_PATHS: dict[str, str] = {
+    "vector_tiles": "datasets/pmtiles/firenze.pmtiles",
+    "natural_earth": "datasets/natural_earth",
+    "overture": "datasets/overture/demo_overture_places_buildings.parquet",
+    "terrain_dem": "datasets/dem/athens_z11_1158_790.tif",
+}
+
+
+@dataclass(slots=True, frozen=True)
+class SourceLibraryPreset:
+    """Friendly source preset layered over model/path/AOI settings."""
+
+    label: str
+    model_id: str
+    paths: dict[str, str] = field(default_factory=dict)
+    aoi: tuple[float, float, float, float] | None = None
+    quality_label: str | None = None
+    note: str = ""
+
+
+SOURCE_LIBRARY_PRESETS: tuple[SourceLibraryPreset, ...] = (
+    SourceLibraryPreset(
+        label="OSM Live",
+        model_id="osm_live",
+        note="Online Overpass source. Use any AOI.",
+    ),
+    SourceLibraryPreset(
+        label="Florence PMTiles",
+        model_id="vector_tiles",
+        paths={"vector_tiles": "datasets/pmtiles/firenze.pmtiles"},
+        aoi=(11.20, 43.73, 11.33, 43.82),
+        quality_label="High Preview",
+        note="Offline PMTiles vector sample.",
+    ),
+    SourceLibraryPreset(
+        label="Natural Earth World",
+        model_id="natural_earth_atlas",
+        paths={"natural_earth": "datasets/natural_earth"},
+        aoi=(-180.0, -85.0, 180.0, 85.0),
+        quality_label="High Preview",
+        note="Offline Natural Earth atlas-scale source.",
+    ),
+    SourceLibraryPreset(
+        label="Athens DEM",
+        model_id="terrain_relief",
+        paths={"terrain_dem": "datasets/dem/athens_z11_1158_790.tif"},
+        aoi=(23.5547, 37.8575, 23.7305, 37.9962),
+        quality_label="High Preview",
+        note="Offline GeoTIFF DEM contour source.",
+    ),
+    SourceLibraryPreset(
+        label="Athens Overture",
+        model_id="overture",
+        paths={"overture": "datasets/overture/demo_overture_places_buildings.parquet"},
+        aoi=(23.70, 37.96, 23.76, 38.01),
+        quality_label="High Preview",
+        note="Offline GeoParquet buildings/places fixture.",
+    ),
+    SourceLibraryPreset(
+        label="Installed Samples",
+        model_id="hybrid_atlas",
+        paths=SAMPLE_SOURCE_PATHS,
+        aoi=(23.5547, 37.8575, 23.7305, 37.9962),
+        quality_label="High Preview",
+        note="Loads every installed local sample path.",
+    ),
+    SourceLibraryPreset(
+        label="Custom",
+        model_id="osm_live",
+        note="Use the model dropdown and path fields manually.",
+    ),
+)
+
+PAPER_PRESETS: dict[str, tuple[int, int]] = {
+    "Canvas": (0, 0),
+    "Square 2048": (2048, 2048),
+    "A4": (2480, 3508),
+    "A3": (3508, 4961),
+    "Poster": (5400, 7200),
+}
 
 THEME_PALETTES: dict[str, dict[str, str]] = {
     "light": {
@@ -116,7 +206,23 @@ class MainWindow:
         self._status_var = tk.StringVar(value="Ready")
         self._cache_status_var = tk.StringVar(value="Cache: n/a")
         self._progress_label_var = tk.StringVar(value="Idle")
-        self._quality_var = tk.StringVar(value="preview")
+        self._provider_status_var = tk.StringVar(value="")
+        self._quality_var = tk.StringVar(value="Fast Preview")
+        self._source_library_var = tk.StringVar(value=SOURCE_LIBRARY_PRESETS[0].label)
+        self._source_library_note_var = tk.StringVar(value=SOURCE_LIBRARY_PRESETS[0].note)
+        self._paper_preset_var = tk.StringVar(value="Canvas")
+        self._paper_orientation_var = tk.StringVar(value="Landscape")
+        self._map_title_var = tk.StringVar(value="")
+        self._map_subtitle_var = tk.StringVar(value="")
+        self._include_title_var = tk.BooleanVar(value=False)
+        self._include_scale_bar_var = tk.BooleanVar(value=False)
+        self._include_north_arrow_var = tk.BooleanVar(value=False)
+        self._include_legend_var = tk.BooleanVar(value=False)
+        self._map_models = self.controller.data_source_manager.get_map_models()
+        self._map_model_label_to_id = {str(model["label"]): str(model["id"]) for model in self._map_models}
+        self._map_model_id_to_label = {str(model["id"]): str(model["label"]) for model in self._map_models}
+        active_model = self.controller.data_source_manager.get_active_map_model()
+        self._map_model_var = tk.StringVar(value=self._map_model_id_to_label.get(active_model, "OSM Live"))
         self._preset_var = tk.StringVar(value=self.default_preset.name)
         self._location_preset_var = tk.StringVar(value="London Center")
         self._location_query_var = tk.StringVar(value="")
@@ -126,7 +232,17 @@ class MainWindow:
         self._provider_endpoint_var = tk.StringVar(value=overpass_settings["endpoint"])
         self._provider_rps_var = tk.DoubleVar(value=overpass_settings["requests_per_second"])
         self._provider_timeout_var = tk.DoubleVar(value=overpass_settings["timeout_seconds"])
-        device_scale = getattr(self.renderer, "device_scale", 2.0)
+        optional_paths = self.controller.data_source_manager.get_optional_source_paths()
+        self._optional_source_vars = {
+            "local_osm_pbf": tk.StringVar(value=optional_paths.get("local_osm_pbf", "")),
+            "vector_tiles": tk.StringVar(value=optional_paths.get("vector_tiles", "")),
+            "natural_earth": tk.StringVar(value=optional_paths.get("natural_earth", "")),
+            "overture": tk.StringVar(value=optional_paths.get("overture", "")),
+            "terrain_dem": tk.StringVar(value=optional_paths.get("terrain_dem", "")),
+        }
+        device_scale = self._auto_device_scale()
+        if hasattr(self.renderer, "device_scale"):
+            setattr(self.renderer, "device_scale", device_scale)
         self._device_scale_var = tk.DoubleVar(value=float(device_scale))
 
         self._aoi_vars = {
@@ -276,8 +392,14 @@ class MainWindow:
 
         # Middle - Quality
         ttk.Label(controls, text="Quality:").pack(side="left", padx=(0, 4))
-        self._quality_menu = ttk.OptionMenu(controls, self._quality_var, "preview", "preview", "export")
+        quality_labels = quality_menu_labels()
+        self._quality_menu = ttk.OptionMenu(controls, self._quality_var, quality_labels[0], *quality_labels)
         self._quality_menu.pack(side="left", padx=(0, 8))
+
+        ttk.Label(controls, text="Model:").pack(side="left", padx=(0, 4))
+        model_labels = tuple(self._map_model_label_to_id.keys())
+        self._map_model_menu = ttk.OptionMenu(controls, self._map_model_var, self._map_model_var.get(), *model_labels)
+        self._map_model_menu.pack(side="left", padx=(0, 8))
 
         # Right side - Export
         ttk.Button(controls, text="Export SVG", command=self._on_export_clicked).pack(side="right")
@@ -296,6 +418,7 @@ class MainWindow:
         self._build_left_sidebar(left)
         self._build_center_canvas(center)
         self._build_right_sidebar(right)
+        self._provider_status_var.set(self._format_provider_status())
 
         statusbar = ttk.Frame(root, padding=(12, 6, 12, 8))
         statusbar.grid(row=2, column=0, columnspan=3, sticky="ew")
@@ -416,18 +539,6 @@ class MainWindow:
         ]
         self._populate_checkbutton_grid(parent, items=label_layers, columns=1, default=True)
 
-        ttk.Separator(parent, orient="horizontal").pack(fill="x", pady=(8, 4))
-        ttk.Label(parent, text="Derived Layers", font=("SF Pro Text", 10, "bold")).pack(anchor="w", pady=(0, 4))
-
-        # Derived layers
-        derived_layers = [
-            ("voronoi_cells", "Voronoi Cells"),
-            ("delaunay_mesh", "Delaunay Mesh"),
-            ("hex_grid", "Hex Grid"),
-            ("circle_packing", "Circle Packing"),
-        ]
-        self._populate_checkbutton_grid(parent, items=derived_layers, columns=2, default=False)
-
         ttk.Separator(parent, orient="horizontal").pack(fill="x", pady=(10, 6))
         ttk.Label(parent, textvariable=self._progress_label_var).pack(anchor="w")
         self._progress = ttk.Progressbar(parent, mode="indeterminate")
@@ -525,7 +636,8 @@ class MainWindow:
         span_lon = abs(aoi.max_lon - aoi.min_lon)
         span_lat = abs(aoi.max_lat - aoi.min_lat)
         area_deg2 = span_lon * span_lat
-        if area_deg2 > 0.02:
+        selected_quality = quality_profile(self._quality_var.get())
+        if area_deg2 > 0.02 and selected_quality.legacy_mode == "preview":
             preset_profile = replace(
                 preset_profile,
                 max_on_screen_features_per_layer=min(preset_profile.max_on_screen_features_per_layer, 1500),
@@ -533,6 +645,7 @@ class MainWindow:
             self._status_var.set("Large area detected: applying preview sampling")
         else:
             self._status_var.set("Fetching map data...")
+        preset_profile = self._cartographic_geometry_profile(preset_profile)
         self._set_busy("Fetching map data...")
         self._fetch_started_at = time.perf_counter()
         self._debug(
@@ -550,10 +663,11 @@ class MainWindow:
             aoi=aoi,
             layers=tuple(self._active_base_layers()),
             style_profile=preset.style_profile,
-            quality_mode=self._quality_var.get() if self._quality_var.get() in {"preview", "export"} else "preview",
+            quality_mode=quality_mode_key(self._quality_var.get()),
             geometry_profile=preset_profile,
             on_scene=self._queue_scene,
             on_error=self._queue_error,
+            map_model_id=self._selected_map_model_id(),
         )
 
     def _resolve_selected_preset(self) -> ArtisticPreset:
@@ -562,6 +676,15 @@ class MainWindow:
         if custom is not None:
             return custom
         return default_preset(selected)
+
+    def _cartographic_geometry_profile(self, profile: GeometryPipelineProfile) -> GeometryPipelineProfile:
+        return replace(
+            profile,
+            derive_voronoi=False,
+            derive_delaunay=False,
+            derive_hex_grid=False,
+            derive_circle_packing=False,
+        )
 
     def _load_custom_presets(self) -> dict[str, ArtisticPreset]:
         try:
@@ -629,6 +752,72 @@ class MainWindow:
 
         ttk.Button(parent, text="Apply Settings", command=self._apply_runtime_settings).pack(fill="x", pady=(8, 0))
 
+        ttk.Label(parent, text="Source Library", font=("SF Pro Text", 11, "bold")).pack(anchor="w", pady=(10, 6))
+        source_labels = tuple(preset.label for preset in SOURCE_LIBRARY_PRESETS)
+        ttk.OptionMenu(parent, self._source_library_var, self._source_library_var.get(), *source_labels).pack(fill="x", pady=(0, 4))
+        ttk.Button(parent, text="Apply Source Preset", command=self._apply_source_library_preset).pack(fill="x", pady=(0, 4))
+        ttk.Button(parent, text="Apply + Fetch Source Preset", command=self._apply_and_fetch_source_library_preset).pack(fill="x", pady=(0, 4))
+        ttk.Label(parent, textvariable=self._source_library_note_var, font=("SF Pro Text", 9), wraplength=280).pack(anchor="w", pady=(0, 6))
+
+        ttk.Label(parent, text="Map Sources", font=("SF Pro Text", 11, "bold")).pack(anchor="w", pady=(10, 6))
+        ttk.Label(
+            parent,
+            text="Optional local/offline sources. OSM Live works without these paths.",
+            font=("SF Pro Text", 9),
+            wraplength=280,
+        ).pack(anchor="w", pady=(0, 4))
+        ttk.Button(parent, text="Use Installed Sample Sources", command=self._use_installed_sample_sources).pack(fill="x", pady=(0, 6))
+        source_rows = (
+            ("Local OSM PBF", "local_osm_pbf"),
+            ("Vector Tiles", "vector_tiles"),
+            ("Natural Earth", "natural_earth"),
+            ("Overture", "overture"),
+            ("Terrain DEM", "terrain_dem"),
+        )
+        for label, provider_id in source_rows:
+            row = ttk.Frame(parent)
+            row.pack(fill="x", pady=2)
+            ttk.Label(row, text=label, width=13).pack(side="left")
+            ttk.Entry(row, textvariable=self._optional_source_vars[provider_id]).pack(side="left", fill="x", expand=True)
+            ttk.Button(row, text="...", width=3, command=lambda pid=provider_id: self._choose_source_path(pid)).pack(side="left", padx=(4, 0))
+            ttk.Label(
+                parent,
+                text=SOURCE_HELP[provider_id],
+                font=("SF Pro Text", 8),
+                wraplength=280,
+            ).pack(anchor="w", padx=(105, 0), pady=(0, 3))
+
+        ttk.Label(parent, text="Apply Settings after changing source paths.", font=("SF Pro Text", 9), wraplength=280).pack(anchor="w", pady=(4, 0))
+        ttk.Label(parent, textvariable=self._provider_status_var, justify="left", wraplength=280).pack(anchor="w", pady=(4, 0))
+
+        ttk.Separator(parent, orient="horizontal").pack(fill="x", pady=10)
+        ttk.Label(parent, text="Export Composition", font=("SF Pro Text", 11, "bold")).pack(anchor="w", pady=(0, 6))
+
+        row = ttk.Frame(parent)
+        row.pack(fill="x", pady=2)
+        ttk.Label(row, text="Paper", width=13).pack(side="left")
+        ttk.OptionMenu(row, self._paper_preset_var, self._paper_preset_var.get(), *PAPER_PRESETS.keys()).pack(side="left", fill="x", expand=True)
+
+        row = ttk.Frame(parent)
+        row.pack(fill="x", pady=2)
+        ttk.Label(row, text="Orientation", width=13).pack(side="left")
+        ttk.OptionMenu(row, self._paper_orientation_var, self._paper_orientation_var.get(), "Landscape", "Portrait").pack(side="left", fill="x", expand=True)
+
+        row = ttk.Frame(parent)
+        row.pack(fill="x", pady=2)
+        ttk.Label(row, text="Title", width=13).pack(side="left")
+        ttk.Entry(row, textvariable=self._map_title_var).pack(side="left", fill="x", expand=True)
+
+        row = ttk.Frame(parent)
+        row.pack(fill="x", pady=2)
+        ttk.Label(row, text="Subtitle", width=13).pack(side="left")
+        ttk.Entry(row, textvariable=self._map_subtitle_var).pack(side="left", fill="x", expand=True)
+
+        ttk.Checkbutton(parent, text="Include title block", variable=self._include_title_var).pack(anchor="w", pady=1)
+        ttk.Checkbutton(parent, text="Include scale bar", variable=self._include_scale_bar_var).pack(anchor="w", pady=1)
+        ttk.Checkbutton(parent, text="Include north arrow", variable=self._include_north_arrow_var).pack(anchor="w", pady=1)
+        ttk.Checkbutton(parent, text="Include simple legend", variable=self._include_legend_var).pack(anchor="w", pady=1)
+
         ttk.Separator(parent, orient="horizontal").pack(fill="x", pady=10)
         ttk.Label(parent, text="Presets", font=("SF Pro Text", 11, "bold")).pack(anchor="w", pady=(0, 6))
 
@@ -645,6 +834,12 @@ class MainWindow:
         ttk.Label(parent, text="Diagnostics", font=("SF Pro Text", 11, "bold")).pack(anchor="w", pady=(0, 6))
         ttk.Checkbutton(parent, text="Enable diagnostics logging", variable=self._debug_enabled_var).pack(anchor="w", pady=(0, 4))
         ttk.Label(parent, text=f"Log: {self._debug_log_file}").pack(anchor="w")
+        diag_actions = ttk.Frame(parent)
+        diag_actions.pack(fill="x", pady=(4, 0))
+        diag_actions.grid_columnconfigure(0, weight=1)
+        diag_actions.grid_columnconfigure(1, weight=1)
+        ttk.Button(diag_actions, text="Copy Diagnostics", command=self._copy_diagnostics).grid(row=0, column=0, sticky="ew", padx=(0, 3))
+        ttk.Button(diag_actions, text="Save Diagnostics", command=self._save_diagnostics).grid(row=0, column=1, sticky="ew", padx=(3, 0))
         ttk.Label(parent, textvariable=self._perf_summary_var, justify="left", wraplength=280).pack(anchor="w", pady=(4, 0))
 
     def _apply_runtime_settings(self) -> None:
@@ -659,12 +854,16 @@ class MainWindow:
             timeout_seconds=timeout_seconds,
             requests_per_second=rps,
         )
+        self.controller.data_source_manager.set_active_map_model(self._selected_map_model_id())
+        for provider_id, var in self._optional_source_vars.items():
+            self.controller.data_source_manager.set_optional_source_path(provider_id, var.get().strip() or None)
+        self._provider_status_var.set(self._format_provider_status())
         if hasattr(self.renderer, "device_scale"):
             setattr(self.renderer, "device_scale", device_scale)
         if hasattr(self.renderer, "set_label_font_size"):
             self.renderer.set_label_font_size(label_font_size)
 
-        self._status_var.set("Settings applied - Using Overpass data")
+        self._status_var.set(f"Settings applied - Model: {self._map_model_var.get()}")
 
     def _save_current_as_preset(self) -> None:
         name = self._new_preset_name_var.get().strip()
@@ -847,10 +1046,78 @@ class MainWindow:
                 bounds_text,
             )
             self._perf_summary_var.set(
-                "Fetch+build: "
-                f"{elapsed_ms:.1f} ms\nLayers: {len(scene.layers)} | Geometries: {geometry_count}\nBounds: {bounds_text}\nCache: {cache_state}"
+                self._scene_diagnostics_text(
+                    scene,
+                    elapsed_ms=elapsed_ms,
+                    geometry_count=geometry_count,
+                    bounds_text=bounds_text,
+                    cache_state=cache_state,
+                )
             )
         self._schedule_redraw()
+
+    def _scene_diagnostics_text(
+        self,
+        scene: RenderScene,
+        *,
+        elapsed_ms: float,
+        geometry_count: int,
+        bounds_text: str,
+        cache_state: str,
+    ) -> str:
+        diagnostics = scene.diagnostics or {}
+        layer_counts = sorted(
+            ((layer.name, len(layer.geometries)) for layer in scene.layers if layer.geometries),
+            key=lambda item: item[1],
+            reverse=True,
+        )
+        busy_layers = ", ".join(f"{name}:{count}" for name, count in layer_counts[:6]) or "none"
+        projection = diagnostics.get("projection", {})
+        crs = ""
+        if isinstance(projection, dict):
+            crs = str(projection.get("render_crs", projection.get("mode", "")))
+        quality = str(scene.metadata.get("quality_profile", diagnostics.get("quality_profile", "unknown")))
+        source = str(scene.metadata.get("source", "unknown"))
+        warnings: list[str] = []
+        if geometry_count == 0:
+            warnings.append("No drawable geometry for this AOI/layer selection.")
+        if int(diagnostics.get("invalid_geometries", 0) or 0) > 0:
+            warnings.append(f"Invalid geometries: {diagnostics.get('invalid_geometries')}")
+        warning_text = "\nWarnings: " + " ".join(warnings) if warnings else ""
+        return (
+            "Explain This Map\n"
+            f"Source: {source} | Quality: {quality}\n"
+            f"CRS: {crs or 'unknown'} | Cache: {cache_state}\n"
+            f"Fetch+build: {elapsed_ms:.1f} ms\n"
+            f"Layers: {len(scene.layers)} | Geometries: {geometry_count}\n"
+            f"Busiest: {busy_layers}\n"
+            f"Bounds: {bounds_text}"
+            f"{warning_text}"
+        )
+
+    def _copy_diagnostics(self) -> None:
+        text = self._perf_summary_var.get().strip()
+        if not text or text == "No diagnostics yet.":
+            messagebox.showinfo("Diagnostics", "No map diagnostics available yet.")
+            return
+        self._root.clipboard_clear()
+        self._root.clipboard_append(text)
+        self._status_var.set("Diagnostics copied")
+
+    def _save_diagnostics(self) -> None:
+        text = self._perf_summary_var.get().strip()
+        if not text or text == "No diagnostics yet.":
+            messagebox.showinfo("Diagnostics", "No map diagnostics available yet.")
+            return
+        target = filedialog.asksaveasfilename(
+            title="Save Diagnostics",
+            defaultextension=".txt",
+            filetypes=[("Text files", "*.txt"), ("All files", "*.*")],
+        )
+        if not target:
+            return
+        Path(target).write_text(text + "\n", encoding="utf-8")
+        self._status_var.set("Diagnostics saved")
 
     def _apply_location_aoi(self, payload: object) -> None:
         if not isinstance(payload, tuple) or len(payload) != 4:
@@ -1149,14 +1416,136 @@ class MainWindow:
         if not target:
             return
 
-        profile = SVGExportProfile(mode="clean", include_diagnostics=True)
+        selected_quality = quality_profile(self._quality_var.get())
+        export_mode = "print" if selected_quality.key == "export_print" else "clean"
+        profile = SVGExportProfile(
+            mode=export_mode,
+            include_diagnostics=True,
+            precision=selected_quality.svg_precision if selected_quality.legacy_mode == "export" else 4,
+            composition=self._export_composition(),
+        )
+        export_width, export_height = self._export_dimensions()
         exporter = SVGExporter(
             scene=self._current_scene,
-            width=max(1024, self._canvas.winfo_width()),
-            height=max(1024, self._canvas.winfo_height()),
+            width=export_width,
+            height=export_height,
         )
         diagnostics = exporter.export_with_profile(Path(target), profile=profile)
         self._status_var.set(f"Exported {diagnostics.total_paths} paths")
+
+    def _export_composition(self) -> MapComposition:
+        return MapComposition(
+            title=self._map_title_var.get().strip(),
+            subtitle=self._map_subtitle_var.get().strip(),
+            include_title=bool(self._include_title_var.get()),
+            include_scale_bar=bool(self._include_scale_bar_var.get()),
+            include_north_arrow=bool(self._include_north_arrow_var.get()),
+            include_legend=bool(self._include_legend_var.get()),
+            paper_preset=self._paper_preset_var.get(),
+            orientation=self._paper_orientation_var.get(),
+        )
+
+    def _export_dimensions(self) -> tuple[int, int]:
+        width, height = PAPER_PRESETS.get(self._paper_preset_var.get(), PAPER_PRESETS["Canvas"])
+        if width <= 0 or height <= 0:
+            width = max(1024, self._canvas.winfo_width())
+            height = max(1024, self._canvas.winfo_height())
+        orientation = self._paper_orientation_var.get()
+        if orientation == "Landscape" and height > width:
+            width, height = height, width
+        elif orientation == "Portrait" and width > height:
+            width, height = height, width
+        return (width, height)
+
+    def _auto_device_scale(self) -> float:
+        try:
+            scale = float(self._root.winfo_fpixels("1i")) / 72.0
+        except Exception:
+            scale = float(getattr(self.renderer, "device_scale", 1.0))
+        return max(1.0, min(4.0, scale))
+
+    def _selected_map_model_id(self) -> str:
+        return self._map_model_label_to_id.get(self._map_model_var.get(), "osm_live")
+
+    def _format_provider_status(self) -> str:
+        statuses = self.controller.data_source_manager.get_provider_statuses()
+        lines: list[str] = []
+        for provider_id in ("local_osm_pbf", "vector_tiles", "natural_earth", "overture", "terrain_dem"):
+            status = statuses.get(provider_id)
+            if status is None:
+                continue
+            mark = "ok" if status.available else "missing"
+            detail = f" - {status.detail}" if status.detail else ""
+            lines.append(f"{status.label}: {mark}{detail}")
+        return "\n".join(lines)
+
+    def _apply_source_library_preset(self) -> None:
+        preset = next(
+            (item for item in SOURCE_LIBRARY_PRESETS if item.label == self._source_library_var.get()),
+            SOURCE_LIBRARY_PRESETS[0],
+        )
+        self._source_library_note_var.set(preset.note)
+        if preset.label == "Custom":
+            self._status_var.set("Custom source mode: use model and path fields manually")
+            return
+
+        model_label = self._map_model_id_to_label.get(preset.model_id)
+        if model_label is not None:
+            self._map_model_var.set(model_label)
+
+        for provider_id, var in self._optional_source_vars.items():
+            var.set("")
+        root = self._repo_root()
+        missing: list[str] = []
+        for provider_id, relative_path in preset.paths.items():
+            candidate = root / relative_path
+            if candidate.exists():
+                self._optional_source_vars[provider_id].set(str(candidate))
+            else:
+                missing.append(relative_path)
+
+        if preset.aoi is not None:
+            self._set_aoi(*preset.aoi)
+        if preset.quality_label is not None:
+            self._quality_var.set(preset.quality_label)
+
+        self._apply_runtime_settings()
+        if missing:
+            messagebox.showwarning(
+                "Source preset",
+                "Some sample sources were not found:\n" + "\n".join(missing),
+            )
+        else:
+            self._status_var.set(f"Source preset applied: {preset.label}")
+
+    def _apply_and_fetch_source_library_preset(self) -> None:
+        self._apply_source_library_preset()
+        if self._source_library_var.get() != "Custom":
+            self._on_fetch_clicked()
+
+    def _use_installed_sample_sources(self) -> None:
+        self._source_library_var.set("Installed Samples")
+        self._apply_source_library_preset()
+
+    def _repo_root(self) -> Path:
+        return Path(__file__).resolve().parents[3]
+
+    def _choose_source_path(self, provider_id: str) -> None:
+        filetypes = {
+            "local_osm_pbf": [("OSM PBF", "*.osm.pbf"), ("GeoJSON/JSON", "*.geojson *.json"), ("All files", "*.*")],
+            "vector_tiles": [("Vector tile sources", "*.mbtiles *.pmtiles *.geojson *.json"), ("All files", "*.*")],
+            "natural_earth": [("Natural Earth/vector files", "*.shp *.gpkg *.geojson *.json"), ("All files", "*.*")],
+            "overture": [("Overture/GeoParquet", "*.parquet *.geojson *.json"), ("All files", "*.*")],
+            "terrain_dem": [("Terrain/contours", "*.tif *.tiff *.geojson *.json"), ("All files", "*.*")],
+        }.get(provider_id, [("All files", "*.*")])
+        if provider_id == "natural_earth":
+            selected = filedialog.askdirectory(title="Choose Natural Earth folder")
+            if not selected:
+                selected = filedialog.askopenfilename(title="Choose Natural Earth file", filetypes=filetypes)
+        else:
+            selected = filedialog.askopenfilename(title="Choose map source", filetypes=filetypes)
+        if selected:
+            self._optional_source_vars[provider_id].set(selected)
 
     def _toggle_theme(self) -> None:
         self._theme_mode = "dark" if self._theme_mode == "light" else "light"

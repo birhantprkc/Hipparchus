@@ -31,7 +31,16 @@ class SVGExporter:
         self.export_with_profile(destination=destination, profile=SVGExportProfile(mode="clean"))
 
     def export_with_profile(self, destination: Path, profile: SVGExportProfile) -> ExportDiagnostics:
-        diagnostics = CleanSVGExporter().export_scene(self.scene, destination, width=self.width, height=self.height)
+        precision = profile.precision
+        if precision is None:
+            precision = 6 if profile.mode == "print" else 4
+        diagnostics = CleanSVGExporter(precision=precision).export_scene(
+            self.scene,
+            destination,
+            width=self.width,
+            height=self.height,
+            profile=profile,
+        )
 
         if profile.include_diagnostics:
             diag_path = destination.with_suffix(destination.suffix + profile.diagnostics_file_suffix)

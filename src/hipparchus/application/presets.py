@@ -3,12 +3,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Literal
+
+from hipparchus.application.quality import QualityMode
 
 from hipparchus.rendering.models import LayerStyle, RGBAColor
-
-QualityMode = Literal["preview", "export"]
-
 
 @dataclass(slots=True, frozen=True)
 class GeometryPipelineProfile:
@@ -17,14 +15,15 @@ class GeometryPipelineProfile:
     simplify_tolerance_preview: float = 1.5
     simplify_tolerance_export: float = 0.6
     smoothing_iterations: int = 1
-    derive_voronoi: bool = True
-    derive_delaunay: bool = True
+    derive_voronoi: bool = False
+    derive_delaunay: bool = False
     derive_hex_grid: bool = False
     derive_circle_packing: bool = False
     hex_radius: float = 60.0
     circle_min_radius: float = 8.0
     circle_max_radius: float = 30.0
     max_on_screen_features_per_layer: int = 10000
+    layer_smoothing_iterations: dict[str, int] = field(default_factory=dict)
 
 
 @dataclass(slots=True, frozen=True)
@@ -75,8 +74,8 @@ def _preset_registry() -> dict[str, ArtisticPreset]:
             geometry_profile=GeometryPipelineProfile(
                 simplify_tolerance_preview=0.0,  # NO SIMPLIFICATION - raw OSM data
                 simplify_tolerance_export=0.0,  # NO SIMPLIFICATION - raw OSM data
-                derive_voronoi=True,
-                derive_delaunay=True,
+                derive_voronoi=False,
+                derive_delaunay=False,
                 derive_hex_grid=False,
                 derive_circle_packing=False,
                 max_on_screen_features_per_layer=200000,  # 200k features per layer - maximum detail
@@ -88,9 +87,9 @@ def _preset_registry() -> dict[str, ArtisticPreset]:
             geometry_profile=GeometryPipelineProfile(
                 simplify_tolerance_preview=0.0,  # NO SIMPLIFICATION
                 simplify_tolerance_export=0.0,  # NO SIMPLIFICATION
-                derive_voronoi=True,
-                derive_delaunay=True,
-                derive_hex_grid=True,
+                derive_voronoi=False,
+                derive_delaunay=False,
+                derive_hex_grid=False,
                 derive_circle_packing=False,
                 hex_radius=45.0,
                 max_on_screen_features_per_layer=200000,
@@ -102,10 +101,10 @@ def _preset_registry() -> dict[str, ArtisticPreset]:
             geometry_profile=GeometryPipelineProfile(
                 simplify_tolerance_preview=0.0,  # NO SIMPLIFICATION
                 simplify_tolerance_export=0.0,  # NO SIMPLIFICATION
-                derive_voronoi=True,
+                derive_voronoi=False,
                 derive_delaunay=False,
                 derive_hex_grid=False,
-                derive_circle_packing=True,
+                derive_circle_packing=False,
                 circle_min_radius=10.0,
                 circle_max_radius=36.0,
                 max_on_screen_features_per_layer=200000,
@@ -118,13 +117,102 @@ def _preset_registry() -> dict[str, ArtisticPreset]:
                 simplify_tolerance_preview=0.0,  # NO SIMPLIFICATION
                 simplify_tolerance_export=0.0,  # NO SIMPLIFICATION
                 derive_voronoi=False,
-                derive_delaunay=True,
-                derive_hex_grid=True,
+                derive_delaunay=False,
+                derive_hex_grid=False,
                 derive_circle_packing=False,
                 hex_radius=70.0,
                 max_on_screen_features_per_layer=200000,
             ),
             style_profile=StyleProfile(layer_styles=_blueprint_styles()),
+        ),
+        "Editorial Print": ArtisticPreset(
+            name="Editorial Print",
+            geometry_profile=GeometryPipelineProfile(
+                simplify_tolerance_preview=0.25,
+                simplify_tolerance_export=0.05,
+                smoothing_iterations=2,
+                derive_voronoi=False,
+                derive_delaunay=False,
+                max_on_screen_features_per_layer=240000,
+            ),
+            style_profile=StyleProfile(layer_styles=_editorial_print_styles()),
+        ),
+        "Clean Atlas": ArtisticPreset(
+            name="Clean Atlas",
+            geometry_profile=GeometryPipelineProfile(
+                simplify_tolerance_preview=0.35,
+                simplify_tolerance_export=0.08,
+                smoothing_iterations=1,
+                derive_voronoi=False,
+                derive_delaunay=False,
+                max_on_screen_features_per_layer=220000,
+            ),
+            style_profile=StyleProfile(layer_styles=_clean_atlas_styles()),
+        ),
+        "Soft Urban": ArtisticPreset(
+            name="Soft Urban",
+            geometry_profile=GeometryPipelineProfile(
+                simplify_tolerance_preview=0.2,
+                simplify_tolerance_export=0.04,
+                smoothing_iterations=1,
+                derive_voronoi=False,
+                derive_delaunay=False,
+                max_on_screen_features_per_layer=220000,
+            ),
+            style_profile=StyleProfile(layer_styles=_soft_urban_styles()),
+        ),
+        "Technical Blueprint": ArtisticPreset(
+            name="Technical Blueprint",
+            geometry_profile=GeometryPipelineProfile(
+                simplify_tolerance_preview=0.15,
+                simplify_tolerance_export=0.03,
+                smoothing_iterations=1,
+                derive_voronoi=False,
+                derive_delaunay=False,
+                derive_hex_grid=False,
+                hex_radius=70.0,
+                max_on_screen_features_per_layer=220000,
+            ),
+            style_profile=StyleProfile(layer_styles=_technical_blueprint_styles()),
+        ),
+        "Terrain Study": ArtisticPreset(
+            name="Terrain Study",
+            geometry_profile=GeometryPipelineProfile(
+                simplify_tolerance_preview=0.4,
+                simplify_tolerance_export=0.1,
+                smoothing_iterations=1,
+                derive_voronoi=False,
+                derive_delaunay=False,
+                derive_hex_grid=False,
+                derive_circle_packing=False,
+                max_on_screen_features_per_layer=200000,
+            ),
+            style_profile=StyleProfile(layer_styles=_terrain_study_styles()),
+        ),
+        "Monochrome Figure Ground": ArtisticPreset(
+            name="Monochrome Figure Ground",
+            geometry_profile=GeometryPipelineProfile(
+                simplify_tolerance_preview=0.12,
+                simplify_tolerance_export=0.02,
+                smoothing_iterations=1,
+                derive_voronoi=False,
+                derive_delaunay=False,
+                max_on_screen_features_per_layer=240000,
+            ),
+            style_profile=StyleProfile(layer_styles=_monochrome_figure_ground_styles()),
+        ),
+        "Coastal Survey": ArtisticPreset(
+            name="Coastal Survey",
+            geometry_profile=GeometryPipelineProfile(
+                simplify_tolerance_preview=0.15,
+                simplify_tolerance_export=0.03,
+                smoothing_iterations=2,
+                derive_voronoi=False,
+                derive_delaunay=False,
+                max_on_screen_features_per_layer=220000,
+                layer_smoothing_iterations={"coastline": 3, "water": 2},
+            ),
+            style_profile=StyleProfile(layer_styles=_coastal_survey_styles()),
         ),
     }
 
@@ -328,4 +416,86 @@ def _blueprint_styles() -> dict[str, LayerStyle]:
     styles["buildings"] = LayerStyle(stroke_width=1.0, fill_enabled=True, fill_color=RGBAColor(200, 220, 240, 255), stroke_color=RGBAColor(50, 110, 180), opacity=1.0)
     styles["hex_grid"] = LayerStyle(stroke_width=1.0, fill_enabled=False, stroke_color=RGBAColor(100, 150, 210), opacity=0.6)
     styles["voronoi_cells"] = LayerStyle(stroke_width=0.8, fill_enabled=False, stroke_color=RGBAColor(80, 140, 220), opacity=0.5)
+    return styles
+
+
+def _with_soft_road_caps(styles: dict[str, LayerStyle]) -> dict[str, LayerStyle]:
+    for name, style in styles.items():
+        if name == "roads" or name.startswith("roads_"):
+            style.line_cap = "round"
+            if style.casing_width <= 0:
+                style.casing_width = max(style.stroke_width + 1.2, style.stroke_width * 1.45)
+                style.casing_color = RGBAColor(235, 232, 224)
+    return styles
+
+
+def _editorial_print_styles() -> dict[str, LayerStyle]:
+    styles = _with_soft_road_caps(_osm_standard_styles())
+    styles["buildings"] = LayerStyle(stroke_width=0.55, fill_enabled=True, fill_color=RGBAColor(218, 214, 205), stroke_color=RGBAColor(156, 150, 140), opacity=1.0)
+    styles["water"] = LayerStyle(stroke_width=0.4, fill_enabled=True, fill_color=RGBAColor(187, 218, 229), stroke_color=RGBAColor(136, 181, 199), opacity=1.0)
+    styles["parks"] = LayerStyle(stroke_width=0.35, fill_enabled=True, fill_color=RGBAColor(207, 226, 190), stroke_color=RGBAColor(157, 183, 133), opacity=0.95)
+    styles["landuse"] = LayerStyle(stroke_width=0.25, fill_enabled=True, fill_color=RGBAColor(226, 222, 204, 180), stroke_color=RGBAColor(190, 184, 162), opacity=0.65)
+    styles["places"] = LayerStyle(stroke_width=0.0, fill_enabled=False, stroke_color=RGBAColor(28, 30, 34), label_halo_color=RGBAColor(255, 254, 248, 235), label_halo_width=2.4)
+    return styles
+
+
+def _clean_atlas_styles() -> dict[str, LayerStyle]:
+    styles = _with_soft_road_caps(_base_styles())
+    styles["roads_motorway"] = LayerStyle(stroke_width=4.8, fill_enabled=False, stroke_color=RGBAColor(232, 127, 88), casing_width=6.2, casing_color=RGBAColor(246, 239, 225), line_cap="round")
+    styles["roads_trunk"] = LayerStyle(stroke_width=4.2, fill_enabled=False, stroke_color=RGBAColor(230, 148, 92), casing_width=5.6, casing_color=RGBAColor(246, 239, 225), line_cap="round")
+    styles["roads_primary"] = LayerStyle(stroke_width=3.6, fill_enabled=False, stroke_color=RGBAColor(226, 166, 102), casing_width=5.0, casing_color=RGBAColor(246, 239, 225), line_cap="round")
+    styles["roads_residential"] = LayerStyle(stroke_width=1.8, fill_enabled=False, stroke_color=RGBAColor(248, 247, 242), casing_width=3.0, casing_color=RGBAColor(197, 193, 183), line_cap="round")
+    styles["buildings"] = LayerStyle(stroke_width=0.45, fill_enabled=True, fill_color=RGBAColor(204, 199, 190), stroke_color=RGBAColor(171, 164, 152), opacity=0.98)
+    styles["water"] = LayerStyle(stroke_width=0.25, fill_enabled=True, fill_color=RGBAColor(166, 207, 222), stroke_color=RGBAColor(120, 172, 191), opacity=1.0)
+    return styles
+
+
+def _soft_urban_styles() -> dict[str, LayerStyle]:
+    styles = _clean_atlas_styles()
+    styles["buildings"] = LayerStyle(stroke_width=0.3, fill_enabled=True, fill_color=RGBAColor(207, 203, 197), stroke_color=RGBAColor(188, 181, 172), opacity=0.82)
+    styles["parks"] = LayerStyle(stroke_width=0.25, fill_enabled=True, fill_color=RGBAColor(194, 220, 187), stroke_color=RGBAColor(148, 184, 136), opacity=0.78)
+    styles["voronoi_cells"] = LayerStyle(stroke_width=0.45, fill_enabled=False, stroke_color=RGBAColor(110, 110, 105), opacity=0.2)
+    return styles
+
+
+def _technical_blueprint_styles() -> dict[str, LayerStyle]:
+    styles = _blueprint_styles()
+    for name, style in styles.items():
+        if name == "roads" or name.startswith("roads_"):
+            style.line_cap = "round"
+            style.casing_width = max(style.casing_width, style.stroke_width + 1.0)
+            style.casing_color = RGBAColor(210, 231, 250)
+    styles["buildings"] = LayerStyle(stroke_width=0.85, fill_enabled=True, fill_color=RGBAColor(223, 239, 250, 210), stroke_color=RGBAColor(37, 87, 142), opacity=0.9)
+    styles["water"] = LayerStyle(stroke_width=0.6, fill_enabled=True, fill_color=RGBAColor(191, 224, 247, 230), stroke_color=RGBAColor(48, 112, 172), opacity=0.95)
+    return styles
+
+
+def _terrain_study_styles() -> dict[str, LayerStyle]:
+    styles = _with_soft_road_caps(_base_styles())
+    styles["water"] = LayerStyle(stroke_width=0.4, fill_enabled=True, fill_color=RGBAColor(149, 189, 205), stroke_color=RGBAColor(88, 136, 158), opacity=0.95)
+    styles["parks"] = LayerStyle(stroke_width=0.25, fill_enabled=True, fill_color=RGBAColor(185, 202, 158), stroke_color=RGBAColor(131, 152, 105), opacity=0.7)
+    styles["forests"] = LayerStyle(stroke_width=0.25, fill_enabled=True, fill_color=RGBAColor(145, 172, 121), stroke_color=RGBAColor(101, 130, 82), opacity=0.78)
+    styles["fields"] = LayerStyle(stroke_width=0.25, fill_enabled=True, fill_color=RGBAColor(219, 204, 158), stroke_color=RGBAColor(166, 148, 102), opacity=0.7)
+    styles["terrain_contours"] = LayerStyle(stroke_width=0.7, fill_enabled=False, stroke_color=RGBAColor(120, 105, 81), opacity=0.55)
+    return styles
+
+
+def _monochrome_figure_ground_styles() -> dict[str, LayerStyle]:
+    styles = _base_styles()
+    for name in list(styles.keys()):
+        styles[name] = LayerStyle(stroke_width=0.5, fill_enabled=False, stroke_color=RGBAColor(33, 33, 33), opacity=0.35)
+    styles["buildings"] = LayerStyle(stroke_width=0.0, fill_enabled=True, fill_color=RGBAColor(24, 24, 24), stroke_color=RGBAColor(24, 24, 24), opacity=1.0)
+    styles["water"] = LayerStyle(stroke_width=0.0, fill_enabled=True, fill_color=RGBAColor(232, 232, 232), stroke_color=RGBAColor(232, 232, 232), opacity=1.0)
+    styles["parks"] = LayerStyle(stroke_width=0.0, fill_enabled=True, fill_color=RGBAColor(242, 242, 242), stroke_color=RGBAColor(242, 242, 242), opacity=1.0)
+    styles["roads_residential"] = LayerStyle(stroke_width=1.2, fill_enabled=False, stroke_color=RGBAColor(255, 255, 255), casing_width=2.0, casing_color=RGBAColor(30, 30, 30), line_cap="round")
+    styles["places"] = LayerStyle(stroke_width=0.0, fill_enabled=False, stroke_color=RGBAColor(20, 20, 20), label_halo_color=RGBAColor(255, 255, 255, 245), label_halo_width=2.8)
+    return styles
+
+
+def _coastal_survey_styles() -> dict[str, LayerStyle]:
+    styles = _with_soft_road_caps(_base_styles())
+    styles["water"] = LayerStyle(stroke_width=0.5, fill_enabled=True, fill_color=RGBAColor(144, 190, 214), stroke_color=RGBAColor(48, 105, 140), opacity=1.0)
+    styles["coastline"] = LayerStyle(stroke_width=2.4, fill_enabled=False, stroke_color=RGBAColor(29, 84, 121), opacity=1.0, line_cap="round")
+    styles["buildings"] = LayerStyle(stroke_width=0.35, fill_enabled=True, fill_color=RGBAColor(214, 211, 201), stroke_color=RGBAColor(155, 151, 141), opacity=0.78)
+    styles["parks"] = LayerStyle(stroke_width=0.25, fill_enabled=True, fill_color=RGBAColor(185, 214, 172), stroke_color=RGBAColor(120, 166, 111), opacity=0.82)
     return styles

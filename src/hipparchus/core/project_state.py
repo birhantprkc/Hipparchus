@@ -25,6 +25,8 @@ class ProjectState:
     preset_name: str
     quality_mode: str
     layer_overrides: dict[str, dict[str, float | bool | str]] = field(default_factory=dict)
+    map_model_id: str = "osm_live"
+    optional_source_paths: dict[str, str] = field(default_factory=dict)
 
     def save(self, path: Path) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -44,4 +46,6 @@ class ProjectState:
             preset_name=preset_name,
             quality_mode=str(data.get("quality_mode", "preview")),
             layer_overrides=dict(data.get("layer_overrides", {})),
+            map_model_id=str(data.get("map_model_id", "osm_live")),
+            optional_source_paths={str(key): str(value) for key, value in dict(data.get("optional_source_paths", {})).items()},
         )

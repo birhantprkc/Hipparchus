@@ -33,6 +33,8 @@ env/
 .hipparchus/
 hipparchus_debug.log
 *.diagnostics.json
+datasets/*
+!datasets/README.md
 
 # Generated exports and temporary map outputs
 exports/

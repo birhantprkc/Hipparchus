@@ -42,6 +42,7 @@ class ApplicationController:
         geometry_profile: GeometryPipelineProfile,
         on_scene: SceneCallback,
         on_error: ErrorCallback,
+        map_model_id: str | None = None,
     ) -> None:
         """Run data pipeline asynchronously and callback with ready scene."""
         self._request_version += 1
@@ -58,7 +59,7 @@ class ApplicationController:
                     layers=layers,
                 )
                 # Use unified data source manager
-                feature_collection = self.data_source_manager.fetch(query)
+                feature_collection = self.data_source_manager.fetch(query, map_model_id=map_model_id)
                 t_fetch = time.perf_counter()
                 scene = self.scene_builder.build(
                     feature_collection=feature_collection,

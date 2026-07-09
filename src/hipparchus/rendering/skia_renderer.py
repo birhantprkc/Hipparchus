@@ -54,6 +54,7 @@ class SkiaRenderer:
     _lock: threading.RLock = field(default_factory=threading.RLock, init=False, repr=False)
     _last_drawn_paths: int = field(default=0, init=False, repr=False)
     _label_font_size: int = field(default=10, init=False, repr=False)
+    _last_render_diagnostics: dict[str, object] = field(default_factory=dict, init=False, repr=False)
 
     def set_scene(self, scene: RenderScene) -> None:
         with self._lock:
@@ -122,6 +123,16 @@ class SkiaRenderer:
             image = surface.makeImageSnapshot()
             data = image.encodeToData()
             png_bytes = bytes(data) if data is not None else b""
+            self._last_render_diagnostics = {
+                "width": width,
+                "height": height,
+                "device_scale": scale,
+                "pixel_width": pixel_width,
+                "pixel_height": pixel_height,
+                "drawn_paths": self._last_drawn_paths,
+                "scene_geometries": sum(len(layer.geometries) for layer in self.scene.layers),
+                "png_bytes": len(png_bytes),
+            }
             
             # Debug: check PNG content
             if len(png_bytes) < 10000:
@@ -324,8 +335,6 @@ class SkiaRenderer:
         except Exception:
             return
 
-        bg_paint = skia.Paint(AntiAlias=True, Color=skia.ColorSetARGB(180, 255, 255, 255))
-        text_paint = skia.Paint(AntiAlias=True, Color=skia.ColorSetARGB(255, 40, 40, 40))
         pad = 2.0
 
         # Pre-compute the world → screen transform (fit + viewport).
@@ -355,7 +364,7 @@ class SkiaRenderer:
 
         # Collect labels with their screen positions, then cull off-screen and
         # suppress overlapping labels so the map stays readable at every zoom.
-        entries: list[tuple[float, float, str]] = []
+        entries: list[tuple[float, float, str, Any]] = []
         for layer in self.scene.iter_visible_layers():
             if not layer.labels:
                 continue
@@ -366,7 +375,7 @@ class SkiaRenderer:
                 # Cull labels that are off-screen.
                 if sx < -100 or sx > width + 100 or sy < -100 or sy > height + 100:
                     continue
-                entries.append((sx, sy, str(label.name)))
+                entries.append((sx, sy, str(label.name), layer.style))
 
         # Simple overlap suppression: reject any label whose centre is too
         # close to an already-placed label.
@@ -374,7 +383,7 @@ class SkiaRenderer:
         min_gap_y = font_size * 1.6
         placed: list[tuple[float, float, float]] = []  # (cx, cy, half_w)
 
-        for sx, sy, text in entries:
+        for sx, sy, text, style in entries:
             tw = font.measureText(text)
             half_w = tw / 2.0
             # Check overlap with already-placed labels.
@@ -387,16 +396,20 @@ class SkiaRenderer:
                 continue
             placed.append((sx, sy, half_w))
 
-            # Draw background pill.
-            rect = skia.Rect.MakeXYWH(
-                sx - half_w - pad,
-                sy - font_size - pad,
-                tw + 2 * pad,
-                font_size + 2 * pad,
+            halo_color = style.label_halo_color
+            text_color = style.stroke_color
+            halo_paint = skia.Paint(
+                AntiAlias=True,
+                Style=skia.Paint.kStroke_Style,
+                StrokeWidth=max(1.0, style.label_halo_width),
+                Color=skia.ColorSetARGB(halo_color.a, halo_color.r, halo_color.g, halo_color.b),
             )
-            canvas.drawRect(rect, bg_paint)
-
-            # Draw text.
+            text_paint = skia.Paint(
+                AntiAlias=True,
+                Style=skia.Paint.kFill_Style,
+                Color=skia.ColorSetARGB(255, text_color.r, text_color.g, text_color.b),
+            )
+            canvas.drawString(text, sx - half_w, sy - 2, font, halo_paint)
             canvas.drawString(text, sx - half_w, sy - 2, font, text_paint)
 
     def _path_for_geometry(self, geometry: Any, skia: Any) -> Any | None:

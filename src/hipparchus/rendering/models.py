@@ -38,6 +38,8 @@ class LayerStyle:
     casing_color: RGBAColor = field(default_factory=lambda: RGBAColor(0, 0, 0, 255))
     # Line cap/join style: "round" or "butt"
     line_cap: str = "butt"
+    label_halo_color: RGBAColor = field(default_factory=lambda: RGBAColor(255, 255, 255, 230))
+    label_halo_width: float = 2.0
 
 
 @dataclass(slots=True)
@@ -90,6 +92,9 @@ class RenderScene:
     layers: list[RenderLayer] = field(default_factory=list)
     # Optional bbox for the scene (min_lon, min_lat, max_lon, max_lat)
     bbox: tuple[float, float, float, float] | None = None
+    source_bbox: tuple[float, float, float, float] | None = None
+    metadata: dict[str, object] = field(default_factory=dict)
+    diagnostics: dict[str, object] = field(default_factory=dict)
 
     def iter_visible_layers(self) -> Iterable[RenderLayer]:
         for layer in self.layers:

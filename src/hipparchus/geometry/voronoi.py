@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Iterable
+from typing import Any, Iterable
+import warnings
 
 import numpy as np
-from scipy.spatial import QhullError, Voronoi
 from shapely.geometry import MultiPoint, Point, Polygon
 from shapely.geometry.base import BaseGeometry
 
@@ -29,9 +29,12 @@ def voronoi_from_points(
         return []
 
     coords = np.array([[p.x, p.y] for p in sites], dtype=float)
+    voronoi_cls, qhull_error_cls = _optional_scipy_voronoi()
+    if voronoi_cls is None:
+        return _fallback_voronoi_cells(sites, boundary)
     try:
-        vor = Voronoi(coords)
-    except QhullError:
+        vor = voronoi_cls(coords)
+    except qhull_error_cls:
         return []
     regions, vertices = _voronoi_finite_polygons_2d(vor)
 
@@ -52,6 +55,43 @@ def voronoi_from_points(
     return cells
 
 
+def _optional_scipy_voronoi() -> tuple[Any | None, type[Exception]]:
+    """Load scipy Voronoi only when experimental Voronoi generation is requested."""
+    class _QhullFallbackError(Exception):
+        pass
+
+    try:
+        with warnings.catch_warnings():
+            warnings.filterwarnings("error", message="A NumPy version.*", category=UserWarning)
+            from scipy.spatial import QhullError, Voronoi  # type: ignore
+    except Exception:  # pragma: no cover - depends on local scipy/numpy ABI
+        return (None, _QhullFallbackError)
+    return (Voronoi, QhullError)
+
+
+def _fallback_voronoi_cells(sites: list[Point], boundary: BaseGeometry) -> list[VoronoiCell]:
+    minx, miny, maxx, maxy = boundary.bounds
+    radius = max(maxx - minx, maxy - miny, 1.0) / max(len(sites) * 3.0, 3.0)
+    cells: list[VoronoiCell] = []
+    for site in sites:
+        candidate = Polygon(
+            [
+                (site.x - radius, site.y - radius),
+                (site.x + radius, site.y - radius),
+                (site.x + radius, site.y + radius),
+                (site.x - radius, site.y + radius),
+                (site.x - radius, site.y - radius),
+            ]
+        ).intersection(boundary)
+        if candidate.is_empty:
+            continue
+        if candidate.geom_type == "Polygon":
+            cells.append(VoronoiCell(site=site, polygon=candidate))
+        else:
+            cells.extend(VoronoiCell(site=site, polygon=geom) for geom in getattr(candidate, "geoms", []) if geom.geom_type == "Polygon")
+    return cells
+
+
 def voronoi_from_building_centroids(
     buildings: Iterable[BaseGeometry],
     boundary: BaseGeometry,
@@ -61,7 +101,7 @@ def voronoi_from_building_centroids(
     return voronoi_from_points(centroids, boundary)
 
 
-def _voronoi_finite_polygons_2d(vor: Voronoi, radius: float | None = None) -> tuple[list[list[int]], np.ndarray]:
+def _voronoi_finite_polygons_2d(vor: Any, radius: float | None = None) -> tuple[list[list[int]], np.ndarray]:
     """Reconstruct finite Voronoi polygons from scipy Voronoi output."""
     if vor.points.shape[1] != 2:
         raise ValueError("Requires 2D input")

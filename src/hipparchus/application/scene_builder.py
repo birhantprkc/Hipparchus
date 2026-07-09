@@ -9,12 +9,13 @@ from shapely.geometry.base import BaseGeometry
 from shapely.ops import polygonize, unary_union
 
 from hipparchus.application.presets import GeometryPipelineProfile, QualityMode, StyleProfile
+from hipparchus.application.quality import quality_profile
 from hipparchus.data_sources.provider import FeatureCollection
 from hipparchus.geometry.circle_packing import CirclePackingOptions, pack_circles_in_boundary
 from hipparchus.geometry.hex_grid import HexGridOptions, generate_hex_grid
+from hipparchus.geometry.projection import ProjectionProfile
 from hipparchus.geometry.simplification import SimplificationOptions, simplify_geometries, simplify_geometry
-from hipparchus.geometry.triangulation import delaunay_from_road_intersections
-from hipparchus.geometry.voronoi import voronoi_from_building_centroids
+from hipparchus.geometry.smoothing import smooth_layer_geometries
 from hipparchus.rendering.models import LayerStyle, RenderLayer, RenderScene, PlaceLabel
 
 
@@ -29,22 +30,40 @@ class RenderSceneBuilder:
         style_profile: StyleProfile,
         quality_mode: QualityMode,
     ) -> RenderScene:
+        profile = quality_profile(str(quality_mode))
+        legacy_quality = profile.legacy_mode
+        projection = ProjectionProfile.from_bbox(feature_collection.bbox, mode=profile.projection_mode)
         tolerance = (
             geometry_profile.simplify_tolerance_preview
-            if quality_mode == "preview"
+            if legacy_quality == "preview"
             else geometry_profile.simplify_tolerance_export
         )
+        tolerance *= profile.simplify_scale
+        smoothing_iterations = int(round(geometry_profile.smoothing_iterations * profile.smoothing_scale))
+        diagnostics: dict[str, object] = {
+            "quality_profile": profile.key,
+            "projection": projection.metadata(feature_collection.bbox),
+            "raw_feature_counts": {
+                layer: len(data.get("features", []))
+                for layer, data in feature_collection.geojson_by_layer.items()
+            },
+            "projected_feature_counts": {},
+            "clipped_geometries": 0,
+            "smoothed_geometries": 0,
+            "invalid_geometries": 0,
+            "simplified_tolerance": tolerance,
+        }
 
         # Create clipping bbox from feature collection if available
         clip_bbox: BaseGeometry | None = None
         if feature_collection.bbox is not None:
-            min_lon, min_lat, max_lon, max_lat = feature_collection.bbox
-            clip_bbox = box(min_lon, min_lat, max_lon, max_lat)
+            clip_bbox = projection.project_bbox_geometry(feature_collection.bbox)
 
         layer_geometries: dict[str, list[BaseGeometry]] = {}
         max_n = geometry_profile.max_on_screen_features_per_layer
+        max_n = max(1, int(max_n * profile.geometry_cap_scale))
         raw_cap = max_n
-        if quality_mode == "preview":
+        if legacy_quality == "preview":
             # Keep interactive preview fast even for dense city AOIs.
             raw_cap = min(max_n, 100000)
 
@@ -55,9 +74,19 @@ class RenderSceneBuilder:
                 for road_type, geoms in road_geoms_by_type.items():
                     if geoms:
                         # Clip geometries to bbox to prevent rendering outside visible area
+                        geoms = [projection.project_geometry(geom) for geom in geoms]
                         if clip_bbox is not None:
+                            before_clip = len(geoms)
                             geoms = _clip_geometries(geoms, clip_bbox)
+                            diagnostics["clipped_geometries"] = int(diagnostics["clipped_geometries"]) + max(0, before_clip - len(geoms))
                         geoms = _optimize_layer_geometries(road_type, geoms, tolerance)
+                        geoms, smoothed, invalid = smooth_layer_geometries(
+                            road_type,
+                            geoms,
+                            geometry_profile.layer_smoothing_iterations.get(road_type, smoothing_iterations),
+                        )
+                        diagnostics["smoothed_geometries"] = int(diagnostics["smoothed_geometries"]) + smoothed
+                        diagnostics["invalid_geometries"] = int(diagnostics["invalid_geometries"]) + invalid
                         layer_geometries[road_type] = geoms[:max_n]
             else:
                 geoms: list[BaseGeometry] = []
@@ -68,14 +97,24 @@ class RenderSceneBuilder:
                     if geom_data is None:
                         continue
                     try:
-                        geoms.append(shape(geom_data))
+                        geoms.append(projection.project_geometry(shape(geom_data)))
                     except Exception:
+                        diagnostics["invalid_geometries"] = int(diagnostics["invalid_geometries"]) + 1
                         continue
                 if geoms:
                     # Clip geometries to bbox to prevent rendering outside visible area
                     if clip_bbox is not None:
+                        before_clip = len(geoms)
                         geoms = _clip_geometries(geoms, clip_bbox)
+                        diagnostics["clipped_geometries"] = int(diagnostics["clipped_geometries"]) + max(0, before_clip - len(geoms))
                     geoms = _optimize_layer_geometries(layer_name, geoms, tolerance)
+                    geoms, smoothed, invalid = smooth_layer_geometries(
+                        layer_name,
+                        geoms,
+                        geometry_profile.layer_smoothing_iterations.get(layer_name, smoothing_iterations),
+                    )
+                    diagnostics["smoothed_geometries"] = int(diagnostics["smoothed_geometries"]) + smoothed
+                    diagnostics["invalid_geometries"] = int(diagnostics["invalid_geometries"]) + invalid
                     layer_geometries[layer_name] = geoms[:max_n]
 
         if clip_bbox is not None:
@@ -85,11 +124,12 @@ class RenderSceneBuilder:
 
         boundary = _scene_boundary(layer_geometries, quality_mode=quality_mode)
         total_base = sum(len(items) for items in layer_geometries.values())
-        if quality_mode == "preview" and total_base > 100000:
+        if legacy_quality == "preview" and total_base > 100000:
             derived = {}
         else:
             derived = self._derive_layers(layer_geometries, boundary, geometry_profile)
         layer_geometries.update(derived)
+        diagnostics["projected_feature_counts"] = {layer: len(geoms) for layer, geoms in layer_geometries.items()}
 
         # Extract labels from places, shops, and amenities
         def extract_labels(layer_name: str, max_labels: int = 200) -> list[PlaceLabel]:
@@ -117,20 +157,24 @@ class RenderSceneBuilder:
                             coords = [sum(lons) / len(lons), sum(lats) / len(lats)]
 
                 if coords and len(coords) >= 2:
-                    labels.append(PlaceLabel(
-                        name=name,
-                        x=coords[0],
-                        y=coords[1],
-                        place_type=props.get("place", props.get("amenity", props.get("shop", "")))
-                    ))
+                    label_x, label_y = projection.project_point(float(coords[0]), float(coords[1]))
+                    labels.append(
+                        PlaceLabel(
+                            name=name,
+                            x=label_x,
+                            y=label_y,
+                            place_type=props.get("place", props.get("amenity", props.get("shop", ""))),
+                        )
+                    )
             return labels
 
         place_labels = extract_labels("places", 300)
         shop_labels = extract_labels("shops", 200)
         amenity_labels = extract_labels("amenities", 200)
 
-        # Combine all labels
-        all_place_labels = place_labels + shop_labels + amenity_labels
+        place_labels = _place_labels_without_collisions(place_labels, max_labels=120)
+        amenity_labels = _place_labels_without_collisions(amenity_labels, max_labels=80)
+        shop_labels = _place_labels_without_collisions(shop_labels, max_labels=80)
 
         layers: list[RenderLayer] = []
         # Ensure all label layers are included
@@ -150,8 +194,18 @@ class RenderSceneBuilder:
             layers.append(RenderLayer(name=layer_name, geometries=geoms, style=style, labels=labels))
 
         # Use the bbox from the feature collection if available
-        scene_bbox = feature_collection.bbox
-        return RenderScene(layers=layers, bbox=scene_bbox)
+        scene_bbox = projection.project_bbox(feature_collection.bbox)
+        return RenderScene(
+            layers=layers,
+            bbox=scene_bbox,
+            source_bbox=feature_collection.bbox,
+            metadata={
+                "source": feature_collection.metadata.get("source", "unknown"),
+                "quality_profile": profile.key,
+                "projection": projection.metadata(feature_collection.bbox),
+            },
+            diagnostics=diagnostics,
+        )
 
     def _derive_layers(
         self,
@@ -165,12 +219,22 @@ class RenderSceneBuilder:
         out: dict[str, list[BaseGeometry]] = {}
 
         if profile.derive_voronoi and base.get("buildings"):
-            cells = voronoi_from_building_centroids(base["buildings"], boundary)
-            out["voronoi_cells"] = [cell.polygon for cell in cells]
+            try:
+                from hipparchus.geometry.voronoi import voronoi_from_building_centroids
+
+                cells = voronoi_from_building_centroids(base["buildings"], boundary)
+                out["voronoi_cells"] = [cell.polygon for cell in cells]
+            except Exception:
+                out["voronoi_cells"] = []
 
         if profile.derive_delaunay and base.get("roads"):
-            mesh = delaunay_from_road_intersections(base["roads"], boundary)
-            out["delaunay_mesh"] = mesh.triangles
+            try:
+                from hipparchus.geometry.triangulation import delaunay_from_road_intersections
+
+                mesh = delaunay_from_road_intersections(base["roads"], boundary)
+                out["delaunay_mesh"] = mesh.triangles
+            except Exception:
+                out["delaunay_mesh"] = []
 
         if profile.derive_hex_grid:
             out["hex_grid"] = generate_hex_grid(boundary, HexGridOptions(radius=profile.hex_radius, clip_to_boundary=True))
@@ -203,7 +267,7 @@ def _scene_boundary(layer_geometries: dict[str, list[BaseGeometry]], quality_mod
 
     # Unary union over thousands of geometries is very expensive. For preview,
     # switch to a fast aggregate bounds box when candidate count is high.
-    if quality_mode == "preview" and len(candidates) > 5000:
+    if quality_profile(str(quality_mode)).legacy_mode == "preview" and len(candidates) > 5000:
         minx: float | None = None
         miny: float | None = None
         maxx: float | None = None
@@ -225,6 +289,39 @@ def _scene_boundary(layer_geometries: dict[str, list[BaseGeometry]], quality_mod
         return None
     hull = unioned.convex_hull
     return hull if not hull.is_empty else None
+
+
+def _place_labels_without_collisions(labels: list[PlaceLabel], max_labels: int) -> list[PlaceLabel]:
+    """Keep higher-priority labels while avoiding obvious projected-space overlap."""
+    accepted: list[PlaceLabel] = []
+    occupied: list[tuple[float, float, float, float]] = []
+    for label in sorted(labels, key=_label_priority):
+        if len(accepted) >= max_labels:
+            break
+        width = max(50.0, len(label.name) * 8.0)
+        height = 20.0
+        box_ = (label.x - width * 0.5, label.y - height * 0.5, label.x + width * 0.5, label.y + height * 0.5)
+        if any(_boxes_overlap(box_, existing) for existing in occupied):
+            continue
+        occupied.append(box_)
+        accepted.append(label)
+    return accepted
+
+
+def _label_priority(label: PlaceLabel) -> tuple[int, str]:
+    place_type = label.place_type
+    if place_type in {"city", "town", "village", "hamlet", "suburb", "neighbourhood"}:
+        return (0, label.name)
+    if place_type:
+        return (1, label.name)
+    return (2, label.name)
+
+
+def _boxes_overlap(
+    first: tuple[float, float, float, float],
+    second: tuple[float, float, float, float],
+) -> bool:
+    return not (first[2] < second[0] or first[0] > second[2] or first[3] < second[1] or first[1] > second[3])
 
 
 def _classify_roads(features: list[dict], raw_cap: int) -> dict[str, list[BaseGeometry]]:

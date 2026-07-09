@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Iterable
+import warnings
 
 import numpy as np
-from scipy.spatial import Delaunay
 from shapely.geometry import LineString, Point, Polygon
 from shapely.geometry.base import BaseGeometry
 from shapely.strtree import STRtree
@@ -27,7 +27,12 @@ def delaunay_from_points(points: Iterable[Point], boundary: BaseGeometry | None 
         return TriangleMesh(points=sites, triangles=[])
 
     coords = np.array([[p.x, p.y] for p in sites], dtype=float)
-    tri = Delaunay(coords)
+    delaunay_cls = _optional_scipy_delaunay()
+    if delaunay_cls is None:
+        triangles = _fallback_triangles(coords, boundary)
+        return TriangleMesh(points=sites, triangles=triangles)
+
+    tri = delaunay_cls(coords)
 
     triangles: list[Polygon] = []
     for simplex in tri.simplices:
@@ -44,6 +49,42 @@ def delaunay_from_points(points: Iterable[Point], boundary: BaseGeometry | None 
             triangles.append(polygon)
 
     return TriangleMesh(points=sites, triangles=triangles)
+
+
+def _optional_scipy_delaunay():
+    """Load scipy Delaunay only when experimental triangulation is requested."""
+    try:
+        with warnings.catch_warnings():
+            warnings.filterwarnings("error", message="A NumPy version.*", category=UserWarning)
+            from scipy.spatial import Delaunay as scipy_delaunay  # type: ignore
+    except Exception:  # pragma: no cover - depends on local scipy/numpy ABI
+        return None
+    return scipy_delaunay
+
+
+def _fallback_triangles(coords: np.ndarray, boundary: BaseGeometry | None) -> list[Polygon]:
+    """Build a deterministic fan triangulation when scipy is unavailable."""
+    if len(coords) < 3:
+        return []
+    center = coords.mean(axis=0)
+    ordered = sorted(coords.tolist(), key=lambda point: np.arctan2(point[1] - center[1], point[0] - center[0]))
+    triangles: list[Polygon] = []
+    anchor = ordered[0]
+    for idx in range(1, len(ordered) - 1):
+        polygon = Polygon([anchor, ordered[idx], ordered[idx + 1]])
+        if polygon.is_empty or polygon.area <= 0:
+            continue
+        if boundary is not None:
+            polygon = polygon.intersection(boundary)
+            if polygon.is_empty:
+                continue
+            if polygon.geom_type == "Polygon":
+                triangles.append(polygon)
+            else:
+                triangles.extend([g for g in getattr(polygon, "geoms", []) if g.geom_type == "Polygon"])
+        else:
+            triangles.append(polygon)
+    return triangles
 
 
 def road_intersections(roads: Iterable[BaseGeometry]) -> list[Point]:

@@ -22,7 +22,11 @@ Hipparchus is a standalone map creation tool focused on live online data, clean 
 - Layer toggles for roads, buildings, water, parks, railways, natural areas, labels, amenities, shops, landuse, barriers, and power features.
 - Styled road hierarchy with motorway, trunk, primary, secondary, tertiary, residential, service, and other road classes.
 - Visible blue water rendering for lakes and coastline-derived sea areas.
+- Hipparchus 2 quality pipeline with projected render coordinates, cartographic smoothing, high-quality preview/export profiles, richer SVG diagnostics, and editable SVG labels.
 - Cartographic presets including `OSM Standard`, `Urban Structure`, `Fragmented Urban`, `Organic Field`, and `Blueprint Relief`.
+- Additional print-oriented presets including `Editorial Print`, `Clean Atlas`, `Soft Urban`, `Technical Blueprint`, `Terrain Study`, `Monochrome Figure Ground`, and `Coastal Survey`.
+- Map-model registry for future local OSM, vector-tile, Natural Earth, Overture, terrain, and hybrid atlas sources without making those optional dependencies mandatory.
+- Local source paths for map models can be supplied in the UI or with environment variables such as `HIPPARCHUS_LOCAL_OSM_PBF`, `HIPPARCHUS_VECTOR_TILES`, `HIPPARCHUS_NATURAL_EARTH`, `HIPPARCHUS_OVERTURE`, and `HIPPARCHUS_TERRAIN_DEM`.
 - Derived geometry layers including Voronoi cells, Delaunay mesh, hex grid, and circle packing.
 - Persistent custom presets saved to the user app data folder.
 - Light and dark appearance support using native macOS Aqua where available.
@@ -42,9 +46,10 @@ Recommended workflow:
 1. Search for a location or choose a preset area.
 2. Keep the area reasonably small.
 3. Select only the layers you need.
-4. Fetch map data.
-5. Adjust visibility, preset, and view.
-6. Export SVG.
+4. Choose `Fast Preview` while exploring or `High Preview` for a smoother screen render.
+5. Fetch map data.
+6. Adjust visibility, preset, and view.
+7. Export SVG with clean or print-quality diagnostics.
 
 ## System Requirements
 
@@ -159,6 +164,12 @@ Install development tools if you plan to run tests:
 python3 -m pip install --user pytest ruff
 ```
 
+Install optional map-source backends if you want native local-source formats:
+
+```bash
+python3 -m pip install --user "hipparchus[maps]"
+```
+
 The launcher scripts add `src/` and the repository root to `PYTHONPATH` automatically.
 
 ## Running Hipparchus
@@ -189,6 +200,27 @@ Use a specific interpreter:
 HIPPARCHUS_PYTHON=/opt/homebrew/bin/python3 ./run_hprs.sh
 ```
 
+Optional local source models can be pointed at files before launch:
+
+```bash
+HIPPARCHUS_NATURAL_EARTH=/path/to/natural-earth.geojson ./run_hprs.sh
+HIPPARCHUS_VECTOR_TILES=/path/to/exported-vector-source.geojson ./run_hprs.sh
+```
+
+GeoJSON/JSON sources work without extra packages. Provider-specific formats use optional backends when installed, for example `osmium` for `.osm.pbf`, `mapbox-vector-tile` for MBTiles/MVT, `pmtiles` for PMTiles, `fiona` for Natural Earth shapefiles, `pyarrow` for Overture GeoParquet, and `rasterio` plus `scikit-image` for DEM contours.
+
+This checkout also has local sample datasets installed under `datasets/`:
+
+```bash
+HIPPARCHUS_VECTOR_TILES=datasets/pmtiles/firenze.pmtiles ./run_hprs.sh
+HIPPARCHUS_VECTOR_TILES=datasets/mbtiles/hipparchus_demo.mbtiles ./run_hprs.sh
+HIPPARCHUS_NATURAL_EARTH=datasets/natural_earth ./run_hprs.sh
+HIPPARCHUS_OVERTURE=datasets/overture/demo_overture_places_buildings.parquet ./run_hprs.sh
+HIPPARCHUS_TERRAIN_DEM=datasets/dem/athens_z11_1158_790.tif ./run_hprs.sh
+```
+
+Inside the app, the right sidebar also includes a `Source Library` selector with one-click presets for OSM Live, installed samples, Florence PMTiles, Natural Earth World, Athens DEM, and Athens Overture.
+
 ### Windows
 
 PowerShell:
@@ -211,6 +243,12 @@ macOS/Linux:
 
 ```bash
 ./scripts/release_preflight.sh
+```
+
+Pytest:
+
+```bash
+python -m pytest
 ```
 
 Windows PowerShell:
@@ -295,12 +333,7 @@ Road sublayers generated during scene building:
 - `roads_service`
 - `roads_other`
 
-Derived local geometry layers:
-
-- `voronoi_cells`
-- `delaunay_mesh`
-- `hex_grid`
-- `circle_packing`
+Experimental derived geometry layers such as Voronoi, Delaunay, hex grid, and circle packing are kept in code for future art-layer workflows, but they are hidden and disabled in the normal cartographic UI.
 
 ## Water And Sea Rendering
 
@@ -323,6 +356,7 @@ SVG export features:
 - Non-scaling strokes.
 - Illustrator-friendly structure.
 - Diagnostics with path counts per layer.
+- Optional composition furniture: title block, scale bar, north arrow, simple legend, and paper-size presets.
 
 ## Presets
 
