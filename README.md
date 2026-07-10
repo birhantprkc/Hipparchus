@@ -1,5 +1,7 @@
 # Hipparchus
 
+**Version 0.2.3**
+
 **Hipparchus is an online desktop vector cartography app for creating clean, editable maps from OpenStreetMap data and exporting them as Illustrator-friendly SVG files.**
 
 ![Hipparchus desktop map editor](docs/assets/hipparchus-screenshot.png)
@@ -433,20 +435,25 @@ HIPPARCHUS_PROVIDER_RPS=0.2 ./run_hprs.sh
 
 ```text
 src/hipparchus/
-  application/       Controller, presets, preset persistence, scene builder
-  cache/             Disk cache and cache index
-  core/              App bootstrap, config, project state, settings
-  data_sources/      Overpass provider, query builder, GeoJSON conversion
-  export/            SVG export
-  geometry/          Derived geometry and simplification tools
-  plugins/           Plugin interfaces and loader
-  rendering/         Render models and Skia renderer
+  application/       Controller, presets, preset persistence, quality, scene builder
+  cache/             Disk cache, cache index, and housekeeping
+  core/              App bootstrap, config, project state, settings store
+  data_sources/      Overpass provider, query builder, GeoJSON conversion, map models
+  export/            SVG export, export profiles, and SVG cleanup
+  geometry/          Projection, simplification, smoothing, and derived geometry tools
+  plugins/           Plugin interfaces, loader, and builtin plugins
+  rendering/         Render models, geometry adapter, and Skia renderer
   ui/                Tkinter main window
 
-tests/               Unit tests
-scripts/             Launch and preflight scripts
-docs/                Documentation assets and notes
+hipparchus/          Compatibility shim so `python -m hipparchus` runs from source
+tests/               Unit tests (18 test modules)
+scripts/             Launch, preflight, and precache scripts
+docs/                Documentation assets (screenshots)
+documents/           Design and planning notes
+datasets/            Local sample data (gitignored except README)
 ```
+
+A full annotated file tree is maintained in [FILE_STRUCTURE.md](FILE_STRUCTURE.md).
 
 ## Troubleshooting
 
