@@ -111,7 +111,7 @@ class SkiaRenderer:
             pixel_width = max(1, int(width * scale))
             pixel_height = max(1, int(height * scale))
 
-            _PERF_LOGGER.info(
+            _PERF_LOGGER.debug(
                 "RENDER_PREVIEW_PNG START: width=%d, height=%d, scale=%.1f, pixel=%dx%d",
                 width, height, scale, pixel_width, pixel_height,
             )
@@ -155,7 +155,7 @@ class SkiaRenderer:
         # Debug: check scene state
         scene_layers = len(self.scene.layers) if self.scene else 0
         scene_geoms = sum(len(layer.geometries) for layer in self.scene.layers) if self.scene else 0
-        _PERF_LOGGER.info(
+        _PERF_LOGGER.debug(
             "DRAW_SCENE: scene_layers=%d, scene_geoms=%d, bounds=%s, dirty=%s, cache_valid=%s",
             scene_layers,
             scene_geoms,
@@ -182,7 +182,7 @@ class SkiaRenderer:
             self._dirty = False
 
             # Debug: log picture recording
-            _PERF_LOGGER.info(
+            _PERF_LOGGER.debug(
                 "PICTURE RECORDED: drawn_paths=%d, dirty=%s, bounds=%s",
                 drawn_paths,
                 self._dirty,
@@ -220,7 +220,7 @@ class SkiaRenderer:
 
             # Debug: log first visible layer
             if _first_layer and layer.geometries:
-                _PERF_LOGGER.info(
+                _PERF_LOGGER.debug(
                     "DEBUG First visible layer: %s, stroke=(%d,%d,%d,%d), fill=(%d,%d,%d,%d), geoms=%d, fit_scale=%.1f",
                     layer.name,
                     stroke_color.r, stroke_color.g, stroke_color.b, stroke_color.a,
