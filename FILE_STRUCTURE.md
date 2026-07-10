@@ -15,7 +15,10 @@ Hipparchus/
 ├── FILE_STRUCTURE.md         This document
 ├── LICENSE                   MIT License
 ├── pyproject.toml            Package metadata, dependencies, pytest config
+├── setup.sh                  One-command dependency setup (macOS / Linux)
+├── setup.ps1                 One-command dependency setup (Windows PowerShell)
 ├── run_hprs.sh               Fast launcher (adds src/ + repo root to PYTHONPATH)
+├── run_hprs.ps1              Windows launcher (checks deps, then starts the GUI)
 ├── run_hprs_checked.sh       Launcher that runs preflight checks first
 ├── .gitignore                Ignored caches, datasets, exports, OS files
 ├── hipparchus/               Compatibility shim package (run from source)

@@ -2,7 +2,36 @@
 
 **Version 0.2.3**
 
-This manual explains how to use Hipparchus as an online map creation app. It covers installation, launching, fetching map data, working with layers and presets, exporting SVG files, and solving common problems.
+This manual explains how to use Hipparchus as an online map creation app. It covers installation, launching, fetching map data, working with layers and presets, exporting SVG files, and solving common problems. It applies to macOS, Linux, and Windows.
+
+Every command block that differs by platform shows both a macOS / Linux version and a Windows (PowerShell) version. If you only see one block, it works the same everywhere.
+
+## Table Of Contents
+
+1. [Overview](#1-overview)
+2. [Quick Start](#2-quick-start)
+3. [Installing And Launching](#3-installing-and-launching)
+4. [The Main Window](#4-the-main-window)
+5. [Choosing An Area](#5-choosing-an-area)
+6. [AOI Navigation Controls](#6-aoi-navigation-controls)
+7. [Fetching Map Data](#7-fetching-map-data)
+8. [Quality Mode](#8-quality-mode)
+9. [Presets](#9-presets)
+10. [Layer Controls](#10-layer-controls)
+11. [View Controls](#11-view-controls)
+12. [Label Settings](#12-label-settings)
+13. [Renderer Settings](#13-renderer-settings)
+14. [Provider Settings](#14-provider-settings)
+15. [Diagnostics](#15-diagnostics)
+16. [Cache](#16-cache)
+17. [Exporting SVG](#17-exporting-svg)
+18. [Recommended Workflows](#18-recommended-workflows)
+19. [Troubleshooting](#19-troubleshooting)
+20. [Keyboard And Mouse Reference](#20-keyboard-and-mouse-reference)
+21. [Configuration Reference](#21-configuration-reference)
+22. [File Reference](#22-file-reference)
+23. [Good Practices](#23-good-practices)
+24. [Limitations](#24-limitations)
 
 ## 1. Overview
 
@@ -15,72 +44,158 @@ Hipparchus is not a GIS database, tile server, or offline map viewer. It is a fo
 - You control layers and visual presets.
 - Hipparchus exports the result as SVG.
 
-## 2. Before You Start
+## 2. Quick Start
 
-Make sure you have:
+Get your first map in about five minutes. You run the setup step once; after that you only run the launcher.
 
-- A working internet connection.
+**Step 1 — Install dependencies (once).**
+
+macOS / Linux:
+
+```bash
+cd Hipparchus
+./setup.sh
+```
+
+Windows (PowerShell):
+
+```powershell
+cd Hipparchus
+.\setup.ps1
+```
+
+**Step 2 — Launch the app.**
+
+macOS / Linux:
+
+```bash
+./run_hprs.sh
+```
+
+Windows (PowerShell):
+
+```powershell
+.\run_hprs.ps1
+```
+
+**Step 3 — Make a map.**
+
+1. In the `Area` dropdown, choose `London Center`.
+2. Click `Use Preset AOI`.
+3. Leave `Quality` on `Fast Preview`.
+4. Click `Fetch` and wait for the preview to appear.
+5. Toggle layers on the left until the map looks right.
+6. Click `Export SVG` and choose where to save it.
+7. Open the SVG in Illustrator, Inkscape, or another vector editor.
+
+That is the whole loop: choose an area, fetch, adjust, export. The rest of this manual explains each part in depth.
+
+## 3. Installing And Launching
+
+### What You Need First
+
+- A working internet connection (for downloading map data).
 - Python 3.11 or newer.
-- Project dependencies installed.
-- Tkinter available in your Python environment.
+- Tkinter available in your Python. Tkinter ships with Python and cannot be installed with pip. It is present in the standard python.org installers and most conda builds; on Linux and some Homebrew Pythons you install it as an OS package (for example `sudo apt install python3-tk`).
 
-Hipparchus is intended to run without a project virtualenv. Use your normal Python installation and install the required packages there.
+Hipparchus runs directly from the source checkout. You do not need a project virtualenv, and you do not need `pip install -e .`.
 
-Recommended dependency install:
+### Install Dependencies (Recommended)
+
+Run the one-command setup once after cloning. It installs `numpy`, `scipy`, `shapely`, and `skia-python` into your normal Python. It first tries a `--user` install and falls back to a plain install for conda/base environments. If Tkinter is missing, the script tells you the OS package to install.
+
+macOS / Linux:
+
+```bash
+./setup.sh
+```
+
+Windows (PowerShell):
+
+```powershell
+.\setup.ps1
+```
+
+To also install the optional local map-source backends, add `--maps` (macOS / Linux) or `-Maps` (Windows):
+
+```bash
+./setup.sh --maps
+```
+
+```powershell
+.\setup.ps1 -Maps
+```
+
+### Install Dependencies Manually (Alternative)
+
+macOS / Linux:
 
 ```bash
 python3 -m pip install --user numpy scipy shapely skia-python
 ```
 
-If you are using conda/base and `--user` is refused, use:
+If you use conda/base and `--user` is refused:
 
 ```bash
 python3 -m pip install numpy scipy shapely skia-python
 ```
 
-For development:
+Windows (PowerShell):
+
+```powershell
+py -m pip install numpy scipy shapely skia-python
+```
+
+For development tools (tests and linting):
 
 ```bash
 python3 -m pip install --user pytest ruff
 ```
 
-The app launchers add the source tree to `PYTHONPATH`, so you do not need `pip install -e .`.
+### Launch Options
 
-## 3. Launching Hipparchus
-
-### Recommended Launch
-
-Use the checked runner:
+macOS / Linux — checked launch runs project checks first, then starts the GUI:
 
 ```bash
-cd Hipparchus
 ./run_hprs_checked.sh
 ```
 
-This runs project checks first. If the checks pass, it launches the GUI.
-
-### Faster Launch
-
-If you do not need checks:
+macOS / Linux — fast launch skips the checks:
 
 ```bash
-cd Hipparchus
 ./run_hprs.sh
 ```
 
-### Direct Python Launch
+Windows (PowerShell) — checks dependencies, points you to `setup.ps1` if anything is missing, then starts the GUI:
+
+```powershell
+.\run_hprs.ps1
+```
+
+Direct launch (any platform, from the repository root):
 
 ```bash
-cd Hipparchus
 PYTHONPATH=src:. python3 -m hipparchus
+```
+
+```powershell
+$env:PYTHONPATH = "src;."; py -m hipparchus
 ```
 
 ### Choosing A Python Interpreter
 
-If your preferred Python is not the first `python3` on `PATH`, set `HIPPARCHUS_PYTHON`:
+If your preferred Python is not the first one found, set `HIPPARCHUS_PYTHON`.
+
+macOS / Linux:
 
 ```bash
 HIPPARCHUS_PYTHON=/opt/homebrew/bin/python3 ./run_hprs.sh
+```
+
+Windows (PowerShell):
+
+```powershell
+$env:HIPPARCHUS_PYTHON = "C:\path\to\python.exe"; .\run_hprs.ps1
 ```
 
 ## 4. The Main Window
@@ -177,7 +292,7 @@ During fetch:
 
 ### Default Online Behavior
 
-Hipparchus uses Overpass by default. Hipparchus 2 can also use configured local map-model sources such as GeoJSON, local OSM PBF, Natural Earth, Overture, vector-source exports, and terrain contour files.
+Hipparchus uses Overpass by default. It can also use configured local map-model sources such as GeoJSON, local OSM PBF, Natural Earth, Overture, vector-source exports, and terrain contour files.
 
 The default endpoint is:
 
@@ -204,35 +319,30 @@ The top bar includes a `Model` dropdown. `OSM Live` is the default and uses Over
 - `Terrain Relief`: accepts contour/elevation GeoJSON/JSON directly and can extract contours from local GeoTIFF DEM files when `rasterio` and `scikit-image` are installed.
 - `Hybrid Atlas`: combines configured sources and falls back gracefully when optional sources are unavailable.
 
-You can also set source paths before launching:
-
-```bash
-HIPPARCHUS_LOCAL_OSM_PBF=/path/to/extract.osm.pbf
-HIPPARCHUS_VECTOR_TILES=/path/to/vector-source.geojson
-HIPPARCHUS_NATURAL_EARTH=/path/to/natural-earth.geojson
-HIPPARCHUS_OVERTURE=/path/to/overture.parquet
-HIPPARCHUS_TERRAIN_DEM=/path/to/contours.geojson
-```
+Install all optional map-source backends with `./setup.sh --maps` (macOS / Linux) or `.\setup.ps1 -Maps` (Windows).
 
 If a selected local model is not configured yet, Hipparchus reports provider status and keeps the app usable instead of failing startup.
 
-This machine also has local sample datasets installed in the repository:
+### Using Your Own Local Files
+
+Hipparchus needs no local files to work — live OSM data is the default. The `datasets/` folder is gitignored, so a fresh clone starts empty. If you add your own local map files there, point the app at them before launch with an environment variable.
+
+macOS / Linux:
 
 ```bash
-HIPPARCHUS_VECTOR_TILES=datasets/pmtiles/firenze.pmtiles
-HIPPARCHUS_VECTOR_TILES=datasets/mbtiles/hipparchus_demo.mbtiles
-HIPPARCHUS_NATURAL_EARTH=datasets/natural_earth
-HIPPARCHUS_OVERTURE=datasets/overture/demo_overture_places_buildings.parquet
-HIPPARCHUS_TERRAIN_DEM=datasets/dem/athens_z11_1158_790.tif
+HIPPARCHUS_VECTOR_TILES=datasets/pmtiles/firenze.pmtiles ./run_hprs.sh
+HIPPARCHUS_NATURAL_EARTH=datasets/natural_earth ./run_hprs.sh
+HIPPARCHUS_OVERTURE=datasets/overture/places_buildings.parquet ./run_hprs.sh
+HIPPARCHUS_TERRAIN_DEM=datasets/dem/contours.tif ./run_hprs.sh
 ```
 
-The right sidebar `Source Library` selector can apply these source/model/AOI combinations without typing paths. Use `Apply Source Preset` to configure the source, or `Apply + Fetch Source Preset` to configure and render immediately.
+Windows (PowerShell):
 
-Install all optional map-source backends with:
-
-```bash
-python3 -m pip install --user "hipparchus[maps]"
+```powershell
+$env:HIPPARCHUS_VECTOR_TILES = "datasets\pmtiles\firenze.pmtiles"; .\run_hprs.ps1
 ```
+
+The right sidebar `Source Library` selector can apply source/model/AOI combinations without typing paths. Use `Apply Source Preset` to configure the source, or `Apply + Fetch Source Preset` to configure and render immediately.
 
 ### Why Fetches Can Fail
 
@@ -260,46 +370,31 @@ Use `Fast Preview` while exploring. Use `High Preview` when judging visual quali
 
 Large AOIs are automatically sampled more aggressively to keep the preview responsive.
 
-Hipparchus 2 quality profiles also record projection, smoothing, clipping, layer counts, path counts, and source metadata in export diagnostics.
+Quality profiles also record projection, smoothing, clipping, layer counts, path counts, and source metadata in export diagnostics.
 
 ## 9. Presets
 
-The top bar has a `Preset` dropdown.
+The top bar has a `Preset` dropdown. Presets control layer styling, geometry simplification, which derived layers are generated, and processing intensity.
 
-Available presets include:
+### Cartographic Presets
 
-- `OSM Standard`
-- `Urban Structure`
-- `Fragmented Urban`
-- `Organic Field`
-- `Blueprint Relief`
+- `OSM Standard`: a familiar OpenStreetMap-like visual hierarchy. Roads use wider line styles and casing-like treatment.
+- `Urban Structure`: the default map-focused preset. Keeps raw OSM geometry detail and enables structural derived geometry such as Voronoi and Delaunay layers.
+- `Fragmented Urban`: emphasizes geometric subdivision and includes hex-grid derivation.
+- `Organic Field`: emphasizes softer, organic derived structures such as circle packing.
+- `Blueprint Relief`: a technical drawing direction with mesh and grid derivations.
 
-Presets control:
+### Print-Oriented Presets
 
-- Layer styling.
-- Geometry simplification settings.
-- Which derived layers are generated.
-- Processing intensity.
+These are tuned for clean, editable print output:
 
-### OSM Standard
-
-Use this when you want a familiar OpenStreetMap-like visual hierarchy. Roads use wider line styles and casing-like visual treatment.
-
-### Urban Structure
-
-This is the default map-focused preset. It keeps raw OSM geometry detail and enables structural derived geometry such as Voronoi and Delaunay layers.
-
-### Fragmented Urban
-
-This preset emphasizes geometric subdivision and includes hex-grid derivation.
-
-### Organic Field
-
-This preset emphasizes softer, organic derived structures such as circle packing.
-
-### Blueprint Relief
-
-This preset gives a technical drawing direction with mesh and grid derivations.
+- `Editorial Print`
+- `Clean Atlas`
+- `Soft Urban`
+- `Technical Blueprint`
+- `Terrain Study`
+- `Monochrome Figure Ground`
+- `Coastal Survey`
 
 ### Creating A Custom Preset
 
@@ -309,7 +404,7 @@ In the right sidebar:
 2. Enter a name in `New Name`.
 3. Click `Add Current To Presets`.
 
-Current custom presets are stored in memory during the session. They are useful for quick experimentation, but they are not yet a full persistent style library.
+Custom presets are saved to your user app data folder (`~/.hipparchus/presets.json`) so they persist between sessions. Override the location with `HIPPARCHUS_PRESETS_FILE`.
 
 ## 10. Layer Controls
 
@@ -362,7 +457,7 @@ Labels can add many features to a request. If Overpass fails, try disabling labe
 - `Hex Grid`
 - `Circle Packing`
 
-Derived layers are generated locally from fetched geometry. They do not come directly from Overpass.
+Derived layers are generated locally from fetched geometry. They do not come directly from Overpass. In the normal cartographic UI they are hidden by default and enabled through the experimental presets.
 
 ## 11. View Controls
 
@@ -379,7 +474,7 @@ The left sidebar includes viewport controls:
 Canvas interactions:
 
 - Drag with the mouse to pan.
-- Use mouse wheel to zoom.
+- Use the mouse wheel to zoom.
 - Use `+` or keypad plus to zoom in.
 - Use `-` or keypad minus to zoom out.
 - Press `0` to reset view.
@@ -398,7 +493,7 @@ The right sidebar includes label settings:
 - Shop/business name visibility
 - Amenity name visibility
 
-Some label controls may depend on renderer support. If a setting appears to have no effect, the data may not include labels for the selected layer or the current renderer path may not use that option yet.
+Some label controls may depend on renderer support. If a setting appears to have no effect, the data may not include labels for the selected layer, or the current renderer path may not use that option yet.
 
 ## 13. Renderer Settings
 
@@ -459,7 +554,7 @@ Suggested values:
 - `60`: default.
 - `120`: larger or slower requests.
 
-Increasing timeout does not solve server overload, but it can help slow valid requests complete.
+Increasing the timeout does not solve server overload, but it can help slow valid requests complete.
 
 ## 15. Diagnostics
 
@@ -476,11 +571,13 @@ The default log path is:
 ~/.hipparchus/cache/hipparchus_debug.log
 ```
 
+On Windows this is under your user profile, for example `C:\Users\<you>\.hipparchus\cache\hipparchus_debug.log`.
+
 Diagnostics include source, quality profile, CRS/projection, fetch/build time, layer counts, geometry counts, busiest layers, bounds, cache state, and warnings.
 
 ## 16. Cache
 
-Hipparchus caches Overpass responses on disk.
+Hipparchus caches Overpass responses on disk so repeated fetches of the same area are fast and survive intermittent network issues.
 
 Default cache directory:
 
@@ -494,30 +591,25 @@ Overpass cache directory:
 ~/.hipparchus/cache/overpass/
 ```
 
-The cache helps when:
+If you suspect stale data, remove the Overpass cache directory.
 
-- Re-fetching the same AOI.
-- Reopening the app and using the same map area.
-- Recovering from intermittent network issues after a successful fetch.
-
-If you suspect stale data, manually remove the cache directory:
+macOS / Linux:
 
 ```bash
 rm -rf ~/.hipparchus/cache/overpass
 ```
 
-Use caution with `rm -rf`. Make sure the path is exactly the cache path you intend to remove.
+Windows (PowerShell):
+
+```powershell
+Remove-Item -Recurse -Force $env:USERPROFILE\.hipparchus\cache\overpass
+```
+
+Delete carefully. Make sure the path is exactly the cache path you intend to remove.
 
 ## 17. Exporting SVG
 
-Click `Export SVG` in the top bar.
-
-The export dialog asks where to save the SVG. Hipparchus writes:
-
-- The SVG file.
-- A diagnostics JSON file next to it.
-
-Example:
+Click `Export SVG` in the top bar. The dialog asks where to save the SVG. Hipparchus writes the SVG file and a diagnostics JSON file next to it:
 
 ```text
 athens-map.svg
@@ -559,7 +651,7 @@ The SVG export is designed to remain friendly to Illustrator and other vector-ed
 3. Click `Find`.
 4. If the bounding box is large, use `+` to reduce it.
 5. Disable shops, amenities, barriers, and power.
-6. Use `preview` quality.
+6. Keep `Quality` on `Fast Preview`.
 7. Click `Fetch`.
 8. Adjust layer visibility.
 9. Export SVG.
@@ -594,47 +686,51 @@ The SVG export is designed to remain friendly to Illustrator and other vector-ed
 
 ### The App Does Not Launch
 
-Run:
+First confirm dependencies are installed by re-running the setup step (`./setup.sh` or `.\setup.ps1`).
+
+On macOS / Linux you can also run the preflight checks directly:
 
 ```bash
 ./scripts/release_preflight.sh
 ```
 
-If Python compilation fails, fix the reported syntax error.
-
-If `shapely` is missing:
+If Python compilation fails, fix the reported syntax error. If `shapely` or `skia-python` is reported missing, install it:
 
 ```bash
-python3 -m pip install shapely
+python3 -m pip install --user shapely skia-python
 ```
 
-If Skia is missing:
+```powershell
+py -m pip install shapely skia-python
+```
+
+### "No Such File Or Directory" When Running The Launcher
+
+The launcher must be run from inside the cloned project folder. Change into it first, then run the launcher for your platform:
 
 ```bash
-python3 -m pip install skia-python
+cd path/to/Hipparchus
+./run_hprs.sh
 ```
 
-### I Am In The Wrong Directory
-
-If this fails:
-
-```bash
-cd Hipparchus
+```powershell
+cd path\to\Hipparchus
+.\run_hprs.ps1
 ```
 
-Use the full project path:
+On Windows, if PowerShell refuses to run the script, you may need to allow local scripts for the current session:
 
-```bash
-cd Hipparchus
+```powershell
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 ```
 
-or the path from your home directory:
+### Tkinter Is Missing
 
-```bash
-cd Hipparchus
-```
+Tkinter ships with Python and cannot be installed with pip.
 
-The exact path depends on how the folder is named on disk. macOS is often case-insensitive, but shell paths still need the right folder structure.
+- macOS: Python.org builds include it; with Homebrew Python run `brew install python-tk`.
+- Windows: reinstall Python from python.org with the **tcl/tk and IDLE** option enabled.
+- Linux (Debian/Ubuntu): `sudo apt install python3-tk`.
 
 ### Overpass Request Failed
 
@@ -671,13 +767,11 @@ Try:
 
 ### Fetch Is Slow
 
-This is usually due to Overpass load or a large request.
-
-Improve speed by:
+This is usually due to Overpass load or a large request. Improve speed by:
 
 - Reducing the AOI.
 - Using fewer layers.
-- Staying in `preview` quality.
+- Staying in `Fast Preview` quality.
 - Avoiding label-heavy layers.
 - Using cached areas when possible.
 
@@ -709,10 +803,10 @@ Keyboard:
 
 Buttons:
 
-- `Fetch`: download and render current AOI.
+- `Fetch`: download and render the current AOI.
 - `Find`: geocode text in the Location field.
-- `Export SVG`: save current scene as SVG.
-- `Dark/Light`: toggle interface theme.
+- `Export SVG`: save the current scene as SVG.
+- `Dark/Light`: toggle the interface theme.
 
 ## 21. Configuration Reference
 
@@ -725,27 +819,28 @@ HIPPARCHUS_CACHE_DIR
 HIPPARCHUS_PLUGINS_DIR
 HIPPARCHUS_PROJECT_DIR
 HIPPARCHUS_SETTINGS_FILE
+HIPPARCHUS_PRESETS_FILE
 HIPPARCHUS_WINDOW_WIDTH
 HIPPARCHUS_WINDOW_HEIGHT
 HIPPARCHUS_PROVIDER_RPS
+HIPPARCHUS_PYTHON
 ```
 
-Examples:
+Examples on macOS / Linux:
 
 ```bash
 HIPPARCHUS_THEME=dark ./run_hprs.sh
-```
-
-```bash
 HIPPARCHUS_WINDOW_WIDTH=1800 HIPPARCHUS_WINDOW_HEIGHT=1100 ./run_hprs.sh
-```
-
-```bash
 HIPPARCHUS_PROVIDER_RPS=0.2 ./run_hprs.sh
+HIPPARCHUS_CACHE_DIR=/tmp/hipparchus-cache ./run_hprs.sh
 ```
 
-```bash
-HIPPARCHUS_CACHE_DIR=/tmp/hipparchus-cache ./run_hprs.sh
+Examples on Windows (PowerShell):
+
+```powershell
+$env:HIPPARCHUS_THEME = "dark"; .\run_hprs.ps1
+$env:HIPPARCHUS_WINDOW_WIDTH = "1800"; $env:HIPPARCHUS_WINDOW_HEIGHT = "1100"; .\run_hprs.ps1
+$env:HIPPARCHUS_PROVIDER_RPS = "0.2"; .\run_hprs.ps1
 ```
 
 ## 22. File Reference
@@ -753,13 +848,17 @@ HIPPARCHUS_CACHE_DIR=/tmp/hipparchus-cache ./run_hprs.sh
 Important project files:
 
 ```text
-README.md
-MANUAL.md
-pyproject.toml
-run_hprs.sh
-run_hprs_checked.sh
-scripts/release_preflight.sh
-src/hipparchus/main.py
+README.md                    Overview and installation
+MANUAL.md                    This manual
+FILE_STRUCTURE.md            Full annotated file tree
+pyproject.toml               Package metadata and dependencies
+setup.sh                     One-command setup (macOS / Linux)
+setup.ps1                    One-command setup (Windows PowerShell)
+run_hprs.sh                  Launcher (macOS / Linux)
+run_hprs.ps1                 Launcher (Windows PowerShell)
+run_hprs_checked.sh          Launcher with preflight checks (macOS / Linux)
+scripts/release_preflight.sh Preflight checks
+src/hipparchus/main.py       Application entry point
 src/hipparchus/core/application.py
 src/hipparchus/core/config.py
 src/hipparchus/data_sources/overpass_provider.py
@@ -788,18 +887,4 @@ Current limitations:
 - Public Overpass servers can fail or throttle requests.
 - Very large AOIs are not suitable.
 - Some UI settings are early-stage and may not affect every rendering path yet.
-- Custom presets are session-local.
 - Export is SVG-focused; PDF, PNG, and GeoJSON exporters are placeholders.
-
-## 25. Quick Start Checklist
-
-1. Open Terminal.
-2. Run `cd Hipparchus`.
-3. Run `./run_hprs_checked.sh`.
-4. Choose `London Center`.
-5. Click `Use Preset AOI`.
-6. Keep `Quality` set to `preview`.
-7. Click `Fetch`.
-8. Toggle layers until the map looks right.
-9. Click `Export SVG`.
-10. Open the SVG in Illustrator or another vector editor.

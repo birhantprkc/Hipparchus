@@ -33,7 +33,34 @@ Hipparchus is a standalone map creation tool focused on live online data, clean 
 - Persistent custom presets saved to the user app data folder.
 - Light and dark appearance support using native macOS Aqua where available.
 - SVG export with grouped layers and diagnostics JSON.
+- One-command setup on macOS, Linux, and Windows.
 - No project virtual environment required.
+
+## Quick Start
+
+Three steps from a fresh clone to a running app. The setup step is run once; after that you only run the launcher.
+
+**macOS / Linux**
+
+```bash
+git clone https://github.com/tsevis/Hipparchus.git
+cd Hipparchus
+./setup.sh        # one-time: installs numpy, scipy, shapely, skia-python
+./run_hprs.sh     # launch the app
+```
+
+**Windows (PowerShell)**
+
+```powershell
+git clone https://github.com/tsevis/Hipparchus.git
+cd Hipparchus
+.\setup.ps1       # one-time: installs numpy, scipy, shapely, skia-python
+.\run_hprs.ps1    # launch the app
+```
+
+Prerequisites the setup step cannot install for you: a **Python 3.11+** interpreter that already includes **Tkinter**. Tkinter ships with Python itself and cannot be installed with pip. It is present in the standard python.org installers on macOS and Windows and in most conda builds; on Linux and some Homebrew Pythons you may need an OS package (for example `sudo apt install python3-tk`). If Tkinter is missing, the setup script tells you exactly what to install.
+
+Map data is downloaded on demand from the public Overpass API the first time you fetch an area, so no map files are bundled or required up front.
 
 ## Screenshot
 
@@ -58,87 +85,47 @@ Recommended workflow:
 ### All Platforms
 
 - Python 3.11 or newer.
+- Tkinter support in Python (bundled with Python; cannot be installed with pip).
 - Internet connection for new map data.
-- Tkinter support in Python.
 - Enough memory for Shapely geometry processing.
 
-Runtime Python packages:
+Runtime Python packages (installed by the setup script):
 
 - `numpy`
 - `scipy`
 - `shapely`
 - `skia-python`
 
-Development packages:
+Development packages (optional, for running tests and linting):
 
 - `pytest`
 - `ruff`
 
 ### macOS
 
-Recommended:
-
-- macOS 13 or newer.
-- Python from Homebrew, Python.org, Miniconda, or another Python 3.11+ distribution with Tkinter.
-- Native Tk Aqua theme is used on macOS.
-
-Install dependencies into your normal Python:
-
-```bash
-python3 -m pip install --user numpy scipy shapely skia-python
-```
-
-If you use conda/base and `--user` is refused:
-
-```bash
-python3 -m pip install numpy scipy shapely skia-python
-```
+- macOS 13 or newer recommended.
+- Python from Python.org, Homebrew, Miniconda, or another Python 3.11+ distribution with Tkinter.
+- The native Tk Aqua theme is used automatically.
+- Homebrew Python may need `brew install python-tk` to provide Tkinter.
 
 ### Windows
 
-Recommended:
-
 - Windows 10 or Windows 11.
 - Python 3.11+ from [python.org](https://www.python.org/downloads/windows/) or Miniconda.
-- Tkinter is normally included with the standard Python.org installer.
-
-Install dependencies in PowerShell:
-
-```powershell
-py -m pip install numpy scipy shapely skia-python
-```
-
-Run from PowerShell:
-
-```powershell
-cd path\to\Hipparchus
-$env:PYTHONPATH = "src;."
-py -m hipparchus
-```
-
-The included `.sh` launcher scripts are for macOS/Linux shells. Windows users can run the Python module directly as shown above, or use Git Bash/Zsh if available.
+- Keep the **tcl/tk and IDLE** option enabled in the python.org installer so Tkinter is available (it is on by default).
+- The `py` launcher is used automatically; set `HIPPARCHUS_PYTHON` to override the interpreter.
 
 ### Linux
 
-Recommended:
-
 - Python 3.11+.
-- Tkinter system package.
+- The Tkinter system package (for example `python3-tk` on Debian/Ubuntu).
 - Basic build/runtime libraries for scientific Python wheels.
 
-On Debian/Ubuntu:
+On Debian/Ubuntu, install the interpreter prerequisites first:
 
 ```bash
 sudo apt update
 sudo apt install python3 python3-pip python3-tk
-python3 -m pip install --user numpy scipy shapely skia-python
-```
-
-Run:
-
-```bash
-cd Hipparchus
-./run_hprs.sh
 ```
 
 If your distribution blocks `pip --user` for system Python, use your distribution package manager, `pipx`, conda, or a user-managed Python installation.
@@ -154,10 +141,48 @@ git clone https://github.com/tsevis/Hipparchus.git
 cd Hipparchus
 ```
 
-Install runtime dependencies:
+### Setup (Recommended)
+
+Run the one-command setup once after cloning. It installs the required Python packages into your normal Python (no virtualenv). It first tries a `--user` install and falls back to a plain install for conda/base environments.
+
+macOS / Linux:
+
+```bash
+./setup.sh
+```
+
+Windows (PowerShell):
+
+```powershell
+.\setup.ps1
+```
+
+To also install the optional local map-source backends (for `.osm.pbf`, MBTiles/MVT, PMTiles, Natural Earth shapefiles, Overture GeoParquet, and DEM contours):
+
+```bash
+./setup.sh --maps
+```
+
+```powershell
+.\setup.ps1 -Maps
+```
+
+If the setup script reports an `externally-managed-environment` error (PEP 668, common on recent Homebrew and Debian/Ubuntu system Pythons), install into a Python you manage, re-run pip with `--break-system-packages`, or use your OS package manager or conda.
+
+### Manual Setup (Alternative)
+
+Install runtime dependencies yourself.
+
+macOS / Linux:
 
 ```bash
 python3 -m pip install --user numpy scipy shapely skia-python
+```
+
+Windows (PowerShell):
+
+```powershell
+py -m pip install numpy scipy shapely skia-python
 ```
 
 Install development tools if you plan to run tests:
@@ -178,7 +203,7 @@ The launcher scripts add `src/` and the repository root to `PYTHONPATH` automati
 
 ### macOS And Linux
 
-Checked launch:
+Checked launch (runs preflight checks first, then starts the GUI):
 
 ```bash
 ./run_hprs_checked.sh
@@ -202,30 +227,22 @@ Use a specific interpreter:
 HIPPARCHUS_PYTHON=/opt/homebrew/bin/python3 ./run_hprs.sh
 ```
 
-Optional local source models can be pointed at files before launch:
-
-```bash
-HIPPARCHUS_NATURAL_EARTH=/path/to/natural-earth.geojson ./run_hprs.sh
-HIPPARCHUS_VECTOR_TILES=/path/to/exported-vector-source.geojson ./run_hprs.sh
-```
-
-GeoJSON/JSON sources work without extra packages. Provider-specific formats use optional backends when installed, for example `osmium` for `.osm.pbf`, `mapbox-vector-tile` for MBTiles/MVT, `pmtiles` for PMTiles, `fiona` for Natural Earth shapefiles, `pyarrow` for Overture GeoParquet, and `rasterio` plus `scikit-image` for DEM contours.
-
-This checkout also has local sample datasets installed under `datasets/`:
-
-```bash
-HIPPARCHUS_VECTOR_TILES=datasets/pmtiles/firenze.pmtiles ./run_hprs.sh
-HIPPARCHUS_VECTOR_TILES=datasets/mbtiles/hipparchus_demo.mbtiles ./run_hprs.sh
-HIPPARCHUS_NATURAL_EARTH=datasets/natural_earth ./run_hprs.sh
-HIPPARCHUS_OVERTURE=datasets/overture/demo_overture_places_buildings.parquet ./run_hprs.sh
-HIPPARCHUS_TERRAIN_DEM=datasets/dem/athens_z11_1158_790.tif ./run_hprs.sh
-```
-
-Inside the app, the right sidebar also includes a `Source Library` selector with one-click presets for OSM Live, installed samples, Florence PMTiles, Natural Earth World, Athens DEM, and Athens Overture.
-
 ### Windows
 
-PowerShell:
+Recommended launcher (checks dependencies, points you to `setup.ps1` if anything is missing, then starts the GUI):
+
+```powershell
+.\run_hprs.ps1
+```
+
+Use a specific interpreter:
+
+```powershell
+$env:HIPPARCHUS_PYTHON = "C:\path\to\python.exe"
+.\run_hprs.ps1
+```
+
+Direct launch in PowerShell:
 
 ```powershell
 $env:PYTHONPATH = "src;."
@@ -239,15 +256,39 @@ set PYTHONPATH=src;.
 py -m hipparchus
 ```
 
+### Local Source Models
+
+GeoJSON/JSON sources work without extra packages. Provider-specific formats use the optional backends installed with `--maps`/`-Maps`, for example `osmium` for `.osm.pbf`, `mapbox-vector-tile` for MBTiles/MVT, `pmtiles` for PMTiles, `fiona` for Natural Earth shapefiles, `pyarrow` for Overture GeoParquet, and `rasterio` plus `scikit-image` for DEM contours.
+
+Hipparchus works out of the box with live OSM data and needs no local files. The `datasets/` folder is gitignored, so a fresh clone starts empty. If you add your own local map files there, point the app at them before launch.
+
+macOS / Linux:
+
+```bash
+HIPPARCHUS_VECTOR_TILES=datasets/pmtiles/firenze.pmtiles ./run_hprs.sh
+HIPPARCHUS_NATURAL_EARTH=datasets/natural_earth ./run_hprs.sh
+HIPPARCHUS_OVERTURE=datasets/overture/demo_overture_places_buildings.parquet ./run_hprs.sh
+HIPPARCHUS_TERRAIN_DEM=datasets/dem/athens_z11_1158_790.tif ./run_hprs.sh
+```
+
+Windows (PowerShell):
+
+```powershell
+$env:HIPPARCHUS_VECTOR_TILES = "datasets\pmtiles\firenze.pmtiles"
+.\run_hprs.ps1
+```
+
+Inside the app, the right sidebar also includes a `Source Library` selector with one-click presets for OSM Live, installed samples, Florence PMTiles, Natural Earth World, Athens DEM, and Athens Overture.
+
 ## Running Checks
 
-macOS/Linux:
+macOS / Linux:
 
 ```bash
 ./scripts/release_preflight.sh
 ```
 
-Pytest:
+Pytest (any platform):
 
 ```bash
 python -m pytest
@@ -399,6 +440,8 @@ Important paths:
 ~/.hipparchus/plugins/
 ```
 
+On Windows the same folder lives under your user profile, for example `C:\Users\<you>\.hipparchus\`.
+
 The Overpass cache makes repeated requests faster and allows recently fetched areas to reload without another network request.
 
 ## Environment Variables
@@ -417,18 +460,20 @@ HIPPARCHUS_PROVIDER_RPS
 HIPPARCHUS_PYTHON
 ```
 
-Examples:
+Examples on macOS / Linux:
 
 ```bash
 HIPPARCHUS_THEME=dark ./run_hprs.sh
-```
-
-```bash
 HIPPARCHUS_WINDOW_WIDTH=1800 HIPPARCHUS_WINDOW_HEIGHT=1100 ./run_hprs.sh
+HIPPARCHUS_PROVIDER_RPS=0.2 ./run_hprs.sh
 ```
 
-```bash
-HIPPARCHUS_PROVIDER_RPS=0.2 ./run_hprs.sh
+Examples on Windows (PowerShell):
+
+```powershell
+$env:HIPPARCHUS_THEME = "dark"; .\run_hprs.ps1
+$env:HIPPARCHUS_WINDOW_WIDTH = "1800"; $env:HIPPARCHUS_WINDOW_HEIGHT = "1100"; .\run_hprs.ps1
+$env:HIPPARCHUS_PROVIDER_RPS = "0.2"; .\run_hprs.ps1
 ```
 
 ## Project Layout
@@ -451,6 +496,12 @@ scripts/             Launch, preflight, and precache scripts
 docs/                Documentation assets (screenshots)
 documents/           Design and planning notes
 datasets/            Local sample data (gitignored except README)
+
+setup.sh             One-command dependency setup (macOS / Linux)
+setup.ps1            One-command dependency setup (Windows PowerShell)
+run_hprs.sh          Fast launcher (macOS / Linux)
+run_hprs.ps1         Launcher (Windows PowerShell)
+run_hprs_checked.sh  Launcher that runs preflight checks first (macOS / Linux)
 ```
 
 A full annotated file tree is maintained in [FILE_STRUCTURE.md](FILE_STRUCTURE.md).
@@ -479,13 +530,11 @@ Try:
 
 ### Tkinter is missing
 
-macOS Python.org builds usually include Tkinter. Homebrew and Linux installations may require extra packages.
+Tkinter ships with Python and cannot be installed with pip.
 
-Linux example:
-
-```bash
-sudo apt install python3-tk
-```
+- macOS: Python.org builds include it; with Homebrew Python run `brew install python-tk`.
+- Windows: reinstall Python from python.org with the **tcl/tk and IDLE** option enabled.
+- Linux (Debian/Ubuntu): `sudo apt install python3-tk`.
 
 ### Skia is missing
 
@@ -495,7 +544,15 @@ Install:
 python3 -m pip install --user skia-python
 ```
 
+```powershell
+py -m pip install skia-python
+```
+
 Hipparchus can start with a fallback renderer, but Skia is recommended for normal visual use.
+
+### Dependency install fails with "externally-managed-environment"
+
+This is PEP 668 protecting a system-managed Python. Install into a Python you manage, re-run pip with `--break-system-packages`, or use conda or your OS package manager.
 
 ## Development Notes
 
@@ -514,4 +571,5 @@ Before publishing changes:
 ```
 
 ## License
-MIT License Copyright (c) 2026 Charis Tsevis Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions: The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software. THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+Hipparchus is released under the MIT License. Copyright (c) 2026 Charis Tsevis. See [LICENSE](LICENSE) for the full text.
