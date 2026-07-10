@@ -41,11 +41,11 @@ missing = [package for module, package in required.items() if importlib.util.fin
 if missing:
     print("Missing required Python packages:", ", ".join(missing), file=sys.stderr)
     print("", file=sys.stderr)
-    print("Install them into your normal Python, without a virtualenv:", file=sys.stderr)
-    print(f"  {sys.executable} -m pip install --user numpy scipy shapely", file=sys.stderr)
+    print("Run the one-command setup from the repository root:", file=sys.stderr)
+    print("  ./setup.sh", file=sys.stderr)
     print("", file=sys.stderr)
-    print("If pip refuses --user inside conda/base, use:", file=sys.stderr)
-    print(f"  {sys.executable} -m pip install numpy scipy shapely", file=sys.stderr)
+    print("Or install them manually into your normal Python:", file=sys.stderr)
+    print(f"  {sys.executable} -m pip install --user numpy scipy shapely", file=sys.stderr)
     raise SystemExit(1)
 
 if importlib.util.find_spec("skia") is None:
