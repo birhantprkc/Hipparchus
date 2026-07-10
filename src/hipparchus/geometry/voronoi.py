@@ -7,7 +7,7 @@ from typing import Any, Iterable
 import warnings
 
 import numpy as np
-from shapely.geometry import MultiPoint, Point, Polygon
+from shapely.geometry import Point, Polygon
 from shapely.geometry.base import BaseGeometry
 
 

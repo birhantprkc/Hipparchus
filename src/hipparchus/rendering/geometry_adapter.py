@@ -56,8 +56,6 @@ def _point_to_circle_path(x: float, y: float, radius: float, precision: int) -> 
     """Represent point as tiny closed path for vector exporters."""
     left = x - radius
     right = x + radius
-    top = y - radius
-    bottom = y + radius
     return (
         f"M {_fmt(left, precision)} {_fmt(y, precision)} "
         f"A {_fmt(radius, precision)} {_fmt(radius, precision)} 0 1 0 {_fmt(right, precision)} {_fmt(y, precision)} "

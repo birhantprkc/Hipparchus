@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 from dataclasses import dataclass, field
 import logging
 import threading
@@ -11,7 +10,7 @@ from typing import Callable
 
 from hipparchus.application.presets import GeometryPipelineProfile, QualityMode, StyleProfile
 from hipparchus.application.scene_builder import RenderSceneBuilder
-from hipparchus.data_sources.data_source_manager import DataSourceConfig, DataSourceManager
+from hipparchus.data_sources.data_source_manager import DataSourceManager
 from hipparchus.data_sources.provider import BBoxQuery, FeatureCollection
 from hipparchus.rendering.engine import Renderer
 from hipparchus.rendering.models import RenderScene

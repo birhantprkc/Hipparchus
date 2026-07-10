@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from shapely.geometry import LineString, MultiLineString, MultiPolygon, Point, Polygon, box, shape
+from shapely.geometry import LineString, MultiLineString, MultiPolygon, Polygon, box, shape
 from shapely.geometry.base import BaseGeometry
 from shapely.ops import polygonize, unary_union
 
@@ -478,7 +478,7 @@ def _ordered_layers(layer_names: set[str] | list[str] | tuple[str, ...]) -> list
 
 def _clip_geometries(geometries: list[BaseGeometry], clip_bbox: BaseGeometry) -> list[BaseGeometry]:
     """Clip geometries to the bounding box to prevent rendering outside visible area.
-    
+
     This ensures that geometries extending beyond the requested AOI are clipped
     to fit within the visible canvas area.
     """

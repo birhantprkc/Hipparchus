@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import logging
 import threading
 from typing import Any
 
@@ -10,6 +11,8 @@ from shapely.geometry import LineString, LinearRing, Point, Polygon
 
 from hipparchus.rendering.geometry_adapter import iter_atomic_geometries
 from hipparchus.rendering.models import RGBAColor, RenderScene, ViewportState
+
+_PERF_LOGGER = logging.getLogger("hipparchus.perf")
 
 
 class SkiaUnavailableError(RuntimeError):
@@ -108,8 +111,7 @@ class SkiaRenderer:
             pixel_width = max(1, int(width * scale))
             pixel_height = max(1, int(height * scale))
 
-            import logging
-            logging.getLogger("hipparchus.perf").info(
+            _PERF_LOGGER.info(
                 "RENDER_PREVIEW_PNG START: width=%d, height=%d, scale=%.1f, pixel=%dx%d",
                 width, height, scale, pixel_width, pixel_height,
             )
@@ -133,17 +135,17 @@ class SkiaRenderer:
                 "scene_geometries": sum(len(layer.geometries) for layer in self.scene.layers),
                 "png_bytes": len(png_bytes),
             }
-            
+
             # Debug: check PNG content
             if len(png_bytes) < 10000:
-                logging.getLogger("hipparchus.perf").warning(
+                _PERF_LOGGER.warning(
                     "SMALL PNG: %d bytes, drawn_paths=%d, scene_bounds=%s, fit_scale=%.1f",
                     len(png_bytes),
                     self._last_drawn_paths,
                     self._scene_bounds,
                     self._fit_scale,
                 )
-            
+
             return png_bytes
 
     def _draw_scene(self, canvas: Any, width: int, height: int) -> None:
@@ -151,10 +153,9 @@ class SkiaRenderer:
         canvas.clear(skia.ColorSetARGB(self.background.a, self.background.r, self.background.g, self.background.b))
 
         # Debug: check scene state
-        import logging
         scene_layers = len(self.scene.layers) if self.scene else 0
-        scene_geoms = sum(len(l.geometries) for l in self.scene.layers) if self.scene else 0
-        logging.getLogger("hipparchus.perf").info(
+        scene_geoms = sum(len(layer.geometries) for layer in self.scene.layers) if self.scene else 0
+        _PERF_LOGGER.info(
             "DRAW_SCENE: scene_layers=%d, scene_geoms=%d, bounds=%s, dirty=%s, cache_valid=%s",
             scene_layers,
             scene_geoms,
@@ -179,10 +180,9 @@ class SkiaRenderer:
             self._cache_width = width
             self._cache_height = height
             self._dirty = False
-            
+
             # Debug: log picture recording
-            import logging
-            logging.getLogger("hipparchus.perf").info(
+            _PERF_LOGGER.info(
                 "PICTURE RECORDED: drawn_paths=%d, dirty=%s, bounds=%s",
                 drawn_paths,
                 self._dirty,
@@ -220,8 +220,7 @@ class SkiaRenderer:
 
             # Debug: log first visible layer
             if _first_layer and layer.geometries:
-                import logging
-                logging.getLogger("hipparchus.perf").info(
+                _PERF_LOGGER.info(
                     "DEBUG First visible layer: %s, stroke=(%d,%d,%d,%d), fill=(%d,%d,%d,%d), geoms=%d, fit_scale=%.1f",
                     layer.name,
                     stroke_color.r, stroke_color.g, stroke_color.b, stroke_color.a,
@@ -379,7 +378,6 @@ class SkiaRenderer:
 
         # Simple overlap suppression: reject any label whose centre is too
         # close to an already-placed label.
-        min_gap_x = font_size * 6.0  # approximate character-width heuristic
         min_gap_y = font_size * 1.6
         placed: list[tuple[float, float, float]] = []  # (cx, cy, half_w)
 

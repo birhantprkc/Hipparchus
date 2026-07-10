@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from hipparchus.application.quality import QualityMode
-
+# Re-exported for the public preset API; consumers import QualityMode from here.
+from hipparchus.application.quality import QualityMode as QualityMode
 from hipparchus.rendering.models import LayerStyle, RGBAColor
 
 @dataclass(slots=True, frozen=True)

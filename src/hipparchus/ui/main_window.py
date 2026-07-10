@@ -20,7 +20,7 @@ from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 from hipparchus.application.controller import ApplicationController
-from hipparchus.application.presets import ArtisticPreset, GeometryPipelineProfile, QualityMode, default_preset, preset_names
+from hipparchus.application.presets import ArtisticPreset, GeometryPipelineProfile, default_preset, preset_names
 from hipparchus.application.quality import quality_menu_labels, quality_mode_key, quality_profile
 from hipparchus.application.preset_store import PresetStore
 from hipparchus.core.config import AppConfig

@@ -90,8 +90,6 @@ def _classify_layer(tags: dict[str, Any]) -> str | None:
     name = tags.get("name", "")
     barrier = str(tags.get("barrier", ""))
     power = str(tags.get("power", ""))
-    shop = str(tags.get("shop", ""))
-    tourism = str(tags.get("tourism", ""))
 
     # Coastline and sea
     if natural == "coastline":
@@ -158,7 +156,7 @@ def _geometry_for_element(element: dict[str, Any]) -> GeoJSONMapping | None:
         # Check if it's a Shapely geometry
         if hasattr(geometry_obj, 'geom_type'):
             return _shapely_to_geojson(geometry_obj)
-        
+
         # Otherwise it's the Overpass format with geometry nodes
         if isinstance(geometry_obj, list):
             coordinates: list[list[float]] = []
