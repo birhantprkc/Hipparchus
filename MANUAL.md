@@ -823,8 +823,12 @@ HIPPARCHUS_PRESETS_FILE
 HIPPARCHUS_WINDOW_WIDTH
 HIPPARCHUS_WINDOW_HEIGHT
 HIPPARCHUS_PROVIDER_RPS
+HIPPARCHUS_START_AREA
+HIPPARCHUS_FETCH_ON_START
 HIPPARCHUS_PYTHON
 ```
+
+`HIPPARCHUS_START_AREA` preselects a built-in area preset by name (for example `Kyoto Center`, `San Francisco Downtown`, or `Venice Historic`). `HIPPARCHUS_FETCH_ON_START` set to `1`, `true`, `yes`, or `on` fetches and renders that area automatically once the window opens, so you can capture a screenshot without clicking through the UI.
 
 Examples on macOS / Linux:
 
@@ -833,6 +837,13 @@ HIPPARCHUS_THEME=dark ./run_hprs.sh
 HIPPARCHUS_WINDOW_WIDTH=1800 HIPPARCHUS_WINDOW_HEIGHT=1100 ./run_hprs.sh
 HIPPARCHUS_PROVIDER_RPS=0.2 ./run_hprs.sh
 HIPPARCHUS_CACHE_DIR=/tmp/hipparchus-cache ./run_hprs.sh
+HIPPARCHUS_START_AREA="Kyoto Center" HIPPARCHUS_FETCH_ON_START=1 ./run_hprs.sh
+```
+
+Example on Windows (PowerShell):
+
+```powershell
+$env:HIPPARCHUS_START_AREA = "Kyoto Center"; $env:HIPPARCHUS_FETCH_ON_START = "1"; .\run_hprs.ps1
 ```
 
 Examples on Windows (PowerShell):

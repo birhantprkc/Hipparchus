@@ -4,7 +4,16 @@
 
 **Hipparchus is an online desktop vector cartography app for creating clean, editable maps from OpenStreetMap data and exporting them as Illustrator-friendly SVG files.**
 
-![Hipparchus desktop map editor](docs/assets/hipparchus-screenshot.png)
+<table>
+  <tr>
+    <td width="50%"><img src="docs/assets/hipparchus-screenshot.png" width="100%" alt="Hipparchus showing a coastal city map in dark appearance"></td>
+    <td width="50%"><img src="docs/assets/hipparchus-venice.png" width="100%" alt="Hipparchus showing the Venice historic center with waterways"></td>
+  </tr>
+  <tr>
+    <td align="center"><em>Coastal city map (dark appearance)</em></td>
+    <td align="center"><em>Venice historic center with waterways</em></td>
+  </tr>
+</table>
 
 ## Introduction
 
@@ -62,9 +71,9 @@ Prerequisites the setup step cannot install for you: a **Python 3.11+** interpre
 
 Map data is downloaded on demand from the public Overpass API the first time you fetch an area, so no map files are bundled or required up front.
 
-## Screenshot
+## Screenshots
 
-The screenshot above shows Hipparchus running on macOS in dark appearance, displaying an OpenStreetMap-derived coastal map with configurable layers and online Overpass provider settings.
+The screenshots above show Hipparchus running on macOS in dark appearance: a coastal city map and the Venice historic center, each with configurable layers, presets, and online Overpass provider settings.
 
 ## Current Status
 
@@ -457,8 +466,12 @@ HIPPARCHUS_PRESETS_FILE
 HIPPARCHUS_WINDOW_WIDTH
 HIPPARCHUS_WINDOW_HEIGHT
 HIPPARCHUS_PROVIDER_RPS
+HIPPARCHUS_START_AREA
+HIPPARCHUS_FETCH_ON_START
 HIPPARCHUS_PYTHON
 ```
+
+`HIPPARCHUS_START_AREA` preselects a built-in area preset (for example `Kyoto Center`) on launch. `HIPPARCHUS_FETCH_ON_START` (`1`/`true`/`yes`/`on`) fetches and renders that area automatically once the window opens — useful for capturing screenshots without clicking through the UI.
 
 Examples on macOS / Linux:
 
@@ -466,6 +479,7 @@ Examples on macOS / Linux:
 HIPPARCHUS_THEME=dark ./run_hprs.sh
 HIPPARCHUS_WINDOW_WIDTH=1800 HIPPARCHUS_WINDOW_HEIGHT=1100 ./run_hprs.sh
 HIPPARCHUS_PROVIDER_RPS=0.2 ./run_hprs.sh
+HIPPARCHUS_START_AREA="Venice Historic" HIPPARCHUS_FETCH_ON_START=1 ./run_hprs.sh
 ```
 
 Examples on Windows (PowerShell):
@@ -474,6 +488,7 @@ Examples on Windows (PowerShell):
 $env:HIPPARCHUS_THEME = "dark"; .\run_hprs.ps1
 $env:HIPPARCHUS_WINDOW_WIDTH = "1800"; $env:HIPPARCHUS_WINDOW_HEIGHT = "1100"; .\run_hprs.ps1
 $env:HIPPARCHUS_PROVIDER_RPS = "0.2"; .\run_hprs.ps1
+$env:HIPPARCHUS_START_AREA = "Venice Historic"; $env:HIPPARCHUS_FETCH_ON_START = "1"; .\run_hprs.ps1
 ```
 
 ## Project Layout
@@ -491,7 +506,7 @@ src/hipparchus/
   ui/                Tkinter main window
 
 hipparchus/          Compatibility shim so `python -m hipparchus` runs from source
-tests/               Unit tests (18 test modules)
+tests/               Unit tests (19 test modules)
 scripts/             Launch, preflight, and precache scripts
 docs/                Documentation assets (screenshots)
 documents/           Design and planning notes

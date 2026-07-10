@@ -108,14 +108,15 @@ src/hipparchus/
 
 ## Tests (`tests/`)
 
-18 pytest modules covering models, projection, smoothing, simplification,
+19 pytest modules covering models, projection, smoothing, simplification,
 scene building, rendering state, export/quality profiles, SVG export, caching,
-presets, project state, geometry tools/adapter, and the Overpass provider,
-query, and GeoJSON conversion paths.
+presets, project state, configuration, geometry tools/adapter, and the Overpass
+provider, query, and GeoJSON conversion paths.
 
 ```text
 tests/
 ├── test_cache_store.py
+├── test_config.py
 ├── test_export_profiles.py
 ├── test_geometry_adapter.py
 ├── test_geometry_tools.py
