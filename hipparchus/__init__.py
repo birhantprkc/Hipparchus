@@ -6,6 +6,9 @@ This package extends its import path to include ``src/hipparchus`` so
 
 from pathlib import Path
 
+# Keep in sync with src/hipparchus/__init__.py.
+__version__ = "0.2.3"
+
 _pkg_dir = Path(__file__).resolve().parent
 _src_pkg_dir = _pkg_dir.parent / "src" / "hipparchus"
 

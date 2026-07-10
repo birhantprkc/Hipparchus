@@ -1,3 +1,5 @@
 """Hipparchus application package."""
 
-__all__: list[str] = []
+__version__ = "0.2.3"
+
+__all__: list[str] = ["__version__"]
