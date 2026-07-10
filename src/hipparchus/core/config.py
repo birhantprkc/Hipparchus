@@ -24,6 +24,8 @@ class AppConfig:
     default_width: int
     default_height: int
     provider_rps_limit: float
+    start_area: str
+    fetch_on_start: bool
 
 
 class ConfigLoader:
@@ -47,6 +49,9 @@ class ConfigLoader:
         default_height = int(os.getenv("HIPPARCHUS_WINDOW_HEIGHT", "1080"))
         provider_rps_limit = float(os.getenv("HIPPARCHUS_PROVIDER_RPS", "1.0"))
 
+        start_area = os.getenv("HIPPARCHUS_START_AREA", "").strip()
+        fetch_on_start = os.getenv("HIPPARCHUS_FETCH_ON_START", "").strip().lower() in {"1", "true", "yes", "on"}
+
         return AppConfig(
             app_name=app_name,
             theme_mode=theme_mode,
@@ -58,4 +63,6 @@ class ConfigLoader:
             default_width=default_width,
             default_height=default_height,
             provider_rps_limit=provider_rps_limit,
+            start_area=start_area,
+            fetch_on_start=fetch_on_start,
         )

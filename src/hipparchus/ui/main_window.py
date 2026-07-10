@@ -37,6 +37,9 @@ LOCATION_PRESETS: dict[str, tuple[float, float, float, float]] = {
     "New York Midtown": (-74.02, 40.72, -73.94, 40.79),
     "Paris Core": (2.26, 48.83, 2.38, 48.89),
     "Tokyo Central": (139.68, 35.65, 139.79, 35.73),
+    "Kyoto Center": (135.73, 34.98, 135.79, 35.03),
+    "San Francisco Downtown": (-122.44, 37.76, -122.39, 37.80),
+    "Venice Historic": (12.31, 45.42, 12.36, 45.45),
 }
 
 LEFT_SIDEBAR_WIDTH = 360
@@ -258,6 +261,8 @@ class MainWindow:
         self._build_layout()
         self._apply_theme()
         self._root.after(50, self._drain_callback_queue)
+        if self.config.start_area or self.config.fetch_on_start:
+            self._root.after(300, self._maybe_fetch_on_start)
 
     def _create_scrollable_frame(self, parent: tk.Widget, width: int, *, padding: int = SIDEBAR_CONTENT_PADDING) -> tuple[ttk.Frame, tk.Canvas, ttk.Frame]:
         """Create a fixed-width scrollable frame."""
@@ -947,6 +952,22 @@ class MainWindow:
         self._aoi_vars["min_lat"].set(f"{min_lat:.5f}")
         self._aoi_vars["max_lon"].set(f"{max_lon:.5f}")
         self._aoi_vars["max_lat"].set(f"{max_lat:.5f}")
+
+    def _maybe_fetch_on_start(self) -> None:
+        """Preselect a start area and/or auto-fetch on launch (screenshot workflow)."""
+        area = self.config.start_area
+        if area:
+            if area in LOCATION_PRESETS:
+                self._location_preset_var.set(area)
+                self._apply_location_preset()
+            else:
+                self._logger.warning(
+                    "HIPPARCHUS_START_AREA '%s' is not a known area preset; ignoring. Known: %s",
+                    area,
+                    ", ".join(LOCATION_PRESETS.keys()),
+                )
+        if self.config.fetch_on_start:
+            self._on_fetch_clicked()
 
     def _nudge_aoi(self, x_ratio: float, y_ratio: float) -> None:
         min_lon, min_lat, max_lon, max_lat = self._current_aoi_values()
