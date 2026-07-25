@@ -70,6 +70,7 @@ class MapModelRegistry:
             "natural_earth": _optional_status("natural_earth", "Natural Earth", "fiona"),
             "overture": _optional_status("overture", "Overture Maps", "pyarrow"),
             "terrain_dem": _optional_status("terrain_dem", "Terrain DEM", "rasterio"),
+            "night_lights": _optional_status("night_lights", "VIIRS Night Lights", "rasterio"),
         }
 
 
@@ -81,6 +82,7 @@ def default_map_models() -> tuple[MapModel, ...]:
         MapModel("natural_earth_atlas", "Natural Earth Atlas", ("natural_earth",), "local_azimuthal", "preview_high", "export_print"),
         MapModel("overture", "Overture Places/Buildings", ("overture",), "web_mercator", "preview_high", "export_clean"),
         MapModel("terrain_relief", "Terrain Relief", ("terrain_dem",), "local_azimuthal", "preview_high", "export_print"),
+        MapModel("night_lights", "Night Lights (VIIRS)", ("night_lights",), "web_mercator", "preview_high", "export_print"),
         MapModel(
             "hybrid_atlas",
             "Hybrid Atlas",

@@ -25,8 +25,18 @@ from hipparchus.data_sources.overpass_query import SUPPORTED_LAYERS
 from hipparchus.data_sources.provider import BBoxQuery, FeatureCollection, GeoJSONMapping
 
 
-EXTRA_LAYERS = ("admin_boundaries", "terrain_contours", "terrain_hillshade", "elevation_bands")
+EXTRA_LAYERS = (
+    "admin_boundaries",
+    "terrain_contours",
+    "terrain_hillshade",
+    "elevation_bands",
+    "night_lights",
+)
 ALL_OPTIONAL_LAYERS = tuple(dict.fromkeys((*SUPPORTED_LAYERS, *EXTRA_LAYERS)))
+
+# Providers whose source is a single-band raster read through the contour path.
+RASTER_PROVIDER_IDS = frozenset({"terrain_dem", "night_lights"})
+RASTER_SUFFIXES = frozenset({".tif", ".tiff"})
 
 
 class OptionalProviderUnavailable(RuntimeError):
@@ -41,6 +51,11 @@ class OptionalSourceProvider:
     label: str
     dependency_module: str | None = None
     source_path: Path | None = None
+    # Raster providers name their contour output. Terrain reads elevation;
+    # night lights read radiance from the same code path.
+    raster_layer: str = "terrain_contours"
+    raster_value_key: str = "elevation"
+    raster_levels: int = 12
 
     def status(self) -> ProviderStatus:
         if self.source_path is None:
@@ -68,7 +83,7 @@ class OptionalSourceProvider:
                     available=tile_status[0],
                     detail=tile_status[1],
                 )
-        if self.provider_id == "terrain_dem" and self.source_path.suffix.lower() in {".tif", ".tiff"}:
+        if self.provider_id in RASTER_PROVIDER_IDS and self.source_path.suffix.lower() in RASTER_SUFFIXES:
             try:
                 __import__("rasterio")
             except Exception as exc:  # noqa: BLE001
@@ -112,9 +127,16 @@ class OptionalSourceProvider:
             return _feature_collection_from_overture_parquet(self.source_path, query=query, provider_id=self.provider_id)
         if self.provider_id == "vector_tiles":
             return _feature_collection_from_vector_tiles(self.source_path, query=query, provider_id=self.provider_id)
-        if self.provider_id == "terrain_dem":
-            if self.source_path.suffix.lower() in {".tif", ".tiff"}:
-                return _feature_collection_from_raster_dem(self.source_path, query=query, provider_id=self.provider_id)
+        if self.provider_id in RASTER_PROVIDER_IDS:
+            if self.source_path.suffix.lower() in RASTER_SUFFIXES:
+                return _feature_collection_from_raster_dem(
+                    self.source_path,
+                    query=query,
+                    provider_id=self.provider_id,
+                    value_layer=self.raster_layer,
+                    value_key=self.raster_value_key,
+                    level_count=self.raster_levels,
+                )
             return _feature_collection_from_geojson_sources(
                 _iter_geojson_payloads(self.source_path),
                 query=query,
@@ -147,6 +169,24 @@ def overture_provider(source_path: Path | None = None) -> OptionalSourceProvider
 
 def terrain_dem_provider(source_path: Path | None = None) -> OptionalSourceProvider:
     return OptionalSourceProvider("terrain_dem", "Terrain DEM", None, source_path)
+
+
+def night_lights_provider(source_path: Path | None = None) -> OptionalSourceProvider:
+    """Provider for measured nighttime illumination rasters (VIIRS/Black Marble).
+
+    Shares the single-band raster contour path with the DEM provider; only the
+    output naming and level count differ. Values are whatever the source encodes
+    -- calibrated radiance for VNL/VNP46A, rendered luminance for a GIBS capture.
+    """
+    return OptionalSourceProvider(
+        "night_lights",
+        "VIIRS Night Lights",
+        None,
+        source_path,
+        raster_layer="night_lights",
+        raster_value_key="radiance",
+        raster_levels=16,
+    )
 
 
 def _is_geojson_source(path: Path) -> bool:
@@ -210,22 +250,48 @@ def _iter_geojson_features(payload: GeoJSONMapping) -> Iterable[GeoJSONMapping]:
         yield from payload.get("features", [])
 
 
+def _bbox_overlaps(
+    candidate: tuple[float, float, float, float],
+    query_bounds: tuple[float, float, float, float],
+) -> bool:
+    """Cheap separating-axis test on (min_lon, min_lat, max_lon, max_lat).
+
+    Deliberately a conservative superset of a true intersection: anything that
+    might intersect is kept, and the exact shapely test in ``_append_feature``
+    still decides. Testing feature bounds rather than 'any vertex inside the
+    query' matters -- the latter silently drops long ways that cross the query
+    box without placing a vertex in it.
+    """
+    return not (
+        candidate[2] < query_bounds[0]
+        or candidate[0] > query_bounds[2]
+        or candidate[3] < query_bounds[1]
+        or candidate[1] > query_bounds[3]
+    )
+
+
 def _feature_collection_from_osm_pbf(path: Path, *, query: BBoxQuery, provider_id: str) -> FeatureCollection:
     import osmium  # type: ignore
 
     features_by_layer = _empty_layers()
-    query_box = box(query.min_lon, query.min_lat, query.max_lon, query.max_lat)
+    query_bounds = (query.min_lon, query.min_lat, query.max_lon, query.max_lat)
+    query_box = box(*query_bounds)
 
     class _Handler(osmium.SimpleHandler):  # type: ignore[misc]
         def node(self, node) -> None:  # noqa: ANN001
-            tags = {str(tag.k): str(tag.v) for tag in node.tags}
-            layer = _classify_layer(tags)
-            if layer is None or layer not in features_by_layer:
-                return
+            # Location first: it rejects nearly every node in a region-sized
+            # extract for the cost of two float comparisons, before any tag
+            # dict or shapely geometry is built.
             try:
                 lon = float(node.location.lon)
                 lat = float(node.location.lat)
             except Exception:
+                return
+            if not (query_bounds[0] <= lon <= query_bounds[2] and query_bounds[1] <= lat <= query_bounds[3]):
+                return
+            tags = {str(tag.k): str(tag.v) for tag in node.tags}
+            layer = _classify_layer(tags)
+            if layer is None or layer not in features_by_layer:
                 return
             geom = {"type": "Point", "coordinates": [lon, lat]}
             _append_feature(features_by_layer, layer, f"node/{node.id}", geom, tags, query_box, provider_id)
@@ -236,12 +302,24 @@ def _feature_collection_from_osm_pbf(path: Path, *, query: BBoxQuery, provider_i
             if layer is None or layer not in features_by_layer:
                 return
             coords: list[list[float]] = []
+            min_lon = min_lat = float("inf")
+            max_lon = max_lat = float("-inf")
             for node in way.nodes:
                 try:
-                    coords.append([float(node.lon), float(node.lat)])
+                    lon = float(node.lon)
+                    lat = float(node.lat)
                 except Exception:
                     continue
+                coords.append([lon, lat])
+                min_lon = lon if lon < min_lon else min_lon
+                max_lon = lon if lon > max_lon else max_lon
+                min_lat = lat if lat < min_lat else min_lat
+                max_lat = lat if lat > max_lat else max_lat
             if len(coords) < 2:
+                return
+            # Reject out-of-area ways before constructing shapely geometry,
+            # which dominates the cost on a region-sized extract.
+            if not _bbox_overlaps((min_lon, min_lat, max_lon, max_lat), query_bounds):
                 return
             element = {"type": "way", "id": way.id, "tags": tags, "geometry": [{"lon": x, "lat": y} for x, y in coords]}
             geom = _geometry_for_element(element)
@@ -414,7 +492,21 @@ def _feature_collection_from_pmtiles(path: Path, *, query: BBoxQuery, provider_i
     )
 
 
-def _feature_collection_from_raster_dem(path: Path, *, query: BBoxQuery, provider_id: str) -> FeatureCollection:
+def _feature_collection_from_raster_dem(
+    path: Path,
+    *,
+    query: BBoxQuery,
+    provider_id: str,
+    value_layer: str = "terrain_contours",
+    value_key: str = "elevation",
+    level_count: int = 12,
+) -> FeatureCollection:
+    """Contour a single-band raster into iso-value lines.
+
+    Band-agnostic: elevation produces terrain contours, nighttime radiance
+    produces iso-radiance lines. ``value_layer``/``value_key`` name the output
+    so the caller is not forced to mislabel non-terrain data as terrain.
+    """
     import numpy as np
     import rasterio  # type: ignore
     from rasterio.warp import transform as transform_coords  # type: ignore
@@ -438,7 +530,7 @@ def _feature_collection_from_raster_dem(path: Path, *, query: BBoxQuery, provide
         valid = filled[np.isfinite(filled)]
         if valid.size == 0:
             return _collection_from_layers(features_by_layer, metadata={"source": provider_id, "format": "dem", "path": str(path)}, bbox=(query.min_lon, query.min_lat, query.max_lon, query.max_lat))
-        levels = _contour_levels(float(valid.min()), float(valid.max()), count=12)
+        levels = _contour_levels(float(valid.min()), float(valid.max()), count=level_count)
         for level in levels:
             for contour in measure.find_contours(filled, level=level):
                 coords: list[tuple[float, float]] = []
@@ -456,17 +548,17 @@ def _feature_collection_from_raster_dem(path: Path, *, query: BBoxQuery, provide
                     continue
                 _append_feature(
                     features_by_layer,
-                    "terrain_contours",
-                    f"contour/{level:.2f}/{len(features_by_layer['terrain_contours'])}",
+                    value_layer,
+                    f"contour/{level:.2f}/{len(features_by_layer[value_layer])}",
                     mapping(line),
-                    {"elevation": float(level), "hipparchus_layer": "terrain_contours"},
+                    {value_key: float(level), "hipparchus_layer": value_layer},
                     box(query.min_lon, query.min_lat, query.max_lon, query.max_lat),
                     provider_id,
                 )
 
     return _collection_from_layers(
         features_by_layer,
-        metadata={"source": provider_id, "format": "dem", "path": str(path)},
+        metadata={"source": provider_id, "format": "raster", "path": str(path), "value_key": value_key},
         bbox=(query.min_lon, query.min_lat, query.max_lon, query.max_lat),
     )
 

@@ -15,6 +15,7 @@ from hipparchus.data_sources.optional_providers import (
     OptionalProviderUnavailable,
     local_osm_pbf_provider,
     natural_earth_provider,
+    night_lights_provider,
     overture_provider,
     terrain_dem_provider,
     vector_tile_provider,
@@ -49,6 +50,7 @@ class DataSourceConfig:
     natural_earth_path: Path | None = field(default_factory=lambda: _optional_path("HIPPARCHUS_NATURAL_EARTH"))
     overture_path: Path | None = field(default_factory=lambda: _optional_path("HIPPARCHUS_OVERTURE"))
     terrain_dem_path: Path | None = field(default_factory=lambda: _optional_path("HIPPARCHUS_TERRAIN_DEM"))
+    night_lights_path: Path | None = field(default_factory=lambda: _optional_path("HIPPARCHUS_NIGHT_LIGHTS"))
 
 
 @dataclass
@@ -83,6 +85,7 @@ class DataSourceManager:
             "natural_earth": natural_earth_provider(self.config.natural_earth_path),
             "overture": overture_provider(self.config.overture_path),
             "terrain_dem": terrain_dem_provider(self.config.terrain_dem_path),
+            "night_lights": night_lights_provider(self.config.night_lights_path),
         }
         _LOGGER.info("Overpass provider initialized with cache at %s", cache_dir / "overpass")
 
