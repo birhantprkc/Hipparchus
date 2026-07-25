@@ -1,6 +1,6 @@
 # Hipparchus
 
-**Version 0.2.3**
+**Version 0.3.0**
 
 **Hipparchus is an online desktop vector cartography app for creating clean, editable maps from OpenStreetMap data and exporting them as Illustrator-friendly SVG files.**
 
@@ -36,8 +36,9 @@ Hipparchus is a standalone map creation tool focused on live online data, clean 
 - Hipparchus 2 quality pipeline with projected render coordinates, cartographic smoothing, high-quality preview/export profiles, richer SVG diagnostics, and editable SVG labels.
 - Cartographic presets including `OSM Standard`, `Urban Structure`, `Fragmented Urban`, `Organic Field`, and `Blueprint Relief`.
 - Additional print-oriented presets including `Editorial Print`, `Clean Atlas`, `Soft Urban`, `Technical Blueprint`, `Terrain Study`, `Monochrome Figure Ground`, and `Coastal Survey`.
-- Map-model registry for future local OSM, vector-tile, Natural Earth, Overture, terrain, and hybrid atlas sources without making those optional dependencies mandatory.
-- Local source paths for map models can be supplied in the UI or with environment variables such as `HIPPARCHUS_LOCAL_OSM_PBF`, `HIPPARCHUS_VECTOR_TILES`, `HIPPARCHUS_NATURAL_EARTH`, `HIPPARCHUS_OVERTURE`, and `HIPPARCHUS_TERRAIN_DEM`.
+- Eight map models covering live OSM, local OSM `.osm.pbf`, vector tiles, Natural Earth, Overture, terrain relief, night lights, and a hybrid atlas — each backed by an optional dependency that never becomes mandatory.
+- `Night Lights (VIIRS)` model that turns a nighttime-illumination GeoTIFF into iso-radiance contours: how brightly a place is actually lit at night, as editable vector lines.
+- Local source paths for map models can be supplied in the UI or with environment variables such as `HIPPARCHUS_LOCAL_OSM_PBF`, `HIPPARCHUS_VECTOR_TILES`, `HIPPARCHUS_NATURAL_EARTH`, `HIPPARCHUS_OVERTURE`, `HIPPARCHUS_TERRAIN_DEM`, and `HIPPARCHUS_NIGHT_LIGHTS`.
 - Derived geometry layers including Voronoi cells, Delaunay mesh, hex grid, and circle packing.
 - Persistent custom presets saved to the user app data folder.
 - Light and dark appearance support using native macOS Aqua where available.
@@ -267,7 +268,7 @@ py -m hipparchus
 
 ### Local Source Models
 
-GeoJSON/JSON sources work without extra packages. Provider-specific formats use the optional backends installed with `--maps`/`-Maps`, for example `osmium` for `.osm.pbf`, `mapbox-vector-tile` for MBTiles/MVT, `pmtiles` for PMTiles, `fiona` for Natural Earth shapefiles, `pyarrow` for Overture GeoParquet, and `rasterio` plus `scikit-image` for DEM contours.
+GeoJSON/JSON sources work without extra packages. Provider-specific formats use the optional backends installed with `--maps`/`-Maps`, for example `osmium` for `.osm.pbf`, `mapbox-vector-tile` for MBTiles/MVT, `pmtiles` for PMTiles, `fiona` for Natural Earth shapefiles, `pyarrow` for Overture GeoParquet, and `rasterio` plus `scikit-image` for DEM and night-lights contours.
 
 Hipparchus works out of the box with live OSM data and needs no local files. The `datasets/` folder is gitignored, so a fresh clone starts empty. If you add your own local map files there, point the app at them before launch.
 
@@ -278,6 +279,14 @@ HIPPARCHUS_VECTOR_TILES=datasets/pmtiles/firenze.pmtiles ./run_hprs.sh
 HIPPARCHUS_NATURAL_EARTH=datasets/natural_earth ./run_hprs.sh
 HIPPARCHUS_OVERTURE=datasets/overture/demo_overture_places_buildings.parquet ./run_hprs.sh
 HIPPARCHUS_TERRAIN_DEM=datasets/dem/athens_z11_1158_790.tif ./run_hprs.sh
+HIPPARCHUS_LOCAL_OSM_PBF=datasets/osm/athens.osm.pbf ./run_hprs.sh
+HIPPARCHUS_NIGHT_LIGHTS=datasets/nightlights/athens.tif ./run_hprs.sh
+```
+
+`OSM Local` scans the whole `.pbf` on every query, so give it a city-sized file. Clip a country or region extract first:
+
+```bash
+python3 scripts/clip_pbf.py greece-latest.osm.pbf athens.osm.pbf 23.55 37.85 23.85 38.10
 ```
 
 Windows (PowerShell):
@@ -498,7 +507,7 @@ src/hipparchus/
   application/       Controller, presets, preset persistence, quality, scene builder
   cache/             Disk cache, cache index, and housekeeping
   core/              App bootstrap, config, project state, settings store
-  data_sources/      Overpass provider, query builder, GeoJSON conversion, map models
+  data_sources/      Overpass provider, query builder, GeoJSON conversion, map models, local-source backends
   export/            SVG export, export profiles, and SVG cleanup
   geometry/          Projection, simplification, smoothing, and derived geometry tools
   plugins/           Plugin interfaces, loader, and builtin plugins
@@ -506,8 +515,8 @@ src/hipparchus/
   ui/                Tkinter main window
 
 hipparchus/          Compatibility shim so `python -m hipparchus` runs from source
-tests/               Unit tests (19 test modules)
-scripts/             Launch, preflight, and precache scripts
+tests/               Unit tests (20 test modules)
+scripts/             Launch, preflight, precache, clip, and export scripts
 docs/                Documentation assets (screenshots)
 documents/           Design and planning notes
 datasets/            Local sample data (gitignored except README)

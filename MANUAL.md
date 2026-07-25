@@ -1,6 +1,6 @@
 # Hipparchus Manual
 
-**Version 0.2.3**
+**Version 0.3.0**
 
 This manual explains how to use Hipparchus as an online map creation app. It covers installation, launching, fetching map data, working with layers and presets, exporting SVG files, and solving common problems. It applies to macOS, Linux, and Windows.
 
@@ -317,6 +317,7 @@ The top bar includes a `Model` dropdown. `OSM Live` is the default and uses Over
 - `Natural Earth Atlas`: accepts GeoJSON/JSON directly and shapefiles when `fiona` is installed.
 - `Overture Places/Buildings`: accepts local GeoParquet when `pyarrow` is installed.
 - `Terrain Relief`: accepts contour/elevation GeoJSON/JSON directly and can extract contours from local GeoTIFF DEM files when `rasterio` and `scikit-image` are installed.
+- `Night Lights (VIIRS)`: reads a single-band nighttime-illumination GeoTIFF and extracts iso-radiance contours — how brightly a place is actually lit at night, as editable vector lines. Shares the raster path with `Terrain Relief`, so it needs the same `rasterio` and `scikit-image` backends.
 - `Hybrid Atlas`: combines configured sources and falls back gracefully when optional sources are unavailable.
 
 Install all optional map-source backends with `./setup.sh --maps` (macOS / Linux) or `.\setup.ps1 -Maps` (Windows).
@@ -334,7 +335,28 @@ HIPPARCHUS_VECTOR_TILES=datasets/pmtiles/firenze.pmtiles ./run_hprs.sh
 HIPPARCHUS_NATURAL_EARTH=datasets/natural_earth ./run_hprs.sh
 HIPPARCHUS_OVERTURE=datasets/overture/places_buildings.parquet ./run_hprs.sh
 HIPPARCHUS_TERRAIN_DEM=datasets/dem/contours.tif ./run_hprs.sh
+HIPPARCHUS_LOCAL_OSM_PBF=datasets/osm/your-city.osm.pbf ./run_hprs.sh
+HIPPARCHUS_NIGHT_LIGHTS=datasets/nightlights/your-city.tif ./run_hprs.sh
 ```
+
+#### Clip `.osm.pbf` extracts before using them
+
+`OSM Local` scans the whole `.pbf` on every query, so point it at a
+city-sized file, not a country-sized one. Region extracts (Geofabrik and
+similar) must be clipped first:
+
+```bash
+python3 scripts/clip_pbf.py greece-latest.osm.pbf athens.osm.pbf 23.55 37.85 23.85 38.10
+```
+
+#### Where to get night-lights rasters
+
+Any single-band GeoTIFF of nighttime radiance works. Calibrated products
+(values in nW/cm²/sr) come from NASA Black Marble VNP46A or the EOG VIIRS
+Nighttime Lights (VNL) annual composites; both are free but need an account.
+Rendered RGB previews such as a NASA GIBS WMS capture need no account, but
+they clip to pure white across bright city cores — a saturated window has no
+contours at all, so treat them as fixtures rather than data.
 
 Windows (PowerShell):
 

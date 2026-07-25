@@ -1,6 +1,6 @@
 # Hipparchus File Structure
 
-**Version 0.2.3**
+**Version 0.3.0**
 
 This document describes the repository layout of Hipparchus, an online desktop
 vector cartography application. It complements the "Project Layout" section of
@@ -24,7 +24,7 @@ Hipparchus/
 ├── hipparchus/               Compatibility shim package (run from source)
 ├── src/hipparchus/           Application source package
 ├── tests/                    Unit tests
-├── scripts/                  Launch, preflight, and precache scripts
+├── scripts/                  Launch, preflight, precache, clip, and export scripts
 ├── docs/                     Documentation assets (screenshots)
 ├── documents/               Design and planning notes
 └── datasets/                 Local sample data (gitignored except README)
@@ -42,7 +42,7 @@ hipparchus/
 
 ```text
 src/hipparchus/
-├── __init__.py               Package root; exposes __version__ = "0.2.3"
+├── __init__.py               Package root; exposes __version__ = "0.3.0"
 ├── __main__.py               `python -m hipparchus` entry point
 ├── main.py                   Application launcher / main() entry
 │
@@ -66,8 +66,8 @@ src/hipparchus/
 │
 ├── data_sources/            Map data acquisition and conversion
 │   ├── data_source_manager.py  Selects and configures active sources
-│   ├── map_models.py         Map-model registry (OSM, vector tiles, DEM, etc.)
-│   ├── optional_providers.py Optional local-source backends
+│   ├── map_models.py         Map-model registry (OSM, vector tiles, DEM, night lights, etc.)
+│   ├── optional_providers.py Optional local-source backends (PBF, MVT/PMTiles, shapefile, GeoParquet, raster contours)
 │   ├── overpass_geojson.py   Overpass JSON to layer-separated GeoJSON
 │   ├── overpass_provider.py  Overpass API client with endpoint fallback
 │   ├── overpass_query.py     Overpass QL query builder
@@ -108,10 +108,11 @@ src/hipparchus/
 
 ## Tests (`tests/`)
 
-19 pytest modules covering models, projection, smoothing, simplification,
+20 pytest modules covering models, projection, smoothing, simplification,
 scene building, rendering state, export/quality profiles, SVG export, caching,
-presets, project state, configuration, geometry tools/adapter, and the Overpass
-provider, query, and GeoJSON conversion paths.
+presets, project state, configuration, geometry tools/adapter, the optional
+local-source providers and their bbox pre-filter, and the Overpass provider,
+query, and GeoJSON conversion paths.
 
 ```text
 tests/
@@ -122,6 +123,7 @@ tests/
 ├── test_geometry_tools.py
 ├── test_map_models.py
 ├── test_optional_providers.py
+├── test_optional_providers_spatial.py
 ├── test_overpass_geojson.py
 ├── test_overpass_provider.py
 ├── test_overpass_query.py
@@ -140,6 +142,8 @@ tests/
 
 ```text
 scripts/
+├── clip_pbf.py               Clip an .osm.pbf to a bbox (city-sized extracts for OSM Local)
+├── export_area_geometry.py  Headless bbox geometry export (JSON contract)
 ├── precache_presets.py       Warm the Overpass cache for built-in presets
 ├── python_env.sh             Shared PYTHONPATH / interpreter helper
 ├── release_preflight.sh      Compile, test, and dependency checks before release
@@ -151,16 +155,21 @@ scripts/
 ```text
 docs/
 └── assets/
-    └── hipparchus-screenshot.png
+    ├── hipparchus-screenshot.png
+    └── hipparchus-venice.png
 
 documents/
 └── hipparchus2plan.md        Hipparchus 2 design and planning notes
 
 datasets/                     Local sample data (gitignored except README.md)
-├── README.md
-├── dem/                      Sample DEM raster
-├── mbtiles/                  Sample MBTiles
-├── natural_earth/            Sample Natural Earth zips
-├── overture/                 Sample Overture GeoParquet
-└── pmtiles/                  Sample PMTiles
+├── README.md                 What is provisioned locally, and how to re-acquire it
+├── dem/                      DEM raster for terrain contours
+├── geojson/                  Plain GeoJSON/JSON sources (any model accepts these)
+├── mbtiles/                  MBTiles vector source
+├── natural_earth/            Natural Earth 1:110m (world scale only)
+├── natural_earth_10m/        Natural Earth 1:10m (use this one regionally)
+├── nightlights/              Nighttime-illumination GeoTIFF for the Night Lights model
+├── osm/                      Local .osm.pbf extracts and city clips
+├── overture/                 Overture GeoParquet
+└── pmtiles/                  PMTiles vector and raster sources
 ```
