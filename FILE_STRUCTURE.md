@@ -24,7 +24,7 @@ Hipparchus/
 ├── hipparchus/               Compatibility shim package (run from source)
 ├── src/hipparchus/           Application source package
 ├── tests/                    Unit tests
-├── scripts/                  Launch, preflight, precache, clip, and export scripts
+├── scripts/                  Launch, preflight, precache, and clip scripts
 ├── docs/                     Documentation assets (screenshots)
 ├── documents/               Design and planning notes
 └── datasets/                 Local sample data (gitignored except README)
@@ -143,7 +143,6 @@ tests/
 ```text
 scripts/
 ├── clip_pbf.py               Clip an .osm.pbf to a bbox (city-sized extracts for OSM Local)
-├── export_area_geometry.py  Headless bbox geometry export (JSON contract)
 ├── precache_presets.py       Warm the Overpass cache for built-in presets
 ├── python_env.sh             Shared PYTHONPATH / interpreter helper
 ├── release_preflight.sh      Compile, test, and dependency checks before release

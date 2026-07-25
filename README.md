@@ -516,7 +516,7 @@ src/hipparchus/
 
 hipparchus/          Compatibility shim so `python -m hipparchus` runs from source
 tests/               Unit tests (20 test modules)
-scripts/             Launch, preflight, precache, clip, and export scripts
+scripts/             Launch, preflight, precache, and clip scripts
 docs/                Documentation assets (screenshots)
 documents/           Design and planning notes
 datasets/            Local sample data (gitignored except README)
