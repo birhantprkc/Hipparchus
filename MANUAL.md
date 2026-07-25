@@ -229,6 +229,11 @@ The left sidebar includes preset locations:
 - New York Midtown
 - Paris Core
 - Tokyo Central
+- Kyoto Center
+- San Francisco Downtown
+- Venice Historic
+
+Any of these names also works with `HIPPARCHUS_START_AREA` (see section 21).
 
 To use one:
 

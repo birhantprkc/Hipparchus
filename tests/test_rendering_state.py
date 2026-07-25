@@ -12,7 +12,25 @@ except Exception:  # noqa: BLE001
     SKIA_AVAILABLE = False
 
 from hipparchus.rendering.engine import NoOpRenderer
-from hipparchus.rendering.models import LayerStyle, RenderLayer, RenderScene, ViewportState
+from hipparchus.rendering.models import LayerStyle, RGBAColor, RenderLayer, RenderScene, ViewportState
+
+
+class RGBAColorHexTests(unittest.TestCase):
+    """Backs the preview surround, which has to be a Tk colour string."""
+
+    def test_channels_render_as_two_digit_hex(self) -> None:
+        self.assertEqual(RGBAColor(14, 17, 23).to_hex(), "#0e1117")
+
+    def test_white_and_black(self) -> None:
+        self.assertEqual(RGBAColor(255, 255, 255).to_hex(), "#ffffff")
+        self.assertEqual(RGBAColor(0, 0, 0).to_hex(), "#000000")
+
+    def test_alpha_is_ignored(self) -> None:
+        """Tk colour strings carry no alpha, and the surround is opaque."""
+        self.assertEqual(RGBAColor(250, 250, 250, 0).to_hex(), RGBAColor(250, 250, 250, 255).to_hex())
+
+    def test_default_scene_ground_is_the_light_paper(self) -> None:
+        self.assertEqual(RenderScene().background.to_hex(), "#fafafa")
 
 
 class RenderingStateTests(unittest.TestCase):

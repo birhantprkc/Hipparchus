@@ -22,6 +22,10 @@ class RGBAColor:
         bounded = max(0.0, min(1.0, opacity))
         return RGBAColor(self.r, self.g, self.b, int(self.a * bounded))
 
+    def to_hex(self) -> str:
+        """Return ``#rrggbb``. Alpha is dropped; Tk colour strings have none."""
+        return f"#{self.r:02x}{self.g:02x}{self.b:02x}"
+
 
 @dataclass(slots=True)
 class LayerStyle:

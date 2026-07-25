@@ -568,7 +568,12 @@ class MainWindow:
         canvas_wrap.grid_rowconfigure(0, weight=1)
         canvas_wrap.grid_columnconfigure(0, weight=1)
 
-        self._canvas = tk.Canvas(canvas_wrap, background="#f5f5f5", highlightthickness=1, highlightbackground="#d0d0d0")
+        self._canvas = tk.Canvas(
+            canvas_wrap,
+            background=self._canvas_surround_color(),
+            highlightthickness=1,
+            highlightbackground="#d0d0d0",
+        )
         self._canvas.grid(row=0, column=0, sticky="nsew")
         self._v_scroll = ttk.Scrollbar(canvas_wrap, orient="vertical", command=self._on_vscroll)
         self._v_scroll.grid(row=0, column=1, sticky="ns")
@@ -854,6 +859,19 @@ class MainWindow:
         ttk.Button(diag_actions, text="Save Diagnostics", command=self._save_diagnostics).grid(row=0, column=1, sticky="ew", padx=(3, 0))
         ttk.Label(parent, textvariable=self._perf_summary_var, justify="left", wraplength=280).pack(anchor="w", pady=(4, 0))
 
+    def _canvas_surround_color(self) -> str:
+        """Colour for the preview canvas outside the rendered image.
+
+        The render is aspect-fitted, so bare canvas shows around it. Matching
+        the scene's ground keeps that margin continuous with the map instead of
+        ringing a dark preset in light grey. Falls back to the theme before any
+        scene exists.
+        """
+        scene = getattr(self, "_current_scene", None)
+        if scene is not None:
+            return scene.background.to_hex()
+        return "#2b2b2b" if self._theme_mode == "dark" else "#f5f5f5"
+
     def _sync_label_font_to_renderer(self) -> None:
         """Push the panel's label font onto the renderer at startup.
 
@@ -1071,6 +1089,9 @@ class MainWindow:
 
     def _apply_scene(self, scene: RenderScene, cache_state: str) -> None:
         self._current_scene = scene
+        # Follow the new preset's ground, so switching to or from a dark preset
+        # repaints the margin around the fitted render too.
+        self._canvas.configure(background=self._canvas_surround_color())
         self._sync_layer_visibility_to_scene()
         self.renderer.set_scene(scene)
         self.renderer.set_viewport(ViewportState())
@@ -1740,7 +1761,7 @@ class MainWindow:
                 canvas = getattr(self, canvas_name)
                 canvas.configure(background=sidebar_bg)
         if hasattr(self, "_canvas"):
-            self._canvas.configure(background="#f5f5f5", highlightbackground=canvas_border)
+            self._canvas.configure(background=self._canvas_surround_color(), highlightbackground=canvas_border)
 
     def run(self) -> None:
         """Run the Tk event loop."""
