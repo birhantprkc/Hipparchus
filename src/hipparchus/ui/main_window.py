@@ -271,6 +271,7 @@ class MainWindow:
         self._build_window()
         self._build_layout()
         self._apply_theme()
+        self._sync_label_font_to_renderer()
         self._root.after(50, self._drain_callback_queue)
         if self.config.start_area or self.config.fetch_on_start:
             self._root.after(300, self._maybe_fetch_on_start)
@@ -853,12 +854,25 @@ class MainWindow:
         ttk.Button(diag_actions, text="Save Diagnostics", command=self._save_diagnostics).grid(row=0, column=1, sticky="ew", padx=(3, 0))
         ttk.Label(parent, textvariable=self._perf_summary_var, justify="left", wraplength=280).pack(anchor="w", pady=(4, 0))
 
+    def _sync_label_font_to_renderer(self) -> None:
+        """Push the panel's label font onto the renderer at startup.
+
+        The panel opens showing Arial at 12pt while the renderer defaults to
+        its own face at 10pt, so without this the first render disagrees with
+        what the sidebar says until Apply Settings is pressed once.
+        """
+        if hasattr(self.renderer, "set_label_font_family"):
+            self.renderer.set_label_font_family(self._label_font_var.get().strip())
+        if hasattr(self.renderer, "set_label_font_size"):
+            self.renderer.set_label_font_size(max(6, min(24, int(self._label_size_var.get()))))
+
     def _apply_runtime_settings(self) -> None:
         endpoint = self._provider_endpoint_var.get().strip()
         rps = max(0.05, float(self._provider_rps_var.get()))
         timeout_seconds = max(5.0, float(self._provider_timeout_var.get()))
         device_scale = max(1.0, min(4.0, float(self._device_scale_var.get())))
         label_font_size = max(6, min(24, int(self._label_size_var.get())))
+        label_font_family = self._label_font_var.get().strip()
 
         self.controller.data_source_manager.set_overpass_settings(
             endpoint=endpoint,
@@ -873,7 +887,12 @@ class MainWindow:
             setattr(self.renderer, "device_scale", device_scale)
         if hasattr(self.renderer, "set_label_font_size"):
             self.renderer.set_label_font_size(label_font_size)
+        if hasattr(self.renderer, "set_label_font_family"):
+            self.renderer.set_label_font_family(label_font_family)
 
+        # The label setters only mark the picture cache dirty, so without a
+        # redraw a font change sat invisible until the next fetch.
+        self._schedule_redraw()
         self._status_var.set(f"Settings applied - Model: {self._map_model_var.get()}")
 
     def _save_current_as_preset(self) -> None:

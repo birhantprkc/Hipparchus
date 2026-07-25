@@ -528,6 +528,17 @@ The right sidebar includes label settings:
 - Font family
 - Font size
 
+Both apply when you click `Apply Settings` in the `Provider` block, which
+repaints the preview immediately. The panel opens on Arial at 12pt and the
+renderer starts there too, so what you see matches the sidebar from the first
+render.
+
+A family the system does not have falls back to the default face rather than
+blanking the labels. Non-Latin names are the one case where your choice is
+overridden: a label the chosen family cannot render is drawn in a face that
+covers it instead, so Japanese and Korean names stay legible whichever family
+is selected (see "Non-Latin Place Names" below).
+
 Label visibility is in the left sidebar under `Labels`, not here. Those three
 checkboxes toggle the `places`, `shops`, and `amenities` layers, which carries
 their labels with them. Earlier versions also showed a `Show Labels` group in

@@ -32,6 +32,9 @@ class Renderer(Protocol):
     def set_label_font_size(self, size: int) -> None:
         """Set the font size for place labels."""
 
+    def set_label_font_family(self, family: str) -> None:
+        """Set the font family for place labels; empty selects the default."""
+
     def set_layer_visibility(self, layer_name: str, visible: bool) -> None:
         """Toggle layer visibility."""
 
@@ -45,6 +48,7 @@ class NoOpRenderer:
 
     scene: RenderScene = field(default_factory=RenderScene)
     viewport: ViewportState = field(default_factory=ViewportState)
+    label_font_family: str = ""
 
     def set_scene(self, scene: RenderScene) -> None:
         self.scene = scene
@@ -66,6 +70,9 @@ class NoOpRenderer:
 
     def set_label_font_size(self, size: int) -> None:
         pass
+
+    def set_label_font_family(self, family: str) -> None:
+        self.label_font_family = family.strip()
 
     def set_layer_visibility(self, layer_name: str, visible: bool) -> None:
         for layer in self.scene.layers:

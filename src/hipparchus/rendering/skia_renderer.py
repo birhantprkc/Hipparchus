@@ -43,6 +43,26 @@ def _import_skia() -> Any:
 _UNSET = object()
 _DEFAULT_TYPEFACE: Any = _UNSET
 _FALLBACK_TYPEFACES: dict[int, Any] = {}
+_FAMILY_TYPEFACES: dict[str, Any] = {}
+
+
+def _family_typeface(family: str) -> Any:
+    """Return the typeface for a requested family, or None to use the default.
+
+    None covers both "nothing requested" and "the system does not have it", so
+    an unavailable family degrades to the default face rather than blanking
+    every label.
+    """
+    requested = family.strip()
+    if not requested:
+        return None
+    if requested not in _FAMILY_TYPEFACES:
+        skia = _import_skia()
+        try:
+            _FAMILY_TYPEFACES[requested] = skia.FontMgr().matchFamilyStyle(requested, skia.FontStyle())
+        except Exception:  # noqa: BLE001 - font matching is best effort
+            _FAMILY_TYPEFACES[requested] = None
+    return _FAMILY_TYPEFACES[requested]
 
 
 def _default_typeface() -> Any:
@@ -59,16 +79,20 @@ def _default_typeface() -> Any:
     return _DEFAULT_TYPEFACE
 
 
-def _typeface_for_text(text: str) -> Any:
-    """Return a typeface covering ``text``, or None when the default suffices.
+def _typeface_for_text(text: str, base: Any = None) -> Any:
+    """Return a typeface covering ``text``, or None when ``base`` suffices.
 
-    Only the first character the default face cannot render decides the
-    fallback: a mixed "Kyoto 京都" label is drawn entirely in the CJK face,
-    which also covers Latin.
+    Only the first character the base face cannot render decides the fallback:
+    a mixed "Kyoto 京都" label is drawn entirely in the CJK face, which also
+    covers Latin.
+
+    ``base`` is the face the label would otherwise use, so coverage is judged
+    against the family the user picked. Courier lacks kanji just as the default
+    face does, and both must still fall back. Defaults to the Latin face.
     """
     if not text:
         return None
-    default = _default_typeface()
+    default = base if base is not None else _default_typeface()
     if default is None:
         return None
     for char in text:
@@ -109,6 +133,8 @@ class SkiaRenderer:
     _lock: threading.RLock = field(default_factory=threading.RLock, init=False, repr=False)
     _last_drawn_paths: int = field(default=0, init=False, repr=False)
     _label_font_size: int = field(default=10, init=False, repr=False)
+    # Empty means the default Latin face. Public so the UI can read it back.
+    label_font_family: str = field(default="", init=False)
     _last_render_diagnostics: dict[str, object] = field(default_factory=dict, init=False, repr=False)
 
     def set_scene(self, scene: RenderScene) -> None:
@@ -147,6 +173,13 @@ class SkiaRenderer:
         """Set the font size for place labels."""
         with self._lock:
             self._label_font_size = size
+            self._dirty = True
+
+    def set_label_font_family(self, family: str) -> None:
+        """Set the font family for labels; empty selects the default face."""
+        with self._lock:
+            self.label_font_family = family.strip()
+            # The cached picture holds the old face, so it has to be rebuilt.
             self._dirty = True
 
     def set_layer_visibility(self, layer_name: str, visible: bool) -> None:
@@ -384,17 +417,21 @@ class SkiaRenderer:
 
         font_size = max(6, min(getattr(self, '_label_font_size', 10), 16))
 
+        # The picked family, or None for the default face when nothing is
+        # requested or the system does not have it.
+        base_typeface = _family_typeface(self.label_font_family)
+
         try:
-            font = skia.Font(None, font_size)
+            font = skia.Font(base_typeface, font_size)
         except Exception:
             return
 
         # Reuse one Font per typeface so non-Latin labels do not allocate a new
-        # one per draw. Keyed by family name; None is the default Latin face.
+        # one per draw. Keyed by family name; None is the base face.
         font_cache: dict[str | None, Any] = {None: font}
 
         def _font_for(text: str) -> Any:
-            typeface = _typeface_for_text(text)
+            typeface = _typeface_for_text(text, base=base_typeface)
             if typeface is None:
                 return font
             family = typeface.getFamilyName()

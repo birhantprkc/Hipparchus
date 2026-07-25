@@ -4,6 +4,13 @@ import unittest
 
 from shapely.geometry import LineString
 
+try:
+    import skia  # type: ignore  # noqa: F401
+
+    SKIA_AVAILABLE = True
+except Exception:  # noqa: BLE001
+    SKIA_AVAILABLE = False
+
 from hipparchus.rendering.engine import NoOpRenderer
 from hipparchus.rendering.models import LayerStyle, RenderLayer, RenderScene, ViewportState
 
@@ -23,6 +30,29 @@ class RenderingStateTests(unittest.TestCase):
         renderer.set_layer_visibility("roads", False)
 
         self.assertFalse(scene.layers[0].style.visible)
+
+    def test_noop_renderer_accepts_a_label_font_family(self) -> None:
+        """Part of the Renderer contract, so the fallback backend must accept it."""
+        renderer = NoOpRenderer()
+
+        renderer.set_label_font_family("Helvetica")
+
+        self.assertEqual(renderer.label_font_family, "Helvetica")
+
+
+@unittest.skipUnless(SKIA_AVAILABLE, "skia-python not installed")
+class SkiaLabelFontFamilyTests(unittest.TestCase):
+    def test_setting_a_family_marks_the_picture_cache_dirty(self) -> None:
+        """A cached picture would keep drawing the old face."""
+        from hipparchus.rendering.skia_renderer import SkiaRenderer
+
+        renderer = SkiaRenderer()
+        renderer._dirty = False
+
+        renderer.set_label_font_family("  Courier  ")
+
+        self.assertEqual(renderer.label_font_family, "Courier")
+        self.assertTrue(renderer._dirty)
 
 
 if __name__ == "__main__":
