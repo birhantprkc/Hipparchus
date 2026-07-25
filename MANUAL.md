@@ -418,6 +418,9 @@ These are tuned for clean, editable print output:
 - `Monochrome Figure Ground`
 - `Coastal Survey`
 
+The "Gallery" section of [README.md](README.md) shows eight of these presets
+rendered from live data, which is the quickest way to pick one by eye.
+
 ### Creating A Custom Preset
 
 In the right sidebar:
@@ -516,6 +519,19 @@ The right sidebar includes label settings:
 - Amenity name visibility
 
 Some label controls may depend on renderer support. If a setting appears to have no effect, the data may not include labels for the selected layer, or the current renderer path may not use that option yet.
+
+### Non-Latin Place Names
+
+Labels are drawn in the system's default text face, which covers Latin, Greek,
+and Cyrillic. When a place name contains characters that face cannot draw —
+Japanese, Chinese, Korean, Arabic, Thai — Hipparchus asks the system for a font
+that covers them and draws that label in it. A name mixing scripts, such as
+`浅野日本酒店Kyoto`, is drawn entirely in the covering font.
+
+This relies on the operating system having a suitable font installed. macOS and
+Windows ship them; a minimal Linux install may not. If non-Latin labels appear
+as empty boxes (`▯▯▯`), install a broad font family — for example
+`fonts-noto-cjk` on Debian/Ubuntu — and restart the app.
 
 ## 13. Renderer Settings
 
@@ -797,6 +813,19 @@ This is usually due to Overpass load or a large request. Improve speed by:
 - Avoiding label-heavy layers.
 - Using cached areas when possible.
 
+If you are on the `OSM Local` model, slowness is expected with a large file:
+the whole `.pbf` is scanned on every query. Clip it to a city-sized extract
+with `scripts/clip_pbf.py` (see section 7) rather than pointing the app at a
+country or region download.
+
+### Labels Show As Empty Boxes
+
+Empty boxes (`▯▯▯`) mean the system has no font covering that writing system.
+Hipparchus asks the operating system for a covering font automatically, so this
+only happens when none is installed — most often on a minimal Linux setup.
+Install a broad font family, for example `fonts-noto-cjk` on Debian/Ubuntu,
+then restart the app. See section 12.
+
 ### Exported SVG Is Too Complex
 
 Try:
@@ -850,6 +879,20 @@ HIPPARCHUS_FETCH_ON_START
 HIPPARCHUS_PYTHON
 ```
 
+Local map-source paths, one per optional map model (see section 7):
+
+```text
+HIPPARCHUS_LOCAL_OSM_PBF     .osm.pbf extract for OSM Local
+HIPPARCHUS_VECTOR_TILES      PMTiles, MBTiles, MVT export, or GeoJSON
+HIPPARCHUS_NATURAL_EARTH     Folder of Natural Earth shapefiles, or a vector file
+HIPPARCHUS_OVERTURE          Overture GeoParquet extract
+HIPPARCHUS_TERRAIN_DEM       GeoTIFF DEM for terrain contours
+HIPPARCHUS_NIGHT_LIGHTS      GeoTIFF of nighttime radiance for Night Lights
+```
+
+A model whose path is unset reports as unavailable and the app stays usable;
+it does not fail at startup.
+
 `HIPPARCHUS_START_AREA` preselects a built-in area preset by name (for example `Kyoto Center`, `San Francisco Downtown`, or `Venice Historic`). `HIPPARCHUS_FETCH_ON_START` set to `1`, `true`, `yes`, or `on` fetches and renders that area automatically once the window opens, so you can capture a screenshot without clicking through the UI.
 
 Examples on macOS / Linux:
@@ -891,6 +934,7 @@ run_hprs.sh                  Launcher (macOS / Linux)
 run_hprs.ps1                 Launcher (Windows PowerShell)
 run_hprs_checked.sh          Launcher with preflight checks (macOS / Linux)
 scripts/release_preflight.sh Preflight checks
+scripts/clip_pbf.py          Clip an .osm.pbf to a bbox for OSM Local
 src/hipparchus/main.py       Application entry point
 src/hipparchus/core/application.py
 src/hipparchus/core/config.py
@@ -898,6 +942,9 @@ src/hipparchus/data_sources/overpass_provider.py
 src/hipparchus/data_sources/overpass_query.py
 src/hipparchus/application/scene_builder.py
 src/hipparchus/application/presets.py
+src/hipparchus/data_sources/map_models.py
+src/hipparchus/data_sources/optional_providers.py
+src/hipparchus/rendering/skia_renderer.py
 src/hipparchus/ui/main_window.py
 src/hipparchus/export/svg_clean.py
 ```
@@ -921,3 +968,7 @@ Current limitations:
 - Very large AOIs are not suitable.
 - Some UI settings are early-stage and may not affect every rendering path yet.
 - Export is SVG-focused; PDF, PNG, and GeoJSON exporters are placeholders.
+- `OSM Local` scans the whole `.pbf` on every query, so it needs a city-sized
+  clip to be practical (see section 7).
+- Non-Latin label rendering depends on the operating system providing a font
+  that covers the script (see section 12).
