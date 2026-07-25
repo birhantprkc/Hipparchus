@@ -208,6 +208,32 @@ class RenderSceneBuilderTests(unittest.TestCase):
         self.assertTrue(water_layer.style.fill_enabled)
         self.assertGreater(water_layer.style.fill_color.b, water_layer.style.fill_color.r)
 
+    def test_scene_carries_the_style_profile_background(self) -> None:
+        """The renderer and the SVG exporter both read the ground off the scene."""
+        fc = FeatureCollection(
+            geojson_by_layer={
+                "roads": {
+                    "type": "FeatureCollection",
+                    "features": [
+                        {
+                            "type": "Feature",
+                            "geometry": {"type": "LineString", "coordinates": [[0, 0], [10, 10]]},
+                            "properties": {},
+                        },
+                    ],
+                },
+            }
+        )
+
+        night = default_preset("Night")
+        scene = RenderSceneBuilder().build(fc, night.geometry_profile, night.style_profile, "preview")
+
+        expected = night.style_profile.background
+        self.assertEqual(
+            (scene.background.r, scene.background.g, scene.background.b),
+            (expected.r, expected.g, expected.b),
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

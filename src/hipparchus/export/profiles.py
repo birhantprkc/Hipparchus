@@ -34,6 +34,9 @@ class SVGExportProfile:
     precision: int | None = None
     clip_to_aoi: bool = True
     include_labels: bool = True
+    # Paint the scene's ground as a rect. Off gives a transparent export for
+    # compositing over other artwork; dark presets need it on to be legible.
+    include_background: bool = True
     composition: MapComposition = field(default_factory=MapComposition)
 
 

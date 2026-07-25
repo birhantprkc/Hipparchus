@@ -8,7 +8,7 @@ from xml.etree.ElementTree import Element, ElementTree, SubElement
 
 from hipparchus.export.profiles import ExportDiagnostics, SVGExportProfile
 from hipparchus.rendering.geometry_adapter import geometry_to_svg_path_data
-from hipparchus.rendering.models import RenderScene
+from hipparchus.rendering.models import RGBAColor, RenderScene
 
 
 @dataclass(slots=True)
@@ -80,6 +80,24 @@ class CleanSVGExporter:
                 svg.set("data-hipparchus-crs", str(projection.get("render_crs", "")))
         svg.set("data-hipparchus-paper", profile.composition.paper_preset)
         svg.set("data-hipparchus-orientation", profile.composition.orientation)
+
+        # Paint the ground first. Without it a dark preset exports pale strokes
+        # onto a transparent canvas, which reads as blank on white paper.
+        if profile.include_background:
+            background = scene.background
+            SubElement(
+                svg,
+                "rect",
+                {
+                    "id": "map_background",
+                    "x": "0",
+                    "y": "0",
+                    "width": str(width),
+                    "height": str(height),
+                    "fill": _color_to_hex(background.r, background.g, background.b),
+                    "opacity": _fmt_float(background.a / 255.0),
+                },
+            )
 
         map_group = SubElement(svg, "g", {"id": "map_layers"})
 
@@ -193,8 +211,14 @@ class CleanSVGExporter:
 
         group = SubElement(svg, "g", {"id": "map_furniture"})
         margin = max(18.0, min(width, height) * max(0.02, min(0.18, composition.margin_ratio)))
-        text_color = "#222222"
-        halo = "#ffffff"
+        # Furniture has to invert on a dark ground, or the title, arrow, and
+        # legend text vanish into it.
+        dark_ground = _relative_luminance(scene.background) < 128.0
+        text_color = "#f2f2f2" if dark_ground else "#222222"
+        halo = "#101010" if dark_ground else "#ffffff"
+        panel_fill = "#12151c" if dark_ground else "#ffffff"
+        panel_stroke = "#3a4050" if dark_ground else "#d0d0d0"
+        subtitle_color = "#b8bdc9" if dark_ground else "#555555"
 
         if composition.include_title and (composition.title or composition.subtitle):
             title_group = SubElement(group, "g", {"id": "map_title"})
@@ -223,7 +247,7 @@ class CleanSVGExporter:
                         "y": _fmt_float(title_y),
                         "font-family": "Arial, Helvetica, sans-serif",
                         "font-size": _fmt_float(max(11.0, min(width, height) * 0.015)),
-                        "fill": "#555555",
+                        "fill": subtitle_color,
                     },
                 )
                 subtitle.text = composition.subtitle
@@ -280,7 +304,7 @@ class CleanSVGExporter:
                     "y": _fmt_float(y - 28),
                     "width": _fmt_float(bar_px + 12),
                     "height": "38",
-                    "fill": "#ffffff",
+                    "fill": panel_fill,
                     "opacity": "0.78",
                 },
             )
@@ -319,9 +343,9 @@ class CleanSVGExporter:
                         "y": _fmt_float(y),
                         "width": _fmt_float(legend_w),
                         "height": _fmt_float(legend_h),
-                        "fill": "#ffffff",
+                        "fill": panel_fill,
                         "opacity": "0.84",
-                        "stroke": "#d0d0d0",
+                        "stroke": panel_stroke,
                     },
                 )
                 for index, layer in enumerate(legend_layers):
@@ -418,6 +442,11 @@ class CleanSVGExporter:
 
 def _color_to_hex(r: int, g: int, b: int) -> str:
     return f"#{r:02x}{g:02x}{b:02x}"
+
+
+def _relative_luminance(color: RGBAColor) -> float:
+    """Rec. 709 luminance on the 0-255 scale, used to pick furniture colours."""
+    return 0.2126 * color.r + 0.7152 * color.g + 0.0722 * color.b
 
 
 def _fmt_float(value: float) -> str:

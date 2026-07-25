@@ -31,6 +31,9 @@ class StyleProfile:
     """Named style set for composable map layer visuals."""
 
     layer_styles: dict[str, LayerStyle]
+    # The ground the layers sit on. Light by default so every daylight preset
+    # keeps rendering exactly as before; dark presets override it.
+    background: RGBAColor = field(default_factory=lambda: RGBAColor(250, 250, 250, 255))
 
 
 @dataclass(slots=True, frozen=True)
@@ -43,6 +46,10 @@ class ArtisticPreset:
 
 
 DEFAULT_PRESET_NAME = "Urban Structure"
+
+# Night ground, and the sodium/amber road palette lit against it. Named so the
+# preset body and the style helper cannot drift apart.
+NIGHT_GROUND = RGBAColor(14, 17, 23, 255)
 
 
 def default_preset(name: str = DEFAULT_PRESET_NAME) -> ArtisticPreset:
@@ -213,6 +220,21 @@ def _preset_registry() -> dict[str, ArtisticPreset]:
                 layer_smoothing_iterations={"coastline": 3, "water": 2},
             ),
             style_profile=StyleProfile(layer_styles=_coastal_survey_styles()),
+        ),
+        "Night": ArtisticPreset(
+            name="Night",
+            geometry_profile=GeometryPipelineProfile(
+                simplify_tolerance_preview=0.0,
+                simplify_tolerance_export=0.0,
+                smoothing_iterations=1,
+                derive_voronoi=False,
+                derive_delaunay=False,
+                max_on_screen_features_per_layer=200000,
+            ),
+            style_profile=StyleProfile(
+                layer_styles=_night_styles(),
+                background=NIGHT_GROUND,
+            ),
         ),
     }
 
@@ -489,6 +511,66 @@ def _monochrome_figure_ground_styles() -> dict[str, LayerStyle]:
     styles["parks"] = LayerStyle(stroke_width=0.0, fill_enabled=True, fill_color=RGBAColor(242, 242, 242), stroke_color=RGBAColor(242, 242, 242), opacity=1.0)
     styles["roads_residential"] = LayerStyle(stroke_width=1.2, fill_enabled=False, stroke_color=RGBAColor(255, 255, 255), casing_width=2.0, casing_color=RGBAColor(30, 30, 30), line_cap="round")
     styles["places"] = LayerStyle(stroke_width=0.0, fill_enabled=False, stroke_color=RGBAColor(20, 20, 20), label_halo_color=RGBAColor(255, 255, 255, 245), label_halo_width=2.8)
+    return styles
+
+
+def _night_styles() -> dict[str, LayerStyle]:
+    """City-at-night palette: lit roads over an unlit ground.
+
+    Inverts the usual figure/ground relationship. Daylight presets darken lines
+    against pale paper; here the roads are the light source, so the hierarchy is
+    carried by brightness rather than hue, and every road gets a casing in the
+    ground colour so adjacent streets stay separable where they bunch up.
+    """
+    styles = _base_styles()
+
+    # Road hierarchy from warm white down to dim sodium.
+    lit_roads = {
+        "roads_motorway": (RGBAColor(255, 236, 189), 4.6),
+        "roads_trunk": (RGBAColor(253, 226, 170), 4.2),
+        "roads_primary": (RGBAColor(250, 211, 145), 3.6),
+        "roads_secondary": (RGBAColor(238, 189, 124), 2.9),
+        "roads_tertiary": (RGBAColor(214, 168, 112), 2.3),
+        "roads_residential": (RGBAColor(178, 140, 98), 1.7),
+        "roads_service": (RGBAColor(140, 113, 84), 1.2),
+        "roads_other": (RGBAColor(122, 100, 76), 1.1),
+        "roads": (RGBAColor(178, 140, 98), 1.7),
+    }
+    for name, (color, width) in lit_roads.items():
+        styles[name] = LayerStyle(
+            stroke_width=width,
+            fill_enabled=False,
+            stroke_color=color,
+            casing_width=width + 1.3,
+            casing_color=RGBAColor(9, 11, 16),
+            line_cap="round",
+            opacity=1.0,
+        )
+
+    # Built fabric reads as a faint lift off the ground, not as filled shapes.
+    styles["buildings"] = LayerStyle(stroke_width=0.3, fill_enabled=True, fill_color=RGBAColor(38, 43, 54), stroke_color=RGBAColor(58, 65, 80), opacity=0.95)
+    styles["water"] = LayerStyle(stroke_width=0.4, fill_enabled=True, fill_color=RGBAColor(11, 26, 46), stroke_color=RGBAColor(32, 62, 96), opacity=1.0)
+    styles["coastline"] = LayerStyle(stroke_width=1.6, fill_enabled=True, fill_color=RGBAColor(9, 20, 36), stroke_color=RGBAColor(38, 72, 108), opacity=1.0, line_cap="round")
+    styles["parks"] = LayerStyle(stroke_width=0.3, fill_enabled=True, fill_color=RGBAColor(22, 38, 30), stroke_color=RGBAColor(40, 62, 48), opacity=0.9)
+    styles["forests"] = LayerStyle(stroke_width=0.3, fill_enabled=True, fill_color=RGBAColor(19, 33, 26), stroke_color=RGBAColor(34, 54, 42), opacity=0.9)
+    styles["fields"] = LayerStyle(stroke_width=0.25, fill_enabled=True, fill_color=RGBAColor(28, 30, 26), stroke_color=RGBAColor(44, 47, 40), opacity=0.8)
+    styles["natural"] = LayerStyle(stroke_width=0.25, fill_enabled=True, fill_color=RGBAColor(26, 30, 28), stroke_color=RGBAColor(42, 48, 44), opacity=0.8)
+    styles["landuse"] = LayerStyle(stroke_width=0.2, fill_enabled=True, fill_color=RGBAColor(22, 25, 32, 160), stroke_color=RGBAColor(38, 42, 52), opacity=0.5)
+    styles["railways"] = LayerStyle(stroke_width=0.9, fill_enabled=False, stroke_color=RGBAColor(96, 104, 120), opacity=0.85)
+    styles["barriers"] = LayerStyle(stroke_width=0.4, fill_enabled=False, stroke_color=RGBAColor(58, 62, 72), opacity=0.5)
+    styles["power"] = LayerStyle(stroke_width=0.4, fill_enabled=False, stroke_color=RGBAColor(70, 74, 86), opacity=0.45)
+
+    # Labels invert too: pale text on a dark halo, or the shared white halo
+    # would print as a box around every name.
+    night_halo = RGBAColor(10, 12, 17, 235)
+    styles["places"] = LayerStyle(stroke_width=0.0, fill_enabled=False, stroke_color=RGBAColor(232, 236, 244), label_halo_color=night_halo, label_halo_width=2.6)
+    styles["shops"] = LayerStyle(stroke_width=0.0, fill_enabled=False, stroke_color=RGBAColor(206, 158, 214), label_halo_color=night_halo, label_halo_width=2.2)
+    styles["amenities"] = LayerStyle(stroke_width=0.0, fill_enabled=False, stroke_color=RGBAColor(146, 200, 158), label_halo_color=night_halo, label_halo_width=2.2)
+
+    # Derived overlays stay faint so they read as structure, not as roads.
+    for derived in ("voronoi_cells", "delaunay_mesh", "hex_grid", "circle_packing"):
+        styles[derived] = LayerStyle(stroke_width=0.5, fill_enabled=False, stroke_color=RGBAColor(70, 78, 94), opacity=0.35)
+
     return styles
 
 

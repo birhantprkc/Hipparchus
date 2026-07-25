@@ -199,6 +199,7 @@ class RenderSceneBuilder:
             layers=layers,
             bbox=scene_bbox,
             source_bbox=feature_collection.bbox,
+            background=style_profile.background,
             metadata={
                 "source": feature_collection.metadata.get("source", "unknown"),
                 "quality_profile": profile.key,

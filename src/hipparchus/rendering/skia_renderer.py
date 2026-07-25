@@ -114,6 +114,9 @@ class SkiaRenderer:
     def set_scene(self, scene: RenderScene) -> None:
         with self._lock:
             self.scene = scene
+            # The scene carries the preset's ground, so switching to a dark
+            # preset repaints the canvas instead of leaving pale lines on white.
+            self.background = scene.background
             self._dirty = True
             self._path_cache.clear()
             self._scene_bounds = self._compute_scene_bounds()

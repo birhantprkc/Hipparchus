@@ -418,8 +418,22 @@ These are tuned for clean, editable print output:
 - `Monochrome Figure Ground`
 - `Coastal Survey`
 
-The "Gallery" section of [README.md](README.md) shows eight of these presets
-rendered from live data, which is the quickest way to pick one by eye.
+### Night
+
+`Night` is the one preset that sets its own background. Every other preset draws
+dark lines onto the pale default ground; `Night` paints an unlit ground and
+inverts the hierarchy, so the road classes are separated by brightness — warm
+white motorways down to dim sodium service roads — rather than by hue. Buildings
+lift slightly off the ground instead of being filled, and labels switch to pale
+text on a dark halo.
+
+The ground travels with the scene, so it applies to the preview and to the SVG
+export alike: exports gain a `map_background` rect, and the optional furniture
+(title, scale bar, north arrow, legend) inverts to stay legible. Saved custom
+presets keep their background too.
+
+The "Gallery" section of [README.md](README.md) shows ten renders of these
+presets from live data, which is the quickest way to pick one by eye.
 
 ### Creating A Custom Preset
 
@@ -673,9 +687,13 @@ Hipparchus exports:
 - Clean SVG paths.
 - Layer groups using map layer names.
 - Fill and stroke colors from the active style.
+- A `map_background` rect holding the preset's ground, written before the layer
+  groups so it sits underneath them. This is what makes a `Night` export legible
+  rather than pale strokes on nothing. Set `include_background=False` on the
+  export profile for a transparent export to composite over other artwork.
 - Non-scaling strokes.
 - Standard SVG path commands.
-- Optional map furniture from the right sidebar: title block, scale bar, north arrow, and simple legend.
+- Optional map furniture from the right sidebar: title block, scale bar, north arrow, and simple legend. On a dark ground the furniture inverts so it stays readable.
 - Paper presets including canvas, square, A4, A3, and poster.
 
 The SVG export is designed to remain friendly to Illustrator and other vector-editing tools.

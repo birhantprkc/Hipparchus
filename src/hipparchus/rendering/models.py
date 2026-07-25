@@ -93,6 +93,9 @@ class RenderScene:
     # Optional bbox for the scene (min_lon, min_lat, max_lon, max_lat)
     bbox: tuple[float, float, float, float] | None = None
     source_bbox: tuple[float, float, float, float] | None = None
+    # Ground the layers are drawn on. Carried on the scene so the preview
+    # renderer and the SVG exporter agree without consulting the preset.
+    background: RGBAColor = field(default_factory=lambda: RGBAColor(250, 250, 250, 255))
     metadata: dict[str, object] = field(default_factory=dict)
     diagnostics: dict[str, object] = field(default_factory=dict)
 

@@ -27,6 +27,36 @@ class PresetStoreTests(unittest.TestCase):
             preset.style_profile.layer_styles["water"].fill_color.b,
         )
 
+    def test_roundtrip_preserves_the_background(self) -> None:
+        """A saved Night preset that reloads on a light ground is unusable."""
+        preset = default_preset("Night")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "presets.json"
+            store = PresetStore(path)
+            store.save({preset.name: preset})
+            loaded = store.load()
+
+        background = loaded["Night"].style_profile.background
+        expected = preset.style_profile.background
+        self.assertEqual(
+            (background.r, background.g, background.b, background.a),
+            (expected.r, expected.g, expected.b, expected.a),
+        )
+
+    def test_roundtrip_preserves_label_halos(self) -> None:
+        preset = default_preset("Night")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "presets.json"
+            store = PresetStore(path)
+            store.save({preset.name: preset})
+            loaded = store.load()
+
+        halo = loaded["Night"].style_profile.layer_styles["places"].label_halo_color
+        expected = preset.style_profile.layer_styles["places"].label_halo_color
+        self.assertEqual((halo.r, halo.g, halo.b), (expected.r, expected.g, expected.b))
+
     def test_empty_missing_file(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             store = PresetStore(Path(tmp) / "missing.json")

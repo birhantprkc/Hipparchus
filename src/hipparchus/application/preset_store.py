@@ -47,7 +47,8 @@ def _preset_to_dict(preset: ArtisticPreset) -> dict[str, Any]:
             "layer_styles": {
                 layer_name: _layer_style_to_dict(style)
                 for layer_name, style in sorted(preset.style_profile.layer_styles.items())
-            }
+            },
+            "background": asdict(preset.style_profile.background),
         },
     }
 
@@ -58,16 +59,19 @@ def _preset_from_dict(data: dict[str, Any]) -> ArtisticPreset | None:
         return None
 
     geometry_profile = GeometryPipelineProfile(**dict(data.get("geometry_profile", {})))
-    raw_styles = dict(data.get("style_profile", {}).get("layer_styles", {}))
+    raw_style_profile = dict(data.get("style_profile", {}))
+    raw_styles = dict(raw_style_profile.get("layer_styles", {}))
     layer_styles = {
         str(layer_name): _layer_style_from_dict(dict(style_data))
         for layer_name, style_data in raw_styles.items()
         if isinstance(style_data, dict)
     }
+    # Presets saved before backgrounds existed keep the light ground.
+    background = _color_from_dict(raw_style_profile.get("background"), RGBAColor(250, 250, 250, 255))
     return ArtisticPreset(
         name=name,
         geometry_profile=geometry_profile,
-        style_profile=StyleProfile(layer_styles=layer_styles),
+        style_profile=StyleProfile(layer_styles=layer_styles, background=background),
     )
 
 
@@ -76,6 +80,7 @@ def _layer_style_to_dict(style: LayerStyle) -> dict[str, Any]:
     data["stroke_color"] = asdict(style.stroke_color)
     data["fill_color"] = asdict(style.fill_color)
     data["casing_color"] = asdict(style.casing_color)
+    data["label_halo_color"] = asdict(style.label_halo_color)
     return data
 
 
@@ -90,6 +95,8 @@ def _layer_style_from_dict(data: dict[str, Any]) -> LayerStyle:
         casing_width=float(data.get("casing_width", 0.0)),
         casing_color=_color_from_dict(data.get("casing_color"), RGBAColor(0, 0, 0, 255)),
         line_cap=str(data.get("line_cap", "butt")),
+        label_halo_color=_color_from_dict(data.get("label_halo_color"), RGBAColor(255, 255, 255, 230)),
+        label_halo_width=float(data.get("label_halo_width", 2.0)),
     )
 
 

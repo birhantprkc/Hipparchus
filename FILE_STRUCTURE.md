@@ -156,7 +156,7 @@ docs/
 └── assets/
     ├── hipparchus-tokyo-dark.png
     ├── hipparchus-kyoto-light.png
-    └── gallery-*.png          Eight preset renders used by the README gallery
+    └── gallery-*.png          Ten preset renders used by the README gallery
 
 documents/
 └── hipparchus2plan.md        Hipparchus 2 design and planning notes

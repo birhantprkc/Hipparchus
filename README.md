@@ -36,6 +36,7 @@ Hipparchus is a standalone map creation tool focused on live online data, clean 
 - Hipparchus 2 quality pipeline with projected render coordinates, cartographic smoothing, high-quality preview/export profiles, richer SVG diagnostics, and editable SVG labels.
 - Cartographic presets including `OSM Standard`, `Urban Structure`, `Fragmented Urban`, `Organic Field`, and `Blueprint Relief`.
 - Additional print-oriented presets including `Editorial Print`, `Clean Atlas`, `Soft Urban`, `Technical Blueprint`, `Terrain Study`, `Monochrome Figure Ground`, and `Coastal Survey`.
+- A dark `Night` preset that paints its own ground, so lit streets read against an unlit city in both the preview and the SVG export.
 - Eight map models covering live OSM, local OSM `.osm.pbf`, vector tiles, Natural Earth, Overture, terrain relief, night lights, and a hybrid atlas — each backed by an optional dependency that never becomes mandatory.
 - `Night Lights (VIIRS)` model that turns a nighttime-illumination GeoTIFF into iso-radiance contours: how brightly a place is actually lit at night, as editable vector lines.
 - Local source paths for map models can be supplied in the UI or with environment variables such as `HIPPARCHUS_LOCAL_OSM_PBF`, `HIPPARCHUS_VECTOR_TILES`, `HIPPARCHUS_NATURAL_EARTH`, `HIPPARCHUS_OVERTURE`, `HIPPARCHUS_TERRAIN_DEM`, and `HIPPARCHUS_NIGHT_LIGHTS`.
@@ -78,7 +79,7 @@ The screenshots above show Hipparchus running on macOS, in dark and light appear
 
 ## Gallery
 
-Eight of the built-in cartographic presets, each rendered from live OpenStreetMap data through the same pipeline that produces the SVG export. Labels are switched off here so the styles read clearly at a glance.
+Ten renders of the built-in cartographic presets, each from live OpenStreetMap data through the same pipeline that produces the SVG export. Labels are switched off here so the styles read clearly at a glance. `Night` appears twice because a dark ground reads differently on a compact centre than on a river city.
 
 <table>
   <tr>
@@ -112,6 +113,14 @@ Eight of the built-in cartographic presets, each rendered from live OpenStreetMa
   <tr>
     <td align="center"><em>Amsterdam — <code>Fragmented Urban</code></em></td>
     <td align="center"><em>Athens — <code>Blueprint Relief</code></em></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/assets/gallery-athens-night.png" width="100%" alt="Athens rendered in the Night preset, lit streets over a dark ground"></td>
+    <td width="50%"><img src="docs/assets/gallery-rome-night.png" width="100%" alt="Rome rendered in the Night preset, lit streets over a dark ground"></td>
+  </tr>
+  <tr>
+    <td align="center"><em>Athens — <code>Night</code></em></td>
+    <td align="center"><em>Rome — <code>Night</code></em></td>
   </tr>
 </table>
 
