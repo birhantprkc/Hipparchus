@@ -728,16 +728,10 @@ class MainWindow:
         self._label_size_var = tk.IntVar(value=12)
         ttk.Spinbox(row, from_=8, to=24, textvariable=self._label_size_var, width=10).pack(side="left")
 
-        # Label visibility toggles
-        ttk.Label(parent, text="Show Labels:", font=("SF Pro Text", 10)).pack(anchor="w", pady=(6, 2))
-        self._show_place_names_var = tk.BooleanVar(value=True)
-        self._show_street_names_var = tk.BooleanVar(value=True)
-        self._show_shop_names_var = tk.BooleanVar(value=True)
-        self._show_amenity_names_var = tk.BooleanVar(value=True)
-        ttk.Checkbutton(parent, text="Place Names (cities, towns)", variable=self._show_place_names_var).pack(anchor="w", pady=1)
-        ttk.Checkbutton(parent, text="Street Names", variable=self._show_street_names_var).pack(anchor="w", pady=1)
-        ttk.Checkbutton(parent, text="Shop/Business Names", variable=self._show_shop_names_var).pack(anchor="w", pady=1)
-        ttk.Checkbutton(parent, text="Amenity Names (cafes, etc.)", variable=self._show_amenity_names_var).pack(anchor="w", pady=1)
+        # Label visibility lives in the left sidebar's "Labels" group, which
+        # toggles the places, shops, and amenities layers for real. A second set
+        # of "Show Labels" checkboxes used to sit here wired to nothing, which
+        # left two identically labelled Place Names controls in one window.
 
         ttk.Separator(parent, orient="horizontal").pack(fill="x", pady=10)
         ttk.Label(parent, text="Renderer", font=("SF Pro Text", 11, "bold")).pack(anchor="w", pady=(0, 6))

@@ -527,12 +527,15 @@ The right sidebar includes label settings:
 
 - Font family
 - Font size
-- Place name visibility
-- Street name visibility
-- Shop/business name visibility
-- Amenity name visibility
 
-Some label controls may depend on renderer support. If a setting appears to have no effect, the data may not include labels for the selected layer, or the current renderer path may not use that option yet.
+Label visibility is in the left sidebar under `Labels`, not here. Those three
+checkboxes toggle the `places`, `shops`, and `amenities` layers, which carries
+their labels with them. Earlier versions also showed a `Show Labels` group in
+the right sidebar; it was wired to nothing and is gone, so the only place
+`Place Names` appears now is the left sidebar, where it works.
+
+If labels do not appear for a layer, the fetched data may simply carry no names
+for it.
 
 ### Non-Latin Place Names
 
