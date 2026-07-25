@@ -2,7 +2,12 @@ from __future__ import annotations
 
 import unittest
 
-from hipparchus.application.presets import DEFAULT_PRESET_NAME, default_preset, preset_names
+from hipparchus.application.presets import (
+    DEFAULT_PRESET_NAME,
+    default_preset,
+    preset_names,
+    resolve_preset_name,
+)
 from hipparchus.rendering.models import RGBAColor
 
 NIGHT_PRESET_NAME = "Night"
@@ -85,6 +90,41 @@ class NightPresetTests(unittest.TestCase):
         night = set(default_preset(NIGHT_PRESET_NAME).style_profile.layer_styles)
         default = set(default_preset(DEFAULT_PRESET_NAME).style_profile.layer_styles)
         self.assertEqual(default - night, set())
+
+
+class ResolvePresetNameTests(unittest.TestCase):
+    """Backs HIPPARCHUS_START_PRESET, so a bad value must never strand the dropdown."""
+
+    available = ("Clean Atlas", "Night", "Urban Structure")
+
+    def test_exact_name_is_selected(self) -> None:
+        self.assertEqual(resolve_preset_name("Night", self.available, DEFAULT_PRESET_NAME), "Night")
+
+    def test_matching_ignores_case_and_padding(self) -> None:
+        for requested in ("night", "  NIGHT  ", "nIgHt"):
+            with self.subTest(requested=requested):
+                self.assertEqual(resolve_preset_name(requested, self.available, DEFAULT_PRESET_NAME), "Night")
+
+    def test_unknown_name_falls_back(self) -> None:
+        self.assertEqual(resolve_preset_name("Midnight", self.available, DEFAULT_PRESET_NAME), DEFAULT_PRESET_NAME)
+
+    def test_empty_request_falls_back(self) -> None:
+        for requested in ("", "   "):
+            with self.subTest(requested=requested):
+                self.assertEqual(resolve_preset_name(requested, self.available, DEFAULT_PRESET_NAME), DEFAULT_PRESET_NAME)
+
+    def test_custom_preset_names_are_selectable(self) -> None:
+        """The dropdown merges built-ins with the user's saved presets."""
+        self.assertEqual(
+            resolve_preset_name("My Night", (*self.available, "My Night"), DEFAULT_PRESET_NAME),
+            "My Night",
+        )
+
+    def test_every_builtin_resolves_to_itself(self) -> None:
+        names = preset_names()
+        for name in names:
+            with self.subTest(preset=name):
+                self.assertEqual(resolve_preset_name(name, names, DEFAULT_PRESET_NAME), name)
 
 
 if __name__ == "__main__":

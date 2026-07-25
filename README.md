@@ -524,11 +524,12 @@ HIPPARCHUS_WINDOW_WIDTH
 HIPPARCHUS_WINDOW_HEIGHT
 HIPPARCHUS_PROVIDER_RPS
 HIPPARCHUS_START_AREA
+HIPPARCHUS_START_PRESET
 HIPPARCHUS_FETCH_ON_START
 HIPPARCHUS_PYTHON
 ```
 
-`HIPPARCHUS_START_AREA` preselects a built-in area preset (for example `Kyoto Center`) on launch. `HIPPARCHUS_FETCH_ON_START` (`1`/`true`/`yes`/`on`) fetches and renders that area automatically once the window opens — useful for capturing screenshots without clicking through the UI.
+`HIPPARCHUS_START_AREA` preselects a built-in area preset (for example `Kyoto Center`) on launch. `HIPPARCHUS_START_PRESET` preselects a cartographic preset by name (for example `Night`); matching ignores case, custom presets work too, and an unknown name falls back to the default rather than leaving the dropdown on a name it does not contain. `HIPPARCHUS_FETCH_ON_START` (`1`/`true`/`yes`/`on`) fetches and renders that area automatically once the window opens — useful for capturing screenshots without clicking through the UI.
 
 Examples on macOS / Linux:
 
@@ -537,6 +538,7 @@ HIPPARCHUS_THEME=dark ./run_hprs.sh
 HIPPARCHUS_WINDOW_WIDTH=1800 HIPPARCHUS_WINDOW_HEIGHT=1100 ./run_hprs.sh
 HIPPARCHUS_PROVIDER_RPS=0.2 ./run_hprs.sh
 HIPPARCHUS_START_AREA="Venice Historic" HIPPARCHUS_FETCH_ON_START=1 ./run_hprs.sh
+HIPPARCHUS_START_PRESET=Night HIPPARCHUS_START_AREA="Athens Center" HIPPARCHUS_FETCH_ON_START=1 ./run_hprs.sh
 ```
 
 Examples on Windows (PowerShell):

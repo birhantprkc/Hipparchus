@@ -20,7 +20,13 @@ from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 from hipparchus.application.controller import ApplicationController
-from hipparchus.application.presets import ArtisticPreset, GeometryPipelineProfile, default_preset, preset_names
+from hipparchus.application.presets import (
+    ArtisticPreset,
+    GeometryPipelineProfile,
+    default_preset,
+    preset_names,
+    resolve_preset_name,
+)
 from hipparchus.application.quality import quality_menu_labels, quality_mode_key, quality_profile
 from hipparchus.application.preset_store import PresetStore
 from hipparchus.core.config import AppConfig
@@ -221,12 +227,17 @@ class MainWindow:
         self._include_scale_bar_var = tk.BooleanVar(value=False)
         self._include_north_arrow_var = tk.BooleanVar(value=False)
         self._include_legend_var = tk.BooleanVar(value=False)
+        # On by default so what the preview shows is what the export contains.
+        # Off gives a transparent SVG for compositing over other artwork.
+        self._include_background_var = tk.BooleanVar(value=True)
         self._map_models = self.controller.data_source_manager.get_map_models()
         self._map_model_label_to_id = {str(model["label"]): str(model["id"]) for model in self._map_models}
         self._map_model_id_to_label = {str(model["id"]): str(model["label"]) for model in self._map_models}
         active_model = self.controller.data_source_manager.get_active_map_model()
         self._map_model_var = tk.StringVar(value=self._map_model_id_to_label.get(active_model, "OSM Live"))
-        self._preset_var = tk.StringVar(value=self.default_preset.name)
+        self._preset_var = tk.StringVar(
+            value=resolve_preset_name(self.config.start_preset, self._preset_options, self.default_preset.name)
+        )
         self._location_preset_var = tk.StringVar(value="London Center")
         self._location_query_var = tk.StringVar(value="")
         self._new_preset_name_var = tk.StringVar(value="")
@@ -822,6 +833,7 @@ class MainWindow:
         ttk.Checkbutton(parent, text="Include scale bar", variable=self._include_scale_bar_var).pack(anchor="w", pady=1)
         ttk.Checkbutton(parent, text="Include north arrow", variable=self._include_north_arrow_var).pack(anchor="w", pady=1)
         ttk.Checkbutton(parent, text="Include simple legend", variable=self._include_legend_var).pack(anchor="w", pady=1)
+        ttk.Checkbutton(parent, text="Include background", variable=self._include_background_var).pack(anchor="w", pady=1)
 
         ttk.Separator(parent, orient="horizontal").pack(fill="x", pady=10)
         ttk.Label(parent, text="Presets", font=("SF Pro Text", 11, "bold")).pack(anchor="w", pady=(0, 6))
@@ -1443,6 +1455,7 @@ class MainWindow:
             mode=export_mode,
             include_diagnostics=True,
             precision=selected_quality.svg_precision if selected_quality.legacy_mode == "export" else 4,
+            include_background=bool(self._include_background_var.get()),
             composition=self._export_composition(),
         )
         export_width, export_height = self._export_dimensions()

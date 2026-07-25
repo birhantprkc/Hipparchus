@@ -26,6 +26,7 @@ class AppConfig:
     provider_rps_limit: float
     start_area: str
     fetch_on_start: bool
+    start_preset: str
 
 
 class ConfigLoader:
@@ -51,6 +52,9 @@ class ConfigLoader:
 
         start_area = os.getenv("HIPPARCHUS_START_AREA", "").strip()
         fetch_on_start = os.getenv("HIPPARCHUS_FETCH_ON_START", "").strip().lower() in {"1", "true", "yes", "on"}
+        # Validated against the populated dropdown in the window, not here, so
+        # custom presets are selectable too.
+        start_preset = os.getenv("HIPPARCHUS_START_PRESET", "").strip()
 
         return AppConfig(
             app_name=app_name,
@@ -65,4 +69,5 @@ class ConfigLoader:
             provider_rps_limit=provider_rps_limit,
             start_area=start_area,
             fetch_on_start=fetch_on_start,
+            start_preset=start_preset,
         )

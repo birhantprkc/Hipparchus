@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 
 # Re-exported for the public preset API; consumers import QualityMode from here.
@@ -59,6 +60,24 @@ def default_preset(name: str = DEFAULT_PRESET_NAME) -> ArtisticPreset:
 
 def preset_names() -> tuple[str, ...]:
     return tuple(_preset_registry().keys())
+
+
+def resolve_preset_name(requested: str, available: Iterable[str], fallback: str) -> str:
+    """Map a requested preset name onto one that exists, or fall back.
+
+    Backs HIPPARCHUS_START_PRESET, where the name is typed on a command line:
+    matching is case-insensitive and tolerates padding, and anything unknown
+    yields the fallback rather than leaving the dropdown on a name that is not
+    in it. ``available`` is passed in so custom presets are selectable too.
+    """
+    candidate = requested.strip()
+    if not candidate:
+        return fallback
+    options = tuple(available)
+    for option in options:
+        if option.casefold() == candidate.casefold():
+            return option
+    return fallback
 
 
 def _preset_registry() -> dict[str, ArtisticPreset]:

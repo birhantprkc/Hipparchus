@@ -12,9 +12,16 @@ class ConfigStartOptionsTests(unittest.TestCase):
             return ConfigLoader.load()
 
     def test_defaults_are_off(self) -> None:
-        config = self._load_with({"HIPPARCHUS_START_AREA": "", "HIPPARCHUS_FETCH_ON_START": ""})
+        config = self._load_with(
+            {"HIPPARCHUS_START_AREA": "", "HIPPARCHUS_FETCH_ON_START": "", "HIPPARCHUS_START_PRESET": ""}
+        )
         self.assertEqual(config.start_area, "")
         self.assertFalse(config.fetch_on_start)
+        self.assertEqual(config.start_preset, "")
+
+    def test_start_preset_is_read_and_stripped(self) -> None:
+        config = self._load_with({"HIPPARCHUS_START_PRESET": "  Night  "})
+        self.assertEqual(config.start_preset, "Night")
 
     def test_start_area_is_read_and_stripped(self) -> None:
         config = self._load_with({"HIPPARCHUS_START_AREA": "  Venice Historic  "})
