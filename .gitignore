@@ -56,3 +56,6 @@ Desktop.ini
 
 # Logs
 *.log
+
+# Local Overpass response cache
+.overpass_cache/
