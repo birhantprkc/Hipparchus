@@ -6,12 +6,12 @@
 
 <table>
   <tr>
-    <td width="50%"><img src="docs/assets/hipparchus-screenshot.png" width="100%" alt="Hipparchus showing a coastal city map in dark appearance"></td>
-    <td width="50%"><img src="docs/assets/hipparchus-venice.png" width="100%" alt="Hipparchus showing the Venice historic center with waterways"></td>
+    <td width="50%"><img src="docs/assets/hipparchus-tokyo-dark.png" width="100%" alt="Hipparchus showing central Tokyo with Japanese labels in dark appearance"></td>
+    <td width="50%"><img src="docs/assets/hipparchus-kyoto-light.png" width="100%" alt="Hipparchus showing central Kyoto with Japanese labels in light appearance"></td>
   </tr>
   <tr>
-    <td align="center"><em>Coastal city map (dark appearance)</em></td>
-    <td align="center"><em>Venice historic center with waterways</em></td>
+    <td align="center"><em>Tokyo Central (dark appearance)</em></td>
+    <td align="center"><em>Kyoto Center (light appearance)</em></td>
   </tr>
 </table>
 
@@ -74,7 +74,7 @@ Map data is downloaded on demand from the public Overpass API the first time you
 
 ## Screenshots
 
-The screenshots above show Hipparchus running on macOS in dark appearance: a coastal city map and the Venice historic center, each with configurable layers, presets, and online Overpass provider settings.
+The screenshots above show Hipparchus running on macOS, in dark and light appearance: central Tokyo and central Kyoto, both fetched live from Overpass with Japanese labels resolved through the CJK font fallback. Each window exposes the same configurable layers, presets, and provider settings.
 
 ## Gallery
 

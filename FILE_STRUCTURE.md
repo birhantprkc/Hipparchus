@@ -154,8 +154,8 @@ scripts/
 ```text
 docs/
 └── assets/
-    ├── hipparchus-screenshot.png
-    ├── hipparchus-venice.png
+    ├── hipparchus-tokyo-dark.png
+    ├── hipparchus-kyoto-light.png
     └── gallery-*.png          Eight preset renders used by the README gallery
 
 documents/
