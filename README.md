@@ -76,6 +76,45 @@ Map data is downloaded on demand from the public Overpass API the first time you
 
 The screenshots above show Hipparchus running on macOS in dark appearance: a coastal city map and the Venice historic center, each with configurable layers, presets, and online Overpass provider settings.
 
+## Gallery
+
+Eight of the built-in cartographic presets, each rendered from live OpenStreetMap data through the same pipeline that produces the SVG export. Labels are switched off here so the styles read clearly at a glance.
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/assets/gallery-nyc-editorial-print.png" width="100%" alt="Manhattan rendered in the Editorial Print preset"></td>
+    <td width="50%"><img src="docs/assets/gallery-paris-figure-ground.png" width="100%" alt="Paris rendered in the Monochrome Figure Ground preset"></td>
+  </tr>
+  <tr>
+    <td align="center"><em>New York — <code>Editorial Print</code></em></td>
+    <td align="center"><em>Paris — <code>Monochrome Figure Ground</code></em></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/assets/gallery-venice-coastal-survey.png" width="100%" alt="Venice rendered in the Coastal Survey preset"></td>
+    <td width="50%"><img src="docs/assets/gallery-london-clean-atlas.png" width="100%" alt="London rendered in the Clean Atlas preset"></td>
+  </tr>
+  <tr>
+    <td align="center"><em>Venice — <code>Coastal Survey</code></em></td>
+    <td align="center"><em>London — <code>Clean Atlas</code></em></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/assets/gallery-barcelona-soft-urban.png" width="100%" alt="Barcelona rendered in the Soft Urban preset"></td>
+    <td width="50%"><img src="docs/assets/gallery-sanfrancisco-technical-blueprint.png" width="100%" alt="San Francisco rendered in the Technical Blueprint preset"></td>
+  </tr>
+  <tr>
+    <td align="center"><em>Barcelona — <code>Soft Urban</code></em></td>
+    <td align="center"><em>San Francisco — <code>Technical Blueprint</code></em></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/assets/gallery-amsterdam-fragmented-urban.png" width="100%" alt="Amsterdam rendered in the Fragmented Urban preset"></td>
+    <td width="50%"><img src="docs/assets/gallery-athens-blueprint-relief.png" width="100%" alt="Athens rendered in the Blueprint Relief preset"></td>
+  </tr>
+  <tr>
+    <td align="center"><em>Amsterdam — <code>Fragmented Urban</code></em></td>
+    <td align="center"><em>Athens — <code>Blueprint Relief</code></em></td>
+  </tr>
+</table>
+
 ## Current Status
 
 Hipparchus is a working desktop application under active development. It can fetch real map data, render an interactive preview, and export SVG. Some UI controls are still evolving, and PDF, PNG, and GeoJSON exporters are placeholders.

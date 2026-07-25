@@ -36,6 +36,58 @@ def _import_skia() -> Any:
     return _SKIA_MODULE
 
 
+# Label font fallback. The default typeface is Latin-only, so a Japanese or
+# Korean place name renders as tofu boxes. Skia's font manager can match a
+# typeface that covers a specific character; results are cached per 256-point
+# Unicode block so the lookup runs a handful of times, not once per label.
+_UNSET = object()
+_DEFAULT_TYPEFACE: Any = _UNSET
+_FALLBACK_TYPEFACES: dict[int, Any] = {}
+
+
+def _default_typeface() -> Any:
+    """Return the typeface used for Latin labels, or None if unavailable."""
+    global _DEFAULT_TYPEFACE
+    if _DEFAULT_TYPEFACE is _UNSET:
+        skia = _import_skia()
+        try:
+            _DEFAULT_TYPEFACE = skia.FontMgr().matchFamilyStyleCharacter(
+                "", skia.FontStyle(), ["und"], ord("A")
+            )
+        except Exception:  # noqa: BLE001 - font matching is best effort
+            _DEFAULT_TYPEFACE = None
+    return _DEFAULT_TYPEFACE
+
+
+def _typeface_for_text(text: str) -> Any:
+    """Return a typeface covering ``text``, or None when the default suffices.
+
+    Only the first character the default face cannot render decides the
+    fallback: a mixed "Kyoto 京都" label is drawn entirely in the CJK face,
+    which also covers Latin.
+    """
+    if not text:
+        return None
+    default = _default_typeface()
+    if default is None:
+        return None
+    for char in text:
+        code_point = ord(char)
+        if code_point < 0x80 or default.unicharToGlyph(code_point):
+            continue
+        block = code_point >> 8
+        if block not in _FALLBACK_TYPEFACES:
+            skia = _import_skia()
+            try:
+                _FALLBACK_TYPEFACES[block] = skia.FontMgr().matchFamilyStyleCharacter(
+                    "", skia.FontStyle(), ["und"], code_point
+                )
+            except Exception:  # noqa: BLE001 - fall back to the default face
+                _FALLBACK_TYPEFACES[block] = None
+        return _FALLBACK_TYPEFACES[block]
+    return None
+
+
 @dataclass(slots=True)
 class SkiaRenderer:
     """Renderer supporting layer styles, zoom/pan, and retina scaling."""
@@ -334,6 +386,24 @@ class SkiaRenderer:
         except Exception:
             return
 
+        # Reuse one Font per typeface so non-Latin labels do not allocate a new
+        # one per draw. Keyed by family name; None is the default Latin face.
+        font_cache: dict[str | None, Any] = {None: font}
+
+        def _font_for(text: str) -> Any:
+            typeface = _typeface_for_text(text)
+            if typeface is None:
+                return font
+            family = typeface.getFamilyName()
+            cached = font_cache.get(family)
+            if cached is None:
+                try:
+                    cached = skia.Font(typeface, font_size)
+                except Exception:  # noqa: BLE001 - keep drawing with the default
+                    cached = font
+                font_cache[family] = cached
+            return cached
+
         pad = 2.0
 
         # Pre-compute the world → screen transform (fit + viewport).
@@ -382,7 +452,8 @@ class SkiaRenderer:
         placed: list[tuple[float, float, float]] = []  # (cx, cy, half_w)
 
         for sx, sy, text, style in entries:
-            tw = font.measureText(text)
+            text_font = _font_for(text)
+            tw = text_font.measureText(text)
             half_w = tw / 2.0
             # Check overlap with already-placed labels.
             collides = False
@@ -407,8 +478,8 @@ class SkiaRenderer:
                 Style=skia.Paint.kFill_Style,
                 Color=skia.ColorSetARGB(255, text_color.r, text_color.g, text_color.b),
             )
-            canvas.drawString(text, sx - half_w, sy - 2, font, halo_paint)
-            canvas.drawString(text, sx - half_w, sy - 2, font, text_paint)
+            canvas.drawString(text, sx - half_w, sy - 2, text_font, halo_paint)
+            canvas.drawString(text, sx - half_w, sy - 2, text_font, text_paint)
 
     def _path_for_geometry(self, geometry: Any, skia: Any) -> Any | None:
         key = id(geometry)

@@ -155,7 +155,8 @@ scripts/
 docs/
 └── assets/
     ├── hipparchus-screenshot.png
-    └── hipparchus-venice.png
+    ├── hipparchus-venice.png
+    └── gallery-*.png          Eight preset renders used by the README gallery
 
 documents/
 └── hipparchus2plan.md        Hipparchus 2 design and planning notes
