@@ -52,6 +52,10 @@ DEFAULT_PRESET_NAME = "Urban Structure"
 # preset body and the style helper cannot drift apart.
 NIGHT_GROUND = RGBAColor(14, 17, 23, 255)
 
+# Warm off-white for the contour sheet: a pure white ground makes hairlines read
+# as dirt on the screen rather than as ink on paper.
+CONTOUR_PAPER = RGBAColor(246, 244, 239, 255)
+
 
 def default_preset(name: str = DEFAULT_PRESET_NAME) -> ArtisticPreset:
     presets = _preset_registry()
@@ -215,6 +219,61 @@ def _preset_registry() -> dict[str, ArtisticPreset]:
             ),
             style_profile=StyleProfile(layer_styles=_terrain_study_styles()),
         ),
+        "Hypsometric Relief": ArtisticPreset(
+            name="Hypsometric Relief",
+            geometry_profile=GeometryPipelineProfile(
+                simplify_tolerance_preview=0.3,
+                simplify_tolerance_export=0.06,
+                smoothing_iterations=2,
+                derive_voronoi=False,
+                derive_delaunay=False,
+                derive_hex_grid=False,
+                derive_circle_packing=False,
+                max_on_screen_features_per_layer=240000,
+            ),
+            style_profile=StyleProfile(
+                layer_styles=_hypsometric_styles(),
+                background=RGBAColor(247, 245, 240, 255),
+            ),
+        ),
+        "Relief Sheet": ArtisticPreset(
+            name="Relief Sheet",
+            geometry_profile=GeometryPipelineProfile(
+                # Hundreds of nested hairlines: simplify barely at all, or the
+                # nesting loses the tight parallelism that carries the relief.
+                simplify_tolerance_preview=0.12,
+                simplify_tolerance_export=0.02,
+                smoothing_iterations=1,
+                derive_voronoi=False,
+                derive_delaunay=False,
+                derive_hex_grid=False,
+                derive_circle_packing=False,
+                max_on_screen_features_per_layer=400000,
+            ),
+            style_profile=StyleProfile(
+                layer_styles=_relief_sheet_styles(),
+                background=CONTOUR_PAPER,
+            ),
+        ),
+        "Contour Study": ArtisticPreset(
+            name="Contour Study",
+            geometry_profile=GeometryPipelineProfile(
+                # Contours arrive dense and already clean, so simplify lightly
+                # and smooth twice: the look lives entirely in the linework.
+                simplify_tolerance_preview=0.35,
+                simplify_tolerance_export=0.08,
+                smoothing_iterations=2,
+                derive_voronoi=False,
+                derive_delaunay=False,
+                derive_hex_grid=False,
+                derive_circle_packing=False,
+                max_on_screen_features_per_layer=200000,
+            ),
+            style_profile=StyleProfile(
+                layer_styles=_contour_study_styles(),
+                background=CONTOUR_PAPER,
+            ),
+        ),
         "Monochrome Figure Ground": ArtisticPreset(
             name="Monochrome Figure Ground",
             geometry_profile=GeometryPipelineProfile(
@@ -281,6 +340,34 @@ def _base_styles() -> dict[str, LayerStyle]:
         "natural": LayerStyle(stroke_width=0.8, fill_enabled=True, fill_color=RGBAColor(200, 210, 160, 255), stroke_color=RGBAColor(140, 150, 100), opacity=1.0),
         "coastline": LayerStyle(stroke_width=3.0, fill_enabled=True, fill_color=RGBAColor(140, 180, 220, 255), stroke_color=RGBAColor(50, 100, 150), opacity=1.0),
         "places": LayerStyle(stroke_width=0.0, fill_enabled=False, stroke_color=RGBAColor(0, 0, 0), opacity=1.0),
+        # Label-only layer: street names carried on the road network.
+        "street_names": LayerStyle(stroke_width=0.0, fill_enabled=False, stroke_color=RGBAColor(60, 60, 60), opacity=1.0),
+        # Iso-brightness lines from nighttime imagery: warm, like the light they
+        # describe, and unfilled so overlapping levels stay readable.
+        "night_lights": LayerStyle(stroke_width=0.7, fill_enabled=False, stroke_color=RGBAColor(214, 158, 64), opacity=0.85),
+        # Hypsometric tints: a two-stop ramp from low ground to high, applied
+        # per band. Unstroked, because a band edge and a contour are the same
+        # line and drawing both doubles it.
+        "elevation_bands": LayerStyle(
+            stroke_width=0.0,
+            fill_enabled=True,
+            fill_color=RGBAColor(232, 237, 226, 255),
+            fill_color_high=RGBAColor(150, 122, 96, 255),
+            stroke_color=RGBAColor(150, 122, 96),
+            opacity=0.9,
+        ),
+        # Sea floor, kept cool and recessive so it never competes with land.
+        "bathymetry": LayerStyle(stroke_width=0.5, fill_enabled=False, stroke_color=RGBAColor(108, 150, 190), opacity=0.7),
+        # Measured summit heights.
+        "summits": LayerStyle(stroke_width=0.0, fill_enabled=False, stroke_color=RGBAColor(78, 62, 44), label_halo_color=RGBAColor(255, 255, 255, 235), label_halo_width=2.6),
+        # Orbital geometry: a bright track over a faint visibility circle.
+        "satellite_tracks": LayerStyle(stroke_width=1.4, fill_enabled=False, stroke_color=RGBAColor(58, 106, 168), opacity=0.95, line_cap="round"),
+        "satellite_footprints": LayerStyle(stroke_width=0.7, fill_enabled=True, fill_color=RGBAColor(120, 170, 220, 34), stroke_color=RGBAColor(86, 134, 186), opacity=0.75),
+        # Seismicity, by depth class: shallow events are the destructive ones,
+        # so they read hottest and deep ones recede.
+        "earthquakes_shallow": LayerStyle(stroke_width=1.1, fill_enabled=True, fill_color=RGBAColor(214, 74, 54, 60), stroke_color=RGBAColor(186, 46, 30), opacity=0.95),
+        "earthquakes_intermediate": LayerStyle(stroke_width=0.9, fill_enabled=True, fill_color=RGBAColor(226, 152, 46, 46), stroke_color=RGBAColor(190, 122, 26), opacity=0.9),
+        "earthquakes_deep": LayerStyle(stroke_width=0.8, fill_enabled=True, fill_color=RGBAColor(84, 116, 168, 40), stroke_color=RGBAColor(60, 92, 146), opacity=0.85),
         # New detailed layers
         "shops": LayerStyle(stroke_width=0.0, fill_enabled=False, stroke_color=RGBAColor(150, 50, 150), opacity=1.0),
         "amenities": LayerStyle(stroke_width=0.0, fill_enabled=False, stroke_color=RGBAColor(50, 150, 50), opacity=1.0),
@@ -518,6 +605,104 @@ def _terrain_study_styles() -> dict[str, LayerStyle]:
     styles["forests"] = LayerStyle(stroke_width=0.25, fill_enabled=True, fill_color=RGBAColor(145, 172, 121), stroke_color=RGBAColor(101, 130, 82), opacity=0.78)
     styles["fields"] = LayerStyle(stroke_width=0.25, fill_enabled=True, fill_color=RGBAColor(219, 204, 158), stroke_color=RGBAColor(166, 148, 102), opacity=0.7)
     styles["terrain_contours"] = LayerStyle(stroke_width=0.7, fill_enabled=False, stroke_color=RGBAColor(120, 105, 81), opacity=0.55)
+    styles["terrain_index_contours"] = LayerStyle(stroke_width=1.15, fill_enabled=False, stroke_color=RGBAColor(96, 82, 60), opacity=0.8)
+    return styles
+
+
+def _hypsometric_styles() -> dict[str, LayerStyle]:
+    """Filled elevation tints under fine contours, the classic atlas relief.
+
+    Bands carry the mass and contours carry the detail, so the contours drop to
+    a hairline: at full weight they fight the fills they sit on. Everything
+    built stays legible on top, because the point of tinting relief is to put a
+    place in its landscape, not to replace it.
+    """
+    styles = _with_soft_road_caps(_base_styles())
+    styles["elevation_bands"] = LayerStyle(
+        stroke_width=0.0,
+        fill_enabled=True,
+        # Low ground pale green, through tan, to bare rock brown.
+        fill_color=RGBAColor(226, 234, 214, 255),
+        fill_color_high=RGBAColor(146, 114, 84, 255),
+        stroke_color=RGBAColor(146, 114, 84),
+        opacity=1.0,
+    )
+    styles["terrain_contours"] = LayerStyle(stroke_width=0.3, fill_enabled=False, stroke_color=RGBAColor(96, 78, 58), opacity=0.4, line_cap="round")
+    styles["terrain_index_contours"] = LayerStyle(stroke_width=0.6, fill_enabled=False, stroke_color=RGBAColor(84, 66, 48), opacity=0.6, line_cap="round")
+    styles["bathymetry"] = LayerStyle(stroke_width=0.35, fill_enabled=False, stroke_color=RGBAColor(126, 162, 194), opacity=0.55, line_cap="round")
+    styles["water"] = LayerStyle(stroke_width=0.5, fill_enabled=True, fill_color=RGBAColor(176, 206, 226, 255), stroke_color=RGBAColor(118, 158, 190), opacity=1.0)
+    styles["coastline"] = LayerStyle(stroke_width=1.1, fill_enabled=True, fill_color=RGBAColor(176, 206, 226, 255), stroke_color=RGBAColor(96, 138, 174), opacity=1.0)
+    styles["buildings"] = LayerStyle(stroke_width=0.3, fill_enabled=True, fill_color=RGBAColor(96, 88, 80, 120), stroke_color=RGBAColor(80, 72, 64), opacity=0.8)
+    styles["summits"] = LayerStyle(stroke_width=0.0, fill_enabled=False, stroke_color=RGBAColor(60, 46, 32), label_halo_color=RGBAColor(247, 245, 240, 240), label_halo_width=2.6)
+    styles["places"] = LayerStyle(stroke_width=0.0, fill_enabled=False, stroke_color=RGBAColor(38, 34, 30), label_halo_color=RGBAColor(247, 245, 240, 240), label_halo_width=2.8)
+    styles["street_names"] = LayerStyle(stroke_width=0.0, fill_enabled=False, stroke_color=RGBAColor(70, 64, 58), label_halo_color=RGBAColor(247, 245, 240, 235), label_halo_width=2.4)
+    return styles
+
+
+def _relief_sheet_styles() -> dict[str, LayerStyle]:
+    """Dense hairline relief: depth from line density alone.
+
+    The opposite approach to ``Contour Study``. There every line is weighted by
+    slope aspect; here every line is identical, and what reads as depth is how
+    tightly they crowd -- open paper on flat ground, near-solid ink where the
+    ground falls away. Accenting every fifth line, or varying weight, only
+    interrupts that gradient, so this preset does neither.
+    """
+    styles = _base_styles()
+    ink = RGBAColor(30, 28, 26)
+    faint = RGBAColor(168, 164, 156)
+    for name in list(styles.keys()):
+        styles[name] = LayerStyle(stroke_width=0.3, fill_enabled=False, stroke_color=faint, opacity=0.3)
+    # Weight is a balancing act unique to this preset: too fine and the lines
+    # antialias to pale grey and the density gradient disappears; too heavy and
+    # the crowded ground floods to solid black with no structure left in it.
+    hairline = LayerStyle(stroke_width=0.7, fill_enabled=False, stroke_color=ink, opacity=1.0, line_cap="round")
+    styles["terrain_contours"] = hairline
+    # Styled identically: a sheet with no accented lines still gets whatever
+    # index levels a coarser source hands it.
+    styles["terrain_index_contours"] = hairline
+    styles["water"] = LayerStyle(stroke_width=0.4, fill_enabled=True, fill_color=RGBAColor(232, 234, 235, 220), stroke_color=RGBAColor(140, 148, 154), opacity=0.8)
+    styles["coastline"] = LayerStyle(stroke_width=0.7, fill_enabled=False, stroke_color=RGBAColor(110, 118, 126), opacity=0.85)
+    styles["places"] = LayerStyle(stroke_width=0.0, fill_enabled=False, stroke_color=ink, label_halo_color=RGBAColor(246, 244, 239, 240), label_halo_width=2.6)
+    styles["street_names"] = LayerStyle(stroke_width=0.0, fill_enabled=False, stroke_color=RGBAColor(96, 92, 86), label_halo_color=RGBAColor(246, 244, 239, 240), label_halo_width=2.4)
+    return styles
+
+
+def _contour_study_styles() -> dict[str, LayerStyle]:
+    """Pencil-on-paper topographic sheet: the relief carries the whole image.
+
+    Everything that is not relief is pushed back to a faint annotation, so that
+    density of line -- not colour or fill -- is what reads as terrain.
+    """
+    styles = _base_styles()
+    ink = RGBAColor(58, 56, 52)
+    faint = RGBAColor(150, 146, 138)
+    for name in list(styles.keys()):
+        styles[name] = LayerStyle(stroke_width=0.35, fill_enabled=False, stroke_color=faint, opacity=0.35)
+    styles["water"] = LayerStyle(stroke_width=0.5, fill_enabled=True, fill_color=RGBAColor(226, 231, 234, 235), stroke_color=RGBAColor(120, 132, 142), opacity=0.85)
+    styles["coastline"] = LayerStyle(stroke_width=0.9, fill_enabled=False, stroke_color=RGBAColor(96, 106, 116), opacity=0.9)
+    styles["roads"] = LayerStyle(stroke_width=0.4, fill_enabled=False, stroke_color=faint, opacity=0.45)
+    # Hairline minor contours, one clearly heavier index line every fifth, both
+    # lit from the north-west so slope aspect reads as depth.
+    styles["terrain_contours"] = LayerStyle(
+        stroke_width=0.5, fill_enabled=False, stroke_color=ink, opacity=0.62, line_cap="round",
+        illumination=1.0, illumination_lit_scale=0.35, illumination_shadow_scale=1.9,
+    )
+    styles["terrain_index_contours"] = LayerStyle(
+        stroke_width=1.0, fill_enabled=False, stroke_color=ink, opacity=0.95, line_cap="round",
+        illumination=1.0, illumination_lit_scale=0.5, illumination_shadow_scale=1.6,
+    )
+    styles["places"] = LayerStyle(stroke_width=0.0, fill_enabled=False, stroke_color=ink, label_halo_color=RGBAColor(246, 244, 239, 235), label_halo_width=2.4)
+    styles["street_names"] = LayerStyle(stroke_width=0.0, fill_enabled=False, stroke_color=RGBAColor(92, 88, 82), label_halo_color=RGBAColor(246, 244, 239, 240), label_halo_width=2.6)
+    styles["night_lights"] = LayerStyle(stroke_width=0.5, fill_enabled=False, stroke_color=ink, opacity=0.6, line_cap="round")
+    styles["bathymetry"] = LayerStyle(stroke_width=0.35, fill_enabled=False, stroke_color=RGBAColor(120, 132, 142), opacity=0.5, line_cap="round")
+    styles["summits"] = LayerStyle(stroke_width=0.0, fill_enabled=False, stroke_color=ink, label_halo_color=RGBAColor(246, 244, 239, 240), label_halo_width=2.6)
+    styles["satellite_tracks"] = LayerStyle(stroke_width=1.0, fill_enabled=False, stroke_color=ink, opacity=0.85, line_cap="round")
+    styles["satellite_footprints"] = LayerStyle(stroke_width=0.45, fill_enabled=False, stroke_color=ink, opacity=0.4)
+    # On a pencil sheet the epicentres stay ink, separated by weight not hue.
+    styles["earthquakes_shallow"] = LayerStyle(stroke_width=1.0, fill_enabled=False, stroke_color=ink, opacity=0.9, label_halo_color=RGBAColor(246, 244, 239, 235), label_halo_width=2.4)
+    styles["earthquakes_intermediate"] = LayerStyle(stroke_width=0.7, fill_enabled=False, stroke_color=ink, opacity=0.72)
+    styles["earthquakes_deep"] = LayerStyle(stroke_width=0.45, fill_enabled=False, stroke_color=ink, opacity=0.55)
     return styles
 
 
@@ -582,6 +767,10 @@ def _night_styles() -> dict[str, LayerStyle]:
     # Labels invert too: pale text on a dark halo, or the shared white halo
     # would print as a box around every name.
     night_halo = RGBAColor(10, 12, 17, 235)
+    # Iso-brightness lines from nighttime satellite imagery: the one layer that
+    # is literally about light, so it glows warmest of all against this ground.
+    styles["night_lights"] = LayerStyle(stroke_width=0.6, fill_enabled=False, stroke_color=RGBAColor(255, 214, 138), opacity=0.7, line_cap="round")
+    styles["street_names"] = LayerStyle(stroke_width=0.0, fill_enabled=False, stroke_color=RGBAColor(206, 212, 226), label_halo_color=night_halo, label_halo_width=2.4)
     styles["places"] = LayerStyle(stroke_width=0.0, fill_enabled=False, stroke_color=RGBAColor(232, 236, 244), label_halo_color=night_halo, label_halo_width=2.6)
     styles["shops"] = LayerStyle(stroke_width=0.0, fill_enabled=False, stroke_color=RGBAColor(206, 158, 214), label_halo_color=night_halo, label_halo_width=2.2)
     styles["amenities"] = LayerStyle(stroke_width=0.0, fill_enabled=False, stroke_color=RGBAColor(146, 200, 158), label_halo_color=night_halo, label_halo_width=2.2)

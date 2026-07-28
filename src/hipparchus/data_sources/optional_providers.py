@@ -28,9 +28,17 @@ from hipparchus.data_sources.provider import BBoxQuery, FeatureCollection, GeoJS
 EXTRA_LAYERS = (
     "admin_boundaries",
     "terrain_contours",
+    "terrain_index_contours",
     "terrain_hillshade",
     "elevation_bands",
     "night_lights",
+    "earthquakes_shallow",
+    "earthquakes_intermediate",
+    "earthquakes_deep",
+    "satellite_tracks",
+    "satellite_footprints",
+    "bathymetry",
+    "summits",
 )
 ALL_OPTIONAL_LAYERS = tuple(dict.fromkeys((*SUPPORTED_LAYERS, *EXTRA_LAYERS)))
 

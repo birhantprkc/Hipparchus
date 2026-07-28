@@ -19,7 +19,18 @@ class LayerSmoothingRule:
 
 
 LINE_SMOOTHING_PREFIXES = ("roads_",)
-LINE_SMOOTHING_LAYERS = {"roads", "railways", "coastline"}
+LINE_SMOOTHING_LAYERS = {
+    "roads",
+    "railways",
+    "coastline",
+    # Contours come off a sampling grid, so they carry a faint cell-scale
+    # staircase that smoothing removes.
+    "terrain_contours",
+    "terrain_index_contours",
+    "night_lights",
+    "satellite_tracks",
+    "bathymetry",
+}
 POLYGON_SMOOTHING_LAYERS = {"water", "parks", "forests", "fields", "natural", "landuse", "coastline"}
 NEVER_SMOOTH_LAYERS = {"buildings", "barriers", "power", "shops", "amenities", "places"}
 
