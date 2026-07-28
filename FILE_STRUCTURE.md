@@ -48,10 +48,14 @@ src/hipparchus/
 │
 ├── application/              Orchestration between UI, data, and rendering
 │   ├── controller.py         Central controller wiring requests to services
+│   ├── fetch_progress.py     Per-source progress and cancellation
+│   ├── layer_inventory.py    What a rendered map contains, for the layer panel
 │   ├── preset_store.py       Persistent custom preset storage
 │   ├── presets.py            Built-in cartographic presets
 │   ├── quality.py            Quality / preview / export profile modes
-│   └── scene_builder.py      Clips, simplifies, classifies, and derives geometry
+│   ├── scene_builder.py      Clips, simplifies, classifies, and derives geometry
+│   ├── source_stack.py       Composable map sources; resolves them into a fetch
+│   └── style_previews.py     Preset thumbnails for the style picker
 │
 ├── cache/                    Disk cache for Overpass responses
 │   ├── housekeeping.py       Cache pruning and maintenance
@@ -71,8 +75,12 @@ src/hipparchus/
 │   ├── overpass_geojson.py   Overpass JSON to layer-separated GeoJSON
 │   ├── overpass_provider.py  Overpass API client with endpoint fallback
 │   ├── overpass_query.py     Overpass QL query builder
+│   ├── gibs_provider.py      NASA GIBS imagery, contoured into iso-brightness lines
 │   ├── provider.py           Provider interface / base types
-│   └── rate_limit.py         Request rate limiting
+│   ├── satellite_provider.py Celestrak element sets to ground tracks and footprints
+│   ├── usgs_provider.py      Live USGS seismicity as magnitude-scaled circles
+│   ├── rate_limit.py         Request rate limiting
+│   └── simulated_field.py    Procedural terrain field, contoured as synthetic relief
 │
 ├── export/                   Vector export
 │   ├── profiles.py           Export quality profiles
@@ -80,7 +88,9 @@ src/hipparchus/
 │   └── svg_clean.py          Illustrator-friendly SVG cleanup
 │
 ├── geometry/                 Geometry processing and derived layers
+│   ├── bands.py              Filled elevation bands from a scalar field
 │   ├── circle_packing.py     Circle-packing derived layer
+│   ├── contours.py           Pure-numpy marching-squares contouring
 │   ├── hex_grid.py           Hex-grid derived layer
 │   ├── ops.py                Shared geometry operations
 │   ├── projection.py         Projection profiles and coordinate transforms
@@ -103,7 +113,9 @@ src/hipparchus/
 │   └── skia_renderer.py      Skia-backed renderer
 │
 └── ui/                       Desktop interface
-    └── main_window.py        Tkinter main window
+    ├── main_window.py        Tkinter main window
+    ├── minimap.py            Locator showing where the current area is
+    └── panels.py             Sources / Layers / Style sidebar panels
 ```
 
 ## Tests (`tests/`)
@@ -116,14 +128,27 @@ query, and GeoJSON conversion paths.
 
 ```text
 tests/
+├── test_bands.py
 ├── test_cache_store.py
 ├── test_config.py
+├── test_contour_rendering.py
+├── test_contours.py
 ├── test_export_profiles.py
+├── test_canvas_transform.py
+├── test_fetch_progress.py
+├── test_icons.py
 ├── test_geometry_adapter.py
 ├── test_geometry_tools.py
+├── test_gibs_provider.py
+├── test_illumination.py
+├── test_layer_inventory.py
+├── test_minimap.py
+├── test_source_stack.py
+├── test_style_previews.py
 ├── test_map_models.py
 ├── test_optional_providers.py
 ├── test_optional_providers_spatial.py
+├── test_orbits.py
 ├── test_overpass_geojson.py
 ├── test_overpass_provider.py
 ├── test_overpass_query.py
@@ -134,6 +159,7 @@ tests/
 ├── test_rendering_state.py
 ├── test_scene_builder.py
 ├── test_simplification_parallel.py
+├── test_simulated_field.py
 ├── test_smoothing.py
 └── test_svg_exporter.py
 ```
@@ -159,6 +185,7 @@ docs/
     └── gallery-*.png          Ten preset renders used by the README gallery
 
 documents/
+├── NextStepsClaude.md        Outstanding work, with approach and acceptance criteria
 └── hipparchus2plan.md        Hipparchus 2 design and planning notes
 
 datasets/                     Local sample data (gitignored except README.md)
