@@ -2,7 +2,7 @@
 
 Notable changes to Hipparchus. Earlier history is in the git log.
 
-## 0.4.3
+## 0.3.2
 
 The release that stops Hipparchus being an OpenStreetMap tool and makes it a
 cartography tool. It gains real elevation for anywhere on Earth, three more
@@ -79,6 +79,17 @@ map is composed rather than chosen.
   now be told what the map is made of, not just where it is.
 - Label font family picker wired to the renderer, CJK label fallback, an export
   background toggle, and `HIPPARCHUS_START_PRESET`.
+
+### Refined after seeing it run
+
+- The locator drew a bare graticule that read as an empty table. It now carries
+  the equator, the prime meridian and compass marks, and the area is a crosshair
+  rather than a small ring — enough to say which way up the world is without a
+  coastline.
+- File-backed sources sit behind a disclosure. Four tall cards for the minority
+  case pushed the Style thumbnails off the bottom of the rail.
+- "Uncheck all" clipped at every width the rail could spare, so it is "Clear all".
+- Sydney Harbour added to the saved places.
 
 ### Fixed
 

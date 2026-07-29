@@ -63,6 +63,7 @@ LOCATION_PRESETS: dict[str, tuple[float, float, float, float]] = {
     "Goa Coast": (73.74, 15.38, 74.00, 15.60),
     "Addis Ababa": (38.65, 8.90, 38.88, 9.10),
     "Shanghai Bund": (121.35, 31.15, 121.60, 31.33),
+    "Sydney Harbour": (151.14, -33.90, 151.30, -33.80),
 }
 
 LEFT_SIDEBAR_WIDTH = 360
@@ -1205,10 +1206,21 @@ class MainWindow:
             canvas.create_line(x, 0, x, height, fill=palette["border"])
         for y in layout.parallels:
             canvas.create_line(0, y, width, y, fill=palette["border"])
+        # Equator and prime meridian carry the orientation a coastline would.
+        canvas.create_line(0, layout.equator, width, layout.equator, fill=palette["muted"])
+        canvas.create_line(layout.prime_meridian, 0, layout.prime_meridian, height, fill=palette["muted"])
+        for text, lx, ly in minimap.hemisphere_labels(width, height):
+            canvas.create_text(lx, ly, text=text, fill=palette["muted"], font=("SF Pro Text", 8))
+
         canvas.create_rectangle(*layout.box, outline=palette["select_text"], width=2)
         if layout.marker is not None:
             mx, my = layout.marker
-            canvas.create_oval(mx - 5, my - 5, mx + 5, my + 5, outline=palette["select_text"], width=2)
+            canvas.create_oval(mx - 6, my - 6, mx + 6, my + 6, outline=palette["select_text"], width=2)
+            # A crosshair reads at a glance where a small ring alone does not.
+            for dx, dy in ((-11, 0), (7, 0)):
+                canvas.create_line(mx + dx, my, mx + dx + 4, my, fill=palette["select_text"], width=2)
+            for dy in (-11, 7):
+                canvas.create_line(mx, my + dy, mx, my + dy + 4, fill=palette["select_text"], width=2)
         self._minimap_caption.set(minimap.describe(bounds))
 
     def _set_aoi(self, min_lon: float, min_lat: float, max_lon: float, max_lat: float) -> None:

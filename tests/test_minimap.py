@@ -77,3 +77,49 @@ class DescribeTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ReferenceLineTests(unittest.TestCase):
+    """Without a coastline, these lines are what orient the locator."""
+
+    def test_the_equator_and_prime_meridian_cross_at_the_centre(self) -> None:
+        layout = geometry((23.57, 37.81, 23.89, 38.13), 240, 120)
+        self.assertAlmostEqual(layout.equator, 60.0, places=6)
+        self.assertAlmostEqual(layout.prime_meridian, 120.0, places=6)
+
+    def test_reference_lines_stay_inside_the_widget(self) -> None:
+        layout = geometry((151.14, -33.90, 151.30, -33.80), 200, 100)
+        self.assertGreaterEqual(layout.equator, 0.0)
+        self.assertLessEqual(layout.equator, 100.0)
+        self.assertGreaterEqual(layout.prime_meridian, 0.0)
+        self.assertLessEqual(layout.prime_meridian, 200.0)
+
+
+class HemisphereLabelTests(unittest.TestCase):
+    def test_all_four_compass_points_are_placed(self) -> None:
+        from hipparchus.ui.minimap import hemisphere_labels
+
+        self.assertEqual({text for text, _x, _y in hemisphere_labels(200, 100)}, {"N", "S", "E", "W"})
+
+    def test_north_is_above_south_and_west_left_of_east(self) -> None:
+        from hipparchus.ui.minimap import hemisphere_labels
+
+        placed = {text: (x, y) for text, x, y in hemisphere_labels(200, 100)}
+        self.assertLess(placed["N"][1], placed["S"][1])
+        self.assertLess(placed["W"][0], placed["E"][0])
+
+    def test_labels_stay_inside_the_widget(self) -> None:
+        from hipparchus.ui.minimap import hemisphere_labels
+
+        for _text, x, y in hemisphere_labels(200, 100):
+            self.assertTrue(0.0 <= x <= 200.0 and 0.0 <= y <= 100.0)
+
+
+class SouthernHemisphereTests(unittest.TestCase):
+    def test_sydney_is_placed_south_and_east(self) -> None:
+        """A southern, eastern place must not land in the northern half."""
+        layout = geometry((151.14, -33.90, 151.30, -33.80), 240, 120)
+        _left, top, _right, bottom = layout.box
+        self.assertGreater(top, layout.equator)
+        self.assertGreater(bottom, layout.equator)
+        self.assertGreater(layout.box[0], layout.prime_meridian)

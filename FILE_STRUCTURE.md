@@ -1,6 +1,6 @@
 # Hipparchus File Structure
 
-**Version 0.4.3**
+**Version 0.3.2**
 
 This document describes the repository layout of Hipparchus, an online desktop
 vector cartography application. It complements the "Project Layout" section of
@@ -42,7 +42,7 @@ hipparchus/
 
 ```text
 src/hipparchus/
-├── __init__.py               Package root; exposes __version__ = "0.4.3"
+├── __init__.py               Package root; exposes __version__ = "0.3.2"
 ├── __main__.py               `python -m hipparchus` entry point
 ├── main.py                   Application launcher / main() entry
 │
@@ -191,7 +191,7 @@ docs/
     ├── gallery-miami-night-lights.png
     ├── gallery-shanghai-night-lights.png
     ├── hipparchus-santorini-light.png
-    ├── hipparchus-athens-dark.png
+    ├── hipparchus-sydney-dark.png
     └── gallery-*.png          Ten preset renders used by the README gallery
 
 documents/
