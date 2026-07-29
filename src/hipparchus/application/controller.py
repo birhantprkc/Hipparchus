@@ -8,7 +8,7 @@ import threading
 import time
 from typing import Callable
 
-from hipparchus.application.fetch_progress import CancellationToken, FetchCancelled, FetchReporter
+from hipparchus.core.fetch_progress import CancellationToken, FetchCancelled, FetchReporter
 from hipparchus.application.presets import GeometryPipelineProfile, QualityMode, StyleProfile
 from hipparchus.application.scene_builder import RenderSceneBuilder
 from hipparchus.data_sources.data_source_manager import DataSourceManager

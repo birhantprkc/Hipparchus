@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import unittest
 
-from hipparchus.application.fetch_progress import (
+from hipparchus.core.fetch_progress import (
     CancellationToken,
     FetchCancelled,
     FetchReporter,

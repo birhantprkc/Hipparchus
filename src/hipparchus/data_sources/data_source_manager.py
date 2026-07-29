@@ -9,7 +9,7 @@ import os
 from pathlib import Path
 from typing import Any
 
-from hipparchus.application.fetch_progress import CancellationToken, FetchCancelled, FetchReporter
+from hipparchus.core.fetch_progress import CancellationToken, FetchCancelled, FetchReporter
 from hipparchus.data_sources.map_models import MapModelRegistry, ProviderStatus
 from hipparchus.data_sources.overpass_provider import OverpassMapProvider, OverpassSettings
 from hipparchus.data_sources.optional_providers import (

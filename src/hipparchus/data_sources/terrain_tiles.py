@@ -27,7 +27,7 @@ from typing import Any, Callable
 
 import numpy as np
 
-from hipparchus.application.fetch_progress import FetchCancelled
+from hipparchus.core.fetch_progress import FetchCancelled
 from hipparchus.data_sources.map_models import ProviderStatus
 from hipparchus.data_sources.optional_providers import _collection_from_layers, _empty_layers
 from hipparchus.data_sources.provider import BBoxQuery, FeatureCollection
