@@ -73,5 +73,40 @@ class SkiaLabelFontFamilyTests(unittest.TestCase):
         self.assertTrue(renderer._dirty)
 
 
+@unittest.skipUnless(SKIA_AVAILABLE, "skia-python not installed")
+class SkiaWeightedLayerTests(unittest.TestCase):
+    """Illuminated layers pair each geometry with its own stroke weight."""
+
+    def _renderer(self):
+        from hipparchus.rendering.skia_renderer import SkiaRenderer
+
+        return SkiaRenderer()
+
+    def test_thinning_a_layer_keeps_geometry_and_weight_paired(self) -> None:
+        """Sampling drops geometries; an index-free sample would misweight the rest."""
+        geometries = [LineString([(i, 0), (i, 1)]) for i in range(50)]
+        sampled = self._renderer()._sample_layer_geometries(
+            layer_name="terrain_contours",
+            geometries=list(enumerate(geometries)),
+            hard_cap=7,
+        )
+
+        self.assertLessEqual(len(sampled), 7)
+        for index, geometry in sampled:
+            self.assertIs(geometry, geometries[index])
+
+    def test_a_weighted_scene_renders(self) -> None:
+        layer = RenderLayer(
+            name="terrain_contours",
+            geometries=[LineString([(0, 0), (1, 1)]), LineString([(1, 0), (2, 1)])],
+            style=LayerStyle(stroke_width=1.0, fill_enabled=False),
+            weights=[0.4, 1.9],
+        )
+        renderer = self._renderer()
+        renderer.set_scene(RenderScene(layers=[layer], bbox=(0.0, 0.0, 2.0, 1.0)))
+
+        self.assertTrue(renderer.render_preview_png(120, 120))
+
+
 if __name__ == "__main__":
     unittest.main()

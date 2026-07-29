@@ -20,6 +20,13 @@ from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 from hipparchus.application.controller import ApplicationController
+from hipparchus.core.fetch_progress import CancellationToken, FetchReporter
+from hipparchus.application.source_stack import SourceStack
+from hipparchus.application.style_previews import featured_names
+from hipparchus.ui import minimap
+from hipparchus.ui import icons, shortcuts
+from hipparchus.ui.icons import IconButton
+from hipparchus.ui.panels import LayersPanel, SourcesPanel, StylePicker, section_heading
 from hipparchus.application.presets import (
     ArtisticPreset,
     GeometryPipelineProfile,
@@ -46,6 +53,16 @@ LOCATION_PRESETS: dict[str, tuple[float, float, float, float]] = {
     "Kyoto Center": (135.73, 34.98, 135.79, 35.03),
     "San Francisco Downtown": (-122.44, 37.76, -122.39, 37.80),
     "Venice Historic": (12.31, 45.42, 12.36, 45.45),
+    # Places chosen because they show what the new sources can do: a drowned
+    # caldera, a coastal shelf, a fault zone, a delta at sea level, a monsoon
+    # coast, a highland capital, and an estuary city.
+    "Santorini Caldera": (25.32, 36.33, 25.50, 36.48),
+    "Paphos Coast": (32.36, 34.72, 32.50, 34.83),
+    "San Francisco Bay": (-122.53, 37.70, -122.35, 37.84),
+    "Miami Beach": (-80.32, 25.70, -80.11, 25.86),
+    "Goa Coast": (73.74, 15.38, 74.00, 15.60),
+    "Addis Ababa": (38.65, 8.90, 38.88, 9.10),
+    "Shanghai Bund": (121.35, 31.15, 121.60, 31.33),
 }
 
 LEFT_SIDEBAR_WIDTH = 360
@@ -117,6 +134,34 @@ SOURCE_LIBRARY_PRESETS: tuple[SourceLibraryPreset, ...] = (
         aoi=(23.70, 37.96, 23.76, 38.01),
         quality_label="High Preview",
         note="Offline GeoParquet buildings/places fixture.",
+    ),
+    SourceLibraryPreset(
+        label="Simulated Terrain",
+        model_id="simulated_terrain",
+        aoi=(23.5547, 37.8575, 23.7305, 37.9962),
+        quality_label="High Preview",
+        note="Generated relief - synthetic, needs no data file. Any AOI works.",
+    ),
+    SourceLibraryPreset(
+        label="Real Terrain",
+        model_id="terrain_online",
+        aoi=(23.57, 37.81, 23.89, 38.13),
+        quality_label="High Preview",
+        note="Real measured elevation for any area, from public terrain tiles.",
+    ),
+    SourceLibraryPreset(
+        label="Terrain Atlas",
+        model_id="terrain_atlas",
+        aoi=(23.70, 37.95, 23.80, 38.02),
+        quality_label="High Preview",
+        note="Real streets, names and elevation together. Keep the AOI small.",
+    ),
+    SourceLibraryPreset(
+        label="Relief Sheet",
+        model_id="relief_sheet",
+        aoi=(23.5547, 37.8575, 23.7305, 37.9962),
+        quality_label="High Preview",
+        note="Dense synthetic relief. Pair with the Relief Sheet preset. Slower to fetch.",
     ),
     SourceLibraryPreset(
         label="Installed Samples",
@@ -195,6 +240,9 @@ class MainWindow:
         self._canvas_image_tempfile: Path | None = None
         self._pending_queue: queue.Queue[tuple[str, object]] = queue.Queue()
         self._drag_last_xy: tuple[int, int] | None = None
+        self._select_origin: tuple[int, int] | None = None
+        self._select_rect: int | None = None
+        self._select_armed = False
         self._redraw_job: str | None = None
         self._render_request_id = 0
         self._render_inflight = False
@@ -233,11 +281,26 @@ class MainWindow:
         self._map_models = self.controller.data_source_manager.get_map_models()
         self._map_model_label_to_id = {str(model["label"]): str(model["id"]) for model in self._map_models}
         self._map_model_id_to_label = {str(model["id"]): str(model["label"]) for model in self._map_models}
+        self._map_models_by_id = {str(model["id"]): tuple(model["providers"]) for model in self._map_models}
         active_model = self.controller.data_source_manager.get_active_map_model()
         self._map_model_var = tk.StringVar(value=self._map_model_id_to_label.get(active_model, "OSM Live"))
+        # A map is built from sources, and sources stack. This replaces the
+        # model dropdown, the source library and the relief toggle, which were
+        # three vocabularies for one idea.
+        self.source_stack = SourceStack()
+        for provider_id, existing in self.controller.data_source_manager.get_optional_source_paths().items():
+            if existing:
+                self.source_stack.set_path(provider_id, existing)
+        self._sources_panel: SourcesPanel | None = None
+        self._layers_panel: LayersPanel | None = None
+        self._style_picker: StylePicker | None = None
+        self._layer_summary = ""
+        self._fetch_cancel: CancellationToken | None = None
+        self._fetch_reporter: FetchReporter | None = None
         self._preset_var = tk.StringVar(
             value=resolve_preset_name(self.config.start_preset, self._preset_options, self.default_preset.name)
         )
+        self._composition_var = tk.StringVar(value="OpenStreetMap")
         self._location_preset_var = tk.StringVar(value="London Center")
         self._location_query_var = tk.StringVar(value="")
         self._new_preset_name_var = tk.StringVar(value="")
@@ -271,7 +334,9 @@ class MainWindow:
         self._build_window()
         self._build_layout()
         self._apply_theme()
+        self._refresh_minimap()
         self._sync_label_font_to_renderer()
+        self._bind_shortcuts()
         self._root.after(50, self._drain_callback_queue)
         if self.config.start_area or self.config.fetch_on_start:
             self._root.after(300, self._maybe_fetch_on_start)
@@ -400,7 +465,14 @@ class MainWindow:
         self._location_entry.pack(side="left", padx=(0, 6))
         self._location_entry.bind("<Return>", lambda _e: self._on_location_lookup_clicked())
         ttk.Button(controls, text="Find", command=self._on_location_lookup_clicked).pack(side="left", padx=(0, 4))
-        ttk.Button(controls, text="Fetch", command=self._on_fetch_clicked).pack(side="left", padx=(0, 12))
+        ttk.Button(
+            controls,
+            text=shortcuts.with_accelerator("Update map"),
+            command=self._on_fetch_clicked,
+        ).pack(side="left", padx=(0, 4))
+        IconButton(controls, "marquee", command=self._arm_area_selection, size=26,
+                   tooltip="Draw a new area on the map").pack(side="left", padx=(0, 4))
+        ttk.Button(controls, text="Draw area", command=self._arm_area_selection).pack(side="left", padx=(0, 12))
 
         # Middle - Preset
         ttk.Label(controls, text="Preset:").pack(side="left", padx=(0, 4))
@@ -413,10 +485,7 @@ class MainWindow:
         self._quality_menu = ttk.OptionMenu(controls, self._quality_var, quality_labels[0], *quality_labels)
         self._quality_menu.pack(side="left", padx=(0, 8))
 
-        ttk.Label(controls, text="Model:").pack(side="left", padx=(0, 4))
-        model_labels = tuple(self._map_model_label_to_id.keys())
-        self._map_model_menu = ttk.OptionMenu(controls, self._map_model_var, self._map_model_var.get(), *model_labels)
-        self._map_model_menu.pack(side="left", padx=(0, 8))
+        ttk.Label(controls, textvariable=self._composition_var, font=("SF Pro Text", 10)).pack(side="left", padx=(4, 8))
 
         # Right side - Export
         ttk.Button(controls, text="Export SVG", command=self._on_export_clicked).pack(side="right")
@@ -441,125 +510,131 @@ class MainWindow:
         statusbar.grid(row=2, column=0, columnspan=3, sticky="ew")
         statusbar.grid_columnconfigure(0, weight=1)
         ttk.Label(statusbar, textvariable=self._status_var).grid(row=0, column=0, sticky="w")
-        ttk.Label(statusbar, textvariable=self._cache_status_var).grid(row=0, column=1, sticky="e")
+        right = ttk.Frame(statusbar)
+        right.grid(row=0, column=1, sticky="e")
+        self._progress = ttk.Progressbar(right, mode="indeterminate", length=120)
+        self._progress.pack(side="left", padx=(0, 8))
+        ttk.Label(right, textvariable=self._progress_label_var, font=("SF Pro Text", 10)).pack(side="left", padx=(0, 8))
+        self._cancel_button = ttk.Button(right, text="Cancel", width=8, command=self._on_cancel_fetch)
+        self._cancel_button.pack(side="left", padx=(0, 8))
+        self._cancel_button.state(["disabled"])
+        ttk.Label(right, textvariable=self._cache_status_var).pack(side="left")
 
     def _build_left_sidebar(self, parent: ttk.Frame) -> None:
-        ttk.Label(parent, text="Area", font=("SF Pro Text", 12, "bold")).pack(anchor="w", pady=(0, 8))
-        ttk.OptionMenu(parent, self._location_preset_var, self._location_preset_var.get(), *LOCATION_PRESETS.keys()).pack(
-            fill="x", pady=(0, 6)
-        )
-        ttk.Button(parent, text="Use Preset AOI", command=self._apply_location_preset).pack(fill="x", pady=(0, 8))
+        # FRAME: where you are, and how big the frame is. The eight nudge
+        # buttons that used to describe an area without ever showing it are
+        # replaced by the locator plus Draw area on the map itself.
+        ttk.Label(parent, text="FRAME", font=("SF Pro Text", 10, "bold")).pack(anchor="w", pady=(0, 6))
+        self._minimap = tk.Canvas(parent, width=200, height=104, highlightthickness=1, bd=0)
+        self._minimap.pack(fill="x", pady=(0, 2))
+        self._minimap_caption = tk.StringVar(value="")
+        ttk.Label(parent, textvariable=self._minimap_caption, font=("SF Pro Text", 9)).pack(anchor="w", pady=(0, 8))
 
-        # Coordinates in compact 2x2 grid
-        ttk.Label(parent, text="Coordinates", font=("SF Pro Text", 10, "bold")).pack(anchor="w", pady=(0, 4))
-        coord_frame = ttk.Frame(parent)
-        coord_frame.pack(fill="x", pady=2)
+        readout = ttk.Frame(parent)
+        readout.pack(fill="x")
+        readout.grid_columnconfigure(1, weight=1)
+        for row, (label, key) in enumerate(
+            (("North", "max_lat"), ("South", "min_lat"), ("West", "min_lon"), ("East", "max_lon"))
+        ):
+            ttk.Label(readout, text=label, font=("SF Pro Text", 10)).grid(row=row, column=0, sticky="w", pady=1)
+            ttk.Label(
+                readout,
+                textvariable=self._aoi_vars[key],
+                font=("SF Pro Text", 10),
+                anchor="e",
+            ).grid(row=row, column=1, sticky="e", pady=1)
 
-        # Row 1: Min Lon, Min Lat
-        ttk.Label(coord_frame, text="Min Lon", width=7).grid(row=0, column=0, sticky="w")
-        ttk.Entry(coord_frame, textvariable=self._aoi_vars["min_lon"], width=9).grid(row=0, column=1, sticky="ew", padx=(2, 6))
-        ttk.Label(coord_frame, text="Min Lat", width=7).grid(row=0, column=2, sticky="w")
-        ttk.Entry(coord_frame, textvariable=self._aoi_vars["min_lat"], width=9).grid(row=0, column=3, sticky="ew", padx=(2, 0))
+        self._coords_expanded = tk.BooleanVar(value=False)
+        ttk.Button(parent, text="Edit coordinates", command=self._toggle_coordinate_editor).pack(fill="x", pady=(8, 0))
 
-        # Row 2: Max Lon, Max Lat
-        ttk.Label(coord_frame, text="Max Lon", width=7).grid(row=1, column=0, sticky="w", pady=(4, 0))
-        ttk.Entry(coord_frame, textvariable=self._aoi_vars["max_lon"], width=9).grid(row=1, column=1, sticky="ew", padx=(2, 6), pady=(4, 0))
-        ttk.Label(coord_frame, text="Max Lat", width=7).grid(row=1, column=2, sticky="w", pady=(4, 0))
-        ttk.Entry(coord_frame, textvariable=self._aoi_vars["max_lat"], width=9).grid(row=1, column=3, sticky="ew", padx=(2, 0), pady=(4, 0))
+        # Built once and shown on demand, so the exact numbers stay reachable
+        # without occupying the rail by default.
+        self._coord_editor = ttk.Frame(parent)
+        for row, (label, key) in enumerate(
+            (("North", "max_lat"), ("South", "min_lat"), ("West", "min_lon"), ("East", "max_lon"))
+        ):
+            ttk.Label(self._coord_editor, text=label, width=6, font=("SF Pro Text", 9)).grid(row=row, column=0, sticky="w", pady=2)
+            ttk.Entry(self._coord_editor, textvariable=self._aoi_vars[key], width=12).grid(row=row, column=1, sticky="ew", pady=2)
+        self._coord_editor.grid_columnconfigure(1, weight=1)
 
-        # Compact navigation arrows
-        nav = ttk.Frame(parent)
-        nav.pack(fill="x", pady=(8, 6))
-        for column in range(4):
-            nav.grid_columnconfigure(column, weight=1)
+        ttk.Separator(parent, orient="horizontal").pack(fill="x", pady=12)
+        ttk.Label(parent, text="SAVED PLACES", font=("SF Pro Text", 10, "bold")).pack(anchor="w", pady=(0, 6))
+        self._places_body = ttk.Frame(parent)
+        self._places_body.pack(fill="x")
+        self._rebuild_saved_places()
 
-        ttk.Button(nav, text="-", width=3, command=lambda: self._scale_aoi(1.15)).grid(row=0, column=0, padx=2, pady=2, sticky="ew")
-        ttk.Button(nav, text="▲", width=3, command=lambda: self._nudge_aoi(0.0, 0.25)).grid(row=0, column=1, padx=2, pady=2, sticky="ew")
-        ttk.Button(nav, text="+", width=3, command=lambda: self._scale_aoi(0.85)).grid(row=0, column=2, padx=2, pady=2, sticky="ew")
-        ttk.Button(nav, text="Reset", width=5, command=self._apply_location_preset).grid(row=0, column=3, padx=2, pady=2, sticky="ew")
-        ttk.Button(nav, text="◀", width=3, command=lambda: self._nudge_aoi(-0.25, 0.0)).grid(row=1, column=0, padx=2, pady=2, sticky="ew")
-        ttk.Button(nav, text="▼", width=3, command=lambda: self._nudge_aoi(0.0, -0.25)).grid(row=1, column=1, padx=2, pady=2, sticky="ew")
-        ttk.Button(nav, text="▶", width=3, command=lambda: self._nudge_aoi(0.25, 0.0)).grid(row=1, column=2, padx=2, pady=2, sticky="ew")
-        ttk.Button(nav, text="Fetch", width=5, command=self._on_fetch_clicked).grid(row=1, column=3, padx=2, pady=2, sticky="ew")
-
-        ttk.Separator(parent, orient="horizontal").pack(fill="x", pady=10)
-        ttk.Label(parent, text="View Controls", font=("SF Pro Text", 11, "bold")).pack(anchor="w", pady=(0, 6))
-
-        # Zoom controls
-        zoom_frame = ttk.Frame(parent)
-        zoom_frame.pack(fill="x", pady=(0, 8))
-        for column in range(3):
-            zoom_frame.grid_columnconfigure(column, weight=1)
-        ttk.Button(zoom_frame, text="Zoom In", command=lambda: self._zoom_view(1.5)).grid(row=0, column=0, padx=(0, 4), sticky="ew")
-        ttk.Button(zoom_frame, text="Zoom Out", command=lambda: self._zoom_view(0.67)).grid(row=0, column=1, padx=2, sticky="ew")
-        ttk.Button(zoom_frame, text="Reset", command=self._reset_view).grid(row=0, column=2, padx=(4, 0), sticky="ew")
-
-        # Rotation controls
+        ttk.Separator(parent, orient="horizontal").pack(fill="x", pady=12)
+        ttk.Label(parent, text="VIEW", font=("SF Pro Text", 10, "bold")).pack(anchor="w", pady=(0, 6))
         rotation_frame = ttk.Frame(parent)
         rotation_frame.pack(fill="x", pady=(0, 8))
         rotation_frame.grid_columnconfigure(1, weight=1)
-        ttk.Label(rotation_frame, text="Rotation:").grid(row=0, column=0, sticky="w", padx=(0, 4))
+        ttk.Label(rotation_frame, text="Rotation", font=("SF Pro Text", 10)).grid(row=0, column=0, sticky="w", padx=(0, 4))
         self._rotation_var = tk.DoubleVar(value=0.0)
-        rotation_scale = ttk.Scale(rotation_frame, from_=-180, to=180, variable=self._rotation_var, orient="horizontal", command=self._on_rotation_changed)
-        rotation_scale.grid(row=0, column=1, sticky="ew", padx=(0, 4))
-        ttk.Button(rotation_frame, text="↺", width=3, command=lambda: self._rotate_view(-15)).grid(row=0, column=2, padx=(0, 2))
-        ttk.Button(rotation_frame, text="↻", width=3, command=lambda: self._rotate_view(15)).grid(row=0, column=3, padx=(0, 2))
+        ttk.Scale(
+            rotation_frame,
+            from_=-180,
+            to=180,
+            variable=self._rotation_var,
+            orient="horizontal",
+            command=self._on_rotation_changed,
+        ).grid(row=0, column=1, sticky="ew", padx=(0, 4))
+        IconButton(rotation_frame, "rotate-left", command=lambda: self._rotate_view(-15), size=22,
+                   tooltip="Rotate anticlockwise").grid(row=0, column=2, padx=(0, 2))
+        IconButton(rotation_frame, "rotate-right", command=lambda: self._rotate_view(15), size=22,
+                   tooltip="Rotate clockwise").grid(row=0, column=3, padx=(0, 2))
         ttk.Button(rotation_frame, text="0°", width=3, command=self._reset_rotation).grid(row=0, column=4)
 
-        ttk.Separator(parent, orient="horizontal").pack(fill="x", pady=10)
-        ttk.Label(parent, text="Layers", font=("SF Pro Text", 12, "bold")).pack(anchor="w", pady=(0, 6))
+    def _bind_shortcuts(self) -> None:
+        """Register the keyboard accelerators.
 
-        # Natural/Area layers
-        area_layers = [
-            ("coastline", "Coastline/Sea"),
-            ("water", "Water/Lakes"),
-            ("fields", "Fields/Farmland"),
-            ("forests", "Forests/Woods"),
-            ("natural", "Natural Areas"),
-            ("parks", "Parks/Gardens"),
-        ]
-        self._populate_checkbutton_grid(parent, items=area_layers, columns=2, default=True)
+        ``bind_all`` rather than ``bind``: the shortcut has to work while the
+        focus sits in the location field or a coordinate entry, which is
+        precisely when someone reaches for it.
+        """
+        for sequence in shortcuts.update_map_sequences():
+            self._root.bind_all(sequence, self._on_update_map_shortcut)
 
-        ttk.Separator(parent, orient="horizontal").pack(fill="x", pady=(8, 4))
-        ttk.Label(parent, text="Roads", font=("SF Pro Text", 10, "bold")).pack(anchor="w", pady=(0, 4))
+    def _on_update_map_shortcut(self, _event: "tk.Event | None" = None) -> str:
+        """Update the map from the keyboard, as if the button were pressed."""
+        self._on_fetch_clicked()
+        # Stop the plain Return binding on the focused widget firing as well.
+        return "break"
 
-        # Road layers
-        road_layers = [
-            ("roads_motorway", "Motorways"),
-            ("roads_trunk", "Trunk Roads"),
-            ("roads_primary", "Primary Roads"),
-            ("roads_secondary", "Secondary Roads"),
-            ("roads_tertiary", "Tertiary Roads"),
-            ("roads_residential", "Residential"),
-            ("roads_service", "Service Roads"),
-        ]
-        self._populate_checkbutton_grid(parent, items=road_layers, columns=2, default=True)
+    def _toggle_coordinate_editor(self) -> None:
+        """Show or hide the exact coordinates.
 
-        ttk.Separator(parent, orient="horizontal").pack(fill="x", pady=(8, 4))
-        ttk.Label(parent, text="Structures", font=("SF Pro Text", 10, "bold")).pack(anchor="w", pady=(0, 4))
+        The readout above is always visible; this is for typing a frame in
+        rather than reading one off.
+        """
+        if self._coords_expanded.get():
+            self._coord_editor.pack_forget()
+            self._coords_expanded.set(False)
+        else:
+            self._coord_editor.pack(fill="x", pady=(4, 0))
+            self._coords_expanded.set(True)
 
-        # Structure layers
-        structure_layers = [
-            ("buildings", "Buildings"),
-            ("railways", "Railways"),
-        ]
-        self._populate_checkbutton_grid(parent, items=structure_layers, columns=2, default=True)
+    def _rebuild_saved_places(self) -> None:
+        """One row per saved area, with the current one marked."""
+        for child in self._places_body.winfo_children():
+            child.destroy()
+        current = self._location_preset_var.get()
+        for name, bounds in LOCATION_PRESETS.items():
+            row = ttk.Frame(self._places_body)
+            row.pack(fill="x", pady=1)
+            marker = "•  " if name == current else "    "
+            ttk.Button(
+                row,
+                text=f"{marker}{name}",
+                command=lambda n=name: self._use_saved_place(n),
+            ).pack(side="left", fill="x", expand=True)
+            span = abs(bounds[2] - bounds[0])
+            ttk.Label(row, text=f"{span:.2f}°", font=("SF Pro Text", 9)).pack(side="right", padx=(4, 0))
 
-        ttk.Separator(parent, orient="horizontal").pack(fill="x", pady=(8, 4))
-        ttk.Label(parent, text="Labels", font=("SF Pro Text", 10, "bold")).pack(anchor="w", pady=(0, 4))
+    def _use_saved_place(self, name: str) -> None:
+        self._location_preset_var.set(name)
+        self._apply_location_preset()
+        self._rebuild_saved_places()
 
-        # Label layers
-        label_layers = [
-            ("places", "Place Names (cities, towns)"),
-            ("shops", "Shops & Businesses"),
-            ("amenities", "Amenities (cafes, etc.)"),
-        ]
-        self._populate_checkbutton_grid(parent, items=label_layers, columns=1, default=True)
-
-        ttk.Separator(parent, orient="horizontal").pack(fill="x", pady=(10, 6))
-        ttk.Label(parent, textvariable=self._progress_label_var).pack(anchor="w")
-        self._progress = ttk.Progressbar(parent, mode="indeterminate")
-        self._progress.pack(fill="x", pady=(4, 0))
 
     def _build_center_canvas(self, parent: ttk.Frame) -> None:
         ttk.Label(parent, text="Map Preview", font=("SF Pro Text", 12, "bold")).grid(row=0, column=0, sticky="w", pady=(0, 8))
@@ -590,6 +665,16 @@ class MainWindow:
             tags=("placeholder",),
         )
 
+        # Drawing an area: Option-drag, Shift-drag, or arm the toolbar button.
+        # Three ways in, because modifier handling differs across platforms and
+        # a feature nobody can find is a feature nobody has.
+        for sequence in ("<Alt-ButtonPress-1>", "<Option-ButtonPress-1>", "<Shift-ButtonPress-1>"):
+            self._canvas.bind(sequence, self._on_select_start)
+        for sequence in ("<Alt-B1-Motion>", "<Option-B1-Motion>", "<Shift-B1-Motion>"):
+            self._canvas.bind(sequence, self._on_select_move)
+        for sequence in ("<Alt-ButtonRelease-1>", "<Option-ButtonRelease-1>", "<Shift-ButtonRelease-1>"):
+            self._canvas.bind(sequence, self._on_select_end)
+
         self._canvas.bind("<ButtonPress-1>", self._on_drag_start)
         self._canvas.bind("<B1-Motion>", self._on_drag_move)
         self._canvas.bind("<ButtonRelease-1>", self._on_drag_end)
@@ -597,6 +682,16 @@ class MainWindow:
         self._canvas.bind("<Button-4>", self._on_mouse_wheel_linux)
         self._canvas.bind("<Button-5>", self._on_mouse_wheel_linux)
         # Keyboard shortcuts for zoom
+        # Zoom lives on the map, where the mockup puts it.
+        controls = tk.Frame(canvas_wrap, bg="#ffffff", highlightthickness=1, highlightbackground="#d5d4cf")
+        controls.place(relx=1.0, rely=0.0, anchor="ne", x=-16, y=16)
+        for icon, action, tip in (
+            ("plus", lambda: self._zoom_view(1.5), "Zoom in"),
+            ("minus", lambda: self._zoom_view(0.67), "Zoom out"),
+            ("fit", self._reset_view, "Fit the map to the window"),
+        ):
+            IconButton(controls, icon, command=action, size=26, tooltip=tip).pack(padx=3, pady=3)
+
         self._canvas.bind("<plus>", lambda e: self._zoom_view(1.5))
         self._canvas.bind("<minus>", lambda e: self._zoom_view(0.67))
         self._canvas.bind("<KP_Add>", lambda e: self._zoom_view(1.5))
@@ -607,7 +702,56 @@ class MainWindow:
         self._canvas.focus_set()
 
     def _build_right_sidebar(self, parent: ttk.Frame) -> None:
+        section_heading(parent, "Sources", "they stack")
+        self._sources_panel = SourcesPanel(
+            parent,
+            self.source_stack,
+            on_toggle=self._on_source_toggled,
+            on_setting=self._on_source_setting_changed,
+            on_choose_path=self._choose_source_path,
+        )
+
+        section_heading(parent, "Layers in this map")
+        self._layers_panel = LayersPanel(parent, on_visibility=self._on_layer_visibility_changed)
+        # The layer panel owns visibility now, so the renderer reads its vars.
+        self._layer_visibility_vars = self._layers_panel.visibility_vars()
+
+        section_heading(parent, "Style", "see it, don't read it")
+        self._style_picker = StylePicker(parent, featured_names(), on_select=self._on_style_selected)
+        self._style_picker.set_selected(self._preset_var.get())
+
+        row = ttk.Frame(parent)
+        row.pack(fill="x", pady=(6, 0))
+        ttk.Label(row, text="All styles", font=("SF Pro Text", 9)).pack(side="left")
+        self._preset_menu = ttk.OptionMenu(row, self._preset_var, self._preset_var.get(), *self._preset_options)
+        self._preset_menu.pack(side="left", fill="x", expand=True, padx=(6, 0))
+
+        ttk.Separator(parent, orient="horizontal").pack(fill="x", pady=12)
         self._build_settings_tab(parent)
+
+    # -- source stack callbacks ---------------------------------------------
+    def _on_source_toggled(self, source_id: str, enabled: bool) -> None:
+        self.source_stack.set_enabled(source_id, enabled)
+        if self._sources_panel is not None:
+            # A source needing a file refuses to tick, so the panel is rebuilt
+            # from the stack rather than trusting the click.
+            self._sources_panel.rebuild()
+        self._composition_var.set(self.source_stack.summary())
+        self._status_var.set(f"Sources: {self.source_stack.summary()}")
+
+    def _on_source_setting_changed(self, source_id: str, key: str, value: object) -> None:
+        self.source_stack.set_setting(source_id, key, value)
+        self.controller.data_source_manager.apply_source_settings(
+            source_id, self.source_stack.provider_overrides(source_id)
+        )
+        self._status_var.set(f"{source_id}: {key} = {value}")
+
+    def _on_layer_visibility_changed(self, layer_id: str, visible: bool) -> None:
+        self.renderer.set_layer_visibility(layer_id, visible)
+        self._schedule_redraw()
+
+    def _on_style_selected(self, name: str) -> None:
+        self._preset_var.set(name)
 
     def _on_fetch_clicked(self) -> None:
         try:
@@ -681,6 +825,22 @@ class MainWindow:
             self._quality_var.get(),
         )
 
+        # A fresh token and reporter per fetch: cancelling one must not touch
+        # the next.
+        self._fetch_cancel = CancellationToken()
+        self._fetch_reporter = FetchReporter(on_change=self._queue_progress)
+        if hasattr(self, "_cancel_button"):
+            self._cancel_button.state(["!disabled"])
+
+        plan = self.source_stack.plan()
+        if plan is None:
+            messagebox.showinfo(
+                "No sources selected",
+                "Tick at least one source in the Sources list to build a map.",
+            )
+            self._set_idle("Idle")
+            return
+
         self.controller.run_fetch_and_render(
             aoi=aoi,
             layers=tuple(self._active_base_layers()),
@@ -689,7 +849,10 @@ class MainWindow:
             geometry_profile=preset_profile,
             on_scene=self._queue_scene,
             on_error=self._queue_error,
-            map_model_id=self._selected_map_model_id(),
+            map_model_id=plan.map_model_id,
+            extra_provider_ids=plan.extra_provider_ids,
+            reporter=self._fetch_reporter,
+            cancel=self._fetch_cancel,
         )
 
     def _resolve_selected_preset(self) -> ArtisticPreset:
@@ -768,41 +931,12 @@ class MainWindow:
 
         ttk.Button(parent, text="Apply Settings", command=self._apply_runtime_settings).pack(fill="x", pady=(8, 0))
 
-        ttk.Label(parent, text="Source Library", font=("SF Pro Text", 11, "bold")).pack(anchor="w", pady=(10, 6))
-        source_labels = tuple(preset.label for preset in SOURCE_LIBRARY_PRESETS)
-        ttk.OptionMenu(parent, self._source_library_var, self._source_library_var.get(), *source_labels).pack(fill="x", pady=(0, 4))
-        ttk.Button(parent, text="Apply Source Preset", command=self._apply_source_library_preset).pack(fill="x", pady=(0, 4))
-        ttk.Button(parent, text="Apply + Fetch Source Preset", command=self._apply_and_fetch_source_library_preset).pack(fill="x", pady=(0, 4))
-        ttk.Label(parent, textvariable=self._source_library_note_var, font=("SF Pro Text", 9), wraplength=280).pack(anchor="w", pady=(0, 6))
-
-        ttk.Label(parent, text="Map Sources", font=("SF Pro Text", 11, "bold")).pack(anchor="w", pady=(10, 6))
         ttk.Label(
             parent,
-            text="Optional local/offline sources. OSM Live works without these paths.",
+            text="Sources and their files are chosen in the Sources list above.",
             font=("SF Pro Text", 9),
             wraplength=280,
-        ).pack(anchor="w", pady=(0, 4))
-        ttk.Button(parent, text="Use Installed Sample Sources", command=self._use_installed_sample_sources).pack(fill="x", pady=(0, 6))
-        source_rows = (
-            ("Local OSM PBF", "local_osm_pbf"),
-            ("Vector Tiles", "vector_tiles"),
-            ("Natural Earth", "natural_earth"),
-            ("Overture", "overture"),
-            ("Terrain DEM", "terrain_dem"),
-        )
-        for label, provider_id in source_rows:
-            row = ttk.Frame(parent)
-            row.pack(fill="x", pady=2)
-            ttk.Label(row, text=label, width=13).pack(side="left")
-            ttk.Entry(row, textvariable=self._optional_source_vars[provider_id]).pack(side="left", fill="x", expand=True)
-            ttk.Button(row, text="...", width=3, command=lambda pid=provider_id: self._choose_source_path(pid)).pack(side="left", padx=(4, 0))
-            ttk.Label(
-                parent,
-                text=SOURCE_HELP[provider_id],
-                font=("SF Pro Text", 8),
-                wraplength=280,
-            ).pack(anchor="w", padx=(105, 0), pady=(0, 3))
-
+        ).pack(anchor="w", pady=(6, 6))
         ttk.Label(parent, text="Apply Settings after changing source paths.", font=("SF Pro Text", 9), wraplength=280).pack(anchor="w", pady=(4, 0))
         ttk.Label(parent, textvariable=self._provider_status_var, justify="left", wraplength=280).pack(anchor="w", pady=(4, 0))
 
@@ -995,6 +1129,7 @@ class MainWindow:
         self._aoi_vars["min_lat"].set(f"{min_lat:.5f}")
         self._aoi_vars["max_lon"].set(f"{max_lon:.5f}")
         self._aoi_vars["max_lat"].set(f"{max_lat:.5f}")
+        self._refresh_minimap()
 
     def _maybe_fetch_on_start(self) -> None:
         """Preselect a start area and/or auto-fetch on launch (screenshot workflow)."""
@@ -1036,6 +1171,39 @@ class MainWindow:
             float(self._aoi_vars["max_lat"].get()),
         )
 
+    def _refresh_minimap(self) -> None:
+        """Redraw the locator from the coordinate fields."""
+        canvas = getattr(self, "_minimap", None)
+        if canvas is None:
+            return
+        try:
+            bounds = (
+                float(self._aoi_vars["min_lon"].get()),
+                float(self._aoi_vars["min_lat"].get()),
+                float(self._aoi_vars["max_lon"].get()),
+                float(self._aoi_vars["max_lat"].get()),
+            )
+        except (ValueError, KeyError):
+            # Mid-edit coordinates are not an error; the locator just waits.
+            return
+
+        palette = THEME_PALETTES[self._theme_mode]
+        width = int(canvas.cget("width"))
+        height = int(canvas.cget("height"))
+        layout = minimap.geometry(bounds, width, height)
+
+        canvas.delete("all")
+        canvas.configure(bg=palette["panel_alt"], highlightbackground=palette["border"])
+        for x in layout.meridians:
+            canvas.create_line(x, 0, x, height, fill=palette["border"])
+        for y in layout.parallels:
+            canvas.create_line(0, y, width, y, fill=palette["border"])
+        canvas.create_rectangle(*layout.box, outline=palette["select_text"], width=2)
+        if layout.marker is not None:
+            mx, my = layout.marker
+            canvas.create_oval(mx - 5, my - 5, mx + 5, my + 5, outline=palette["select_text"], width=2)
+        self._minimap_caption.set(minimap.describe(bounds))
+
     def _set_aoi(self, min_lon: float, min_lat: float, max_lon: float, max_lat: float) -> None:
         self._aoi_vars["min_lon"].set(f"{min_lon:.5f}")
         self._aoi_vars["min_lat"].set(f"{min_lat:.5f}")
@@ -1052,6 +1220,24 @@ class MainWindow:
             "places", "shops", "amenities", "landuse", "barriers", "power"
         ]
         return [name for name in base if self._layer_visibility_vars.get(name, tk.BooleanVar(value=True)).get()]
+
+    def _on_cancel_fetch(self) -> None:
+        """Stop waiting for the current fetch.
+
+        What is already in flight cannot be pulled out of the socket, so the
+        result is discarded rather than drawn and the map on screen stays put.
+        """
+        if self._fetch_cancel is None:
+            return
+        self._fetch_cancel.cancel()
+        self._status_var.set("Fetch cancelled")
+        self._set_idle("Idle")
+        if hasattr(self, "_cancel_button"):
+            self._cancel_button.state(["disabled"])
+
+    def _queue_progress(self, reporter: FetchReporter) -> None:
+        """Called from the fetch thread; hand it to the UI thread to display."""
+        self._pending_queue.put(("progress", reporter.summary()))
 
     def _queue_scene(self, scene: RenderScene, cache_state: str) -> None:
         self._pending_queue.put(("scene", (scene, cache_state)))
@@ -1070,6 +1256,8 @@ class MainWindow:
                     self._apply_location_aoi(payload)
                 elif kind == "image":
                     self._apply_canvas_png(payload)
+                elif kind == "progress":
+                    self._progress_label_var.set(str(payload))
                 elif kind == "error":
                     error_msg = str(payload)
                     if "No match" in error_msg:
@@ -1089,6 +1277,9 @@ class MainWindow:
 
     def _apply_scene(self, scene: RenderScene, cache_state: str) -> None:
         self._current_scene = scene
+        if self._layers_panel is not None:
+            self._layer_summary = self._layers_panel.update(scene)
+            self._layer_visibility_vars = self._layers_panel.visibility_vars()
         # Follow the new preset's ground, so switching to or from a dark preset
         # repaints the margin around the fitted render too.
         self._canvas.configure(background=self._canvas_surround_color())
@@ -1272,7 +1463,9 @@ class MainWindow:
                 font=("SF Pro Text", 13),
                 justify="center",
             )
-            self._status_var.set("Rendered")
+            self._status_var.set(f"Rendered · {getattr(self, '_layer_summary', '')}".rstrip(" ·"))
+        if hasattr(self, "_cancel_button"):
+            self._cancel_button.state(["disabled"])
             self._set_idle("Renderer fallback")
             return
 
@@ -1280,7 +1473,7 @@ class MainWindow:
         self._canvas.delete("all")
         self._canvas.create_image(0, 0, anchor="nw", image=self._canvas_image)
         self._canvas.configure(scrollregion=(0, 0, width, height))
-        self._status_var.set("Rendered")
+        self._status_var.set(f"Rendered · {getattr(self, '_layer_summary', '')}".rstrip(" ·"))
         png_bytes = len(png)
         if isinstance(render_ms, (int, float)):
             drawn_paths = getattr(self.renderer, "_last_drawn_paths", -1)
@@ -1378,11 +1571,102 @@ class MainWindow:
         except ValueError:
             pass
 
+    def _arm_area_selection(self) -> None:
+        """Next drag on the canvas draws an area instead of panning."""
+        self._select_armed = True
+        self._canvas.configure(cursor="crosshair")
+        self._status_var.set("Drag on the map to draw a new area")
+
+    def _disarm_area_selection(self) -> None:
+        self._select_armed = False
+        self._canvas.configure(cursor="")
+
+    def _on_select_start(self, event: tk.Event) -> "str | None":
+        if self._current_scene is None:
+            return None
+        self._select_origin = (event.x, event.y)
+        if self._select_rect is not None:
+            self._canvas.delete(self._select_rect)
+        self._select_rect = self._canvas.create_rectangle(
+            event.x, event.y, event.x, event.y,
+            outline=THEME_PALETTES[self._theme_mode]["select_text"],
+            width=2,
+            dash=(4, 3),
+        )
+        return "break"  # the pan handler must not see this press too
+
+    def _on_select_move(self, event: tk.Event) -> "str | None":
+        if self._select_origin is None or self._select_rect is None:
+            return None
+        x0, y0 = self._select_origin
+        self._canvas.coords(self._select_rect, x0, y0, event.x, event.y)
+        return "break"
+
+    def _on_select_end(self, event: tk.Event) -> "str | None":
+        origin = self._select_origin
+        self._select_origin = None
+        if self._select_rect is not None:
+            self._canvas.delete(self._select_rect)
+            self._select_rect = None
+        self._disarm_area_selection()
+        if origin is None:
+            return None
+
+        x0, y0 = origin
+        if abs(event.x - x0) < 8 or abs(event.y - y0) < 8:
+            # A stray click is not an area; ignore it rather than jumping the
+            # map to a sliver nobody meant to draw.
+            self._status_var.set("Area too small - drag a box to set one")
+            return "break"
+
+        bounds = self._canvas_box_to_bounds((x0, y0), (event.x, event.y))
+        if bounds is None:
+            self._status_var.set("Could not read that area from the map")
+            return "break"
+
+        self._set_aoi(*bounds)
+        self._status_var.set("Area set from the map - Update map to fetch it")
+        return "break"
+
+    def _canvas_box_to_bounds(
+        self,
+        first: tuple[int, int],
+        second: tuple[int, int],
+    ) -> tuple[float, float, float, float] | None:
+        """Two canvas corners to a lon/lat bbox, through the render transform."""
+        scene = self._current_scene
+        projection = getattr(scene, "projection", None) if scene is not None else None
+        if projection is None:
+            return None
+        width = max(1, self._canvas.winfo_width())
+        height = max(1, self._canvas.winfo_height())
+
+        corners = []
+        for x, y in (first, second):
+            world = self.renderer.screen_to_world(float(x), float(y), width, height)
+            if world is None:
+                return None
+            corners.append(projection.unproject_point(*world))
+
+        lons = [point[0] for point in corners]
+        lats = [point[1] for point in corners]
+        min_lon, max_lon = min(lons), max(lons)
+        min_lat, max_lat = min(lats), max(lats)
+        if max_lon - min_lon < 1e-6 or max_lat - min_lat < 1e-6:
+            return None
+        return (min_lon, min_lat, max_lon, max_lat)
+
     def _on_drag_start(self, event: tk.Event) -> None:
+        if self._select_armed:
+            self._on_select_start(event)
+            return
         self._drag_last_xy = (event.x, event.y)
         self._canvas.configure(cursor="fleur")
 
     def _on_drag_move(self, event: tk.Event) -> None:
+        if self._select_origin is not None:
+            self._on_select_move(event)
+            return
         if self._drag_last_xy is None:
             return
         lx, ly = self._drag_last_xy
@@ -1394,6 +1678,9 @@ class MainWindow:
         self._schedule_redraw()
 
     def _on_drag_end(self, _: tk.Event) -> None:
+        if self._select_origin is not None:
+            self._on_select_end(_)
+            return
         self._drag_last_xy = None
         self._canvas.configure(cursor="")
 
@@ -1599,6 +1886,9 @@ class MainWindow:
         return Path(__file__).resolve().parents[3]
 
     def _choose_source_path(self, provider_id: str) -> None:
+        self._choose_source_path_impl(provider_id)
+
+    def _choose_source_path_impl(self, provider_id: str) -> None:
         filetypes = {
             "local_osm_pbf": [("OSM PBF", "*.osm.pbf"), ("GeoJSON/JSON", "*.geojson *.json"), ("All files", "*.*")],
             "vector_tiles": [("Vector tile sources", "*.mbtiles *.pmtiles *.geojson *.json"), ("All files", "*.*")],
@@ -1612,8 +1902,28 @@ class MainWindow:
                 selected = filedialog.askopenfilename(title="Choose Natural Earth file", filetypes=filetypes)
         else:
             selected = filedialog.askopenfilename(title="Choose map source", filetypes=filetypes)
-        if selected:
+        if not selected:
+            return
+        # Three places need to agree: the stack decides whether the source can
+        # be ticked, the manager does the reading, and the old path field is
+        # still what Apply Settings writes from.
+        self.source_stack.set_path(provider_id, selected)
+        self.controller.data_source_manager.set_optional_source_path(provider_id, selected)
+        if provider_id in self._optional_source_vars:
             self._optional_source_vars[provider_id].set(selected)
+        if self._sources_panel is not None:
+            self._sources_panel.rebuild()
+        self._status_var.set(f"{provider_id}: {selected}")
+
+    def _restyle_icons(self) -> None:
+        """Keep the drawn icons in step with the current appearance."""
+        palette = THEME_PALETTES.get(self._theme_mode, THEME_PALETTES["light"])
+        icons.restyle_all(
+            colour=palette["text"],
+            background=palette["panel_alt"],
+            hover=palette["button_active"],
+        )
+        self._refresh_minimap()
 
     def _toggle_theme(self) -> None:
         self._theme_mode = "dark" if self._theme_mode == "light" else "light"
@@ -1623,6 +1933,7 @@ class MainWindow:
     def _apply_theme(self) -> None:
         style = ttk.Style(master=self._root)
         self._setup_platform_theme(style)
+        self._restyle_icons()
         if platform.system() == "Darwin":
             self._apply_macos_aqua_appearance()
             return

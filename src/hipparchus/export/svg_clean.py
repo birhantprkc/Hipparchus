@@ -135,10 +135,19 @@ class CleanSVGExporter:
                                 "stroke-linecap": "round",
                             },
                         )
-            for geometry in layer.geometries:
+            for geometry_index, geometry in enumerate(layer.geometries):
                 # Transform geometry coordinates if needed
                 if transform:
                     geometry = self._transform_geometry(geometry, transform)
+                # Illuminated layers vary weight per path; everything else keeps
+                # the layer's single width.
+                stroke_width = _fmt_float(layer.style.stroke_width * layer.weight_at(geometry_index))
+                # Banded layers carry a fill per feature; everything else keeps
+                # the layer's single fill.
+                path_fill = fill
+                if layer.style.fill_enabled and layer.fill_colors:
+                    banded = layer.fill_color_at(geometry_index)
+                    path_fill = _color_to_hex(banded.r, banded.g, banded.b)
                 paths = geometry_to_svg_path_data(geometry, precision=self.precision)
                 for idx, path_data in enumerate(paths):
                     SubElement(
@@ -147,9 +156,9 @@ class CleanSVGExporter:
                         {
                             "id": f"{layer.name}_path_{layer_paths + idx}",
                             "d": path_data,
-                            "fill": fill,
+                            "fill": path_fill,
                             "stroke": stroke,
-                            "stroke-width": _fmt_float(layer.style.stroke_width),
+                            "stroke-width": stroke_width,
                             "vector-effect": "non-scaling-stroke",
                             "stroke-linejoin": "round",
                             "stroke-linecap": "round" if layer.style.line_cap == "round" else "butt",
@@ -502,6 +511,17 @@ def _legend_label(layer_name: str) -> str:
         "amenities": "Amenities",
         "landuse": "Land Use",
         "terrain_contours": "Terrain Contours",
+        "terrain_index_contours": "Index Contours",
+        "elevation_bands": "Elevation Bands (hypsometric)",
+        "night_lights": "Night Lights",
         "admin_boundaries": "Admin Boundaries",
+        "earthquakes_shallow": "Earthquakes (shallow)",
+        "earthquakes_intermediate": "Earthquakes (intermediate)",
+        "earthquakes_deep": "Earthquakes (deep)",
+        "street_names": "Street Names",
+        "bathymetry": "Bathymetry",
+        "summits": "Summit Heights",
+        "satellite_tracks": "Satellite Ground Tracks",
+        "satellite_footprints": "Satellite Footprints",
     }
     return labels.get(layer_name, layer_name.replace("_", " ").title())

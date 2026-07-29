@@ -81,6 +81,7 @@ def _layer_style_to_dict(style: LayerStyle) -> dict[str, Any]:
     data["fill_color"] = asdict(style.fill_color)
     data["casing_color"] = asdict(style.casing_color)
     data["label_halo_color"] = asdict(style.label_halo_color)
+    data["fill_color_high"] = asdict(style.fill_color_high) if style.fill_color_high else None
     return data
 
 
@@ -97,7 +98,22 @@ def _layer_style_from_dict(data: dict[str, Any]) -> LayerStyle:
         line_cap=str(data.get("line_cap", "butt")),
         label_halo_color=_color_from_dict(data.get("label_halo_color"), RGBAColor(255, 255, 255, 230)),
         label_halo_width=float(data.get("label_halo_width", 2.0)),
+        # Absent in presets saved before illuminated contours existed, so each
+        # one falls back to "unlit" rather than failing to load.
+        illumination=float(data.get("illumination", 0.0)),
+        illumination_azimuth=float(data.get("illumination_azimuth", 315.0)),
+        illumination_bands=int(data.get("illumination_bands", 5)),
+        illumination_lit_scale=float(data.get("illumination_lit_scale", 0.4)),
+        illumination_shadow_scale=float(data.get("illumination_shadow_scale", 1.9)),
+        fill_color_high=_optional_color(data.get("fill_color_high")),
     )
+
+
+def _optional_color(value: object) -> RGBAColor | None:
+    """Absent in presets saved before hypsometric tints existed."""
+    if not isinstance(value, dict):
+        return None
+    return _color_from_dict(value, RGBAColor(0, 0, 0, 255))
 
 
 def _color_from_dict(value: object, fallback: RGBAColor) -> RGBAColor:

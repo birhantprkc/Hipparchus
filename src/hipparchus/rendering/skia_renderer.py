@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 import logging
+import math
 import threading
 from typing import Any
 
@@ -13,6 +14,20 @@ from hipparchus.rendering.geometry_adapter import iter_atomic_geometries
 from hipparchus.rendering.models import RGBAColor, RenderScene, ViewportState
 
 _PERF_LOGGER = logging.getLogger("hipparchus.perf")
+
+
+# Beyond this the memory cost grows faster than the visible gain, and a large
+# preview at 4x can exhaust the surface allocation outright.
+MAX_SUPERSAMPLE = 3.0
+
+
+def _resample(image: Any, width: int, height: int, skia: Any) -> Any:
+    """Downscale with a Mitchell filter, falling back to the original."""
+    try:
+        resized = image.resize(width, height, skia.SamplingOptions(skia.CubicResampler.Mitchell()))
+    except Exception:  # noqa: BLE001 - an unfiltered preview beats no preview
+        return image
+    return resized if resized is not None else image
 
 
 class SkiaUnavailableError(RuntimeError):
@@ -196,8 +211,12 @@ class SkiaRenderer:
         skia = _import_skia()
         with self._lock:
             scale = max(1.0, self.device_scale)
-            pixel_width = max(1, int(width * scale))
-            pixel_height = max(1, int(height * scale))
+            # Draw larger than needed, then resample down. Hairlines are the
+            # whole point of a contour sheet and they alias badly at 1:1; a
+            # quality profile that asks for oversampling now gets it.
+            supersample = max(1.0, min(float(self.scene.supersample), MAX_SUPERSAMPLE))
+            pixel_width = max(1, int(width * scale * supersample))
+            pixel_height = max(1, int(height * scale * supersample))
 
             _PERF_LOGGER.debug(
                 "RENDER_PREVIEW_PNG START: width=%d, height=%d, scale=%.1f, pixel=%dx%d",
@@ -206,17 +225,20 @@ class SkiaRenderer:
 
             surface = skia.Surface(pixel_width, pixel_height)
             canvas = surface.getCanvas()
-            canvas.scale(scale, scale)
+            canvas.scale(scale * supersample, scale * supersample)
 
             self._draw_scene(canvas, width, height)
 
             image = surface.makeImageSnapshot()
+            if supersample > 1.0:
+                image = _resample(image, max(1, int(width * scale)), max(1, int(height * scale)), skia)
             data = image.encodeToData()
             png_bytes = bytes(data) if data is not None else b""
             self._last_render_diagnostics = {
                 "width": width,
                 "height": height,
                 "device_scale": scale,
+                "supersample": supersample,
                 "pixel_width": pixel_width,
                 "pixel_height": pixel_height,
                 "drawn_paths": self._last_drawn_paths,
@@ -350,15 +372,55 @@ class SkiaRenderer:
                 casing_paint.setStrokeCap(cap)
                 casing_paint.setStrokeJoin(join)
 
+            # Weighted layers keep geometry and weight paired through sampling,
+            # so a thinned preview never draws a line at another line's weight.
+            weighted = bool(layer.weights)
+            indexed = list(enumerate(layer.geometries))
             if sampled:
-                selected = self._sample_layer_geometries(
+                selected_pairs = self._sample_layer_geometries(
                     layer_name=layer.name,
-                    geometries=layer.geometries,
+                    geometries=indexed,
                     hard_cap=min(self.preview_max_geometries_per_layer, remaining_budget),
                 )
-                remaining_budget -= len(selected)
+                remaining_budget -= len(selected_pairs)
             else:
-                selected = layer.geometries
+                selected_pairs = indexed
+            selected = [geometry for _index, geometry in selected_pairs]
+
+            # One paint per distinct weight, not per geometry: weights are
+            # quantised into a handful of bands, so this stays a small cache.
+            weight_paints: dict[float, Any] = {}
+            banded = bool(layer.fill_colors)
+            fill_paints: dict[tuple[int, int, int, int], Any] = {}
+
+            def _fill_paint_for(color: RGBAColor) -> Any:
+                shaded = color.with_opacity(layer.style.opacity)
+                key = (shaded.r, shaded.g, shaded.b, shaded.a)
+                cached = fill_paints.get(key)
+                if cached is None:
+                    cached = skia.Paint(
+                        AntiAlias=True,
+                        Style=skia.Paint.kFill_Style,
+                        Color=skia.ColorSetARGB(shaded.a, shaded.r, shaded.g, shaded.b),
+                    )
+                    fill_paints[key] = cached
+                return cached
+
+            def _stroke_paint_for(weight: float) -> Any:
+                if weight == 1.0:
+                    return stroke_paint
+                cached = weight_paints.get(weight)
+                if cached is None:
+                    cached = skia.Paint(
+                        AntiAlias=True,
+                        Style=skia.Paint.kStroke_Style,
+                        StrokeWidth=max(0.0001, layer.style.stroke_width * weight) / self._fit_scale,
+                        Color=skia.ColorSetARGB(stroke_color.a, stroke_color.r, stroke_color.g, stroke_color.b),
+                    )
+                    cached.setStrokeCap(cap)
+                    cached.setStrokeJoin(join)
+                    weight_paints[weight] = cached
+                return cached
 
             # Skip label-only layers in the geometry pass — labels are drawn
             # separately in _draw_labels so they remain at fixed pixel size.
@@ -375,14 +437,18 @@ class SkiaRenderer:
                                 canvas.drawPath(path, casing_paint)
 
             # Second pass: draw fills and strokes
-            for geometry in selected:
+            for index, geometry in selected_pairs:
+                paint = _stroke_paint_for(layer.weight_at(index)) if weighted else stroke_paint
                 for atomic in iter_atomic_geometries(geometry):
                     path = self._path_for_geometry(atomic, skia)
                     if path is None:
                         continue
                     if layer.style.fill_enabled and isinstance(atomic, Polygon):
-                        canvas.drawPath(path, fill_paint)
-                    canvas.drawPath(path, stroke_paint)
+                        canvas.drawPath(
+                            path,
+                            _fill_paint_for(layer.fill_color_at(index)) if banded else fill_paint,
+                        )
+                    canvas.drawPath(path, paint)
                     drawn_paths += 1
         canvas.restore()
         return drawn_paths
@@ -446,30 +512,11 @@ class SkiaRenderer:
 
         pad = 2.0
 
-        # Pre-compute the world → screen transform (fit + viewport).
-        minx, miny, maxx, maxy = self._scene_bounds
-        span_x = max(maxx - minx, 1e-9)
-        span_y = max(maxy - miny, 1e-9)
-        margin = max(16.0, min(width, height) * 0.06)
-        avail_w = max(1.0, width - 2.0 * margin)
-        avail_h = max(1.0, height - 2.0 * margin)
-        fit_scale = min(avail_w / span_x, avail_h / span_y)
-        fit_scale = max(1e-6, min(fit_scale, 1e6))
-        draw_w = span_x * fit_scale
-        draw_h = span_y * fit_scale
-        offset_x = (width - draw_w) * 0.5
-        offset_y = (height - draw_h) * 0.5
-
-        zoom = self.viewport.zoom
-        pan_x = self.viewport.pan_x
-        pan_y = self.viewport.pan_y
-
+        # One shared transform for labels and geometry, so a rotated map no
+        # longer leaves its labels behind where the geometry used to be.
         def _world_to_screen(wx: float, wy: float) -> tuple[float, float]:
-            # Fit transform (with Y-flip: north up).
-            sx = offset_x + (wx - minx) * fit_scale
-            sy = offset_y + (maxy - wy) * fit_scale
-            # Viewport transform.
-            return pan_x + sx * zoom, pan_y + sy * zoom
+            placed = self.world_to_screen(wx, wy, width, height)
+            return placed if placed is not None else (0.0, 0.0)
 
         # Collect labels with their screen positions, then cull off-screen and
         # suppress overlapping labels so the map stays readable at every zoom.
@@ -598,6 +645,59 @@ class SkiaRenderer:
             return None
         return (minx, miny, maxx, maxy)
 
+    def fit_metrics(self, width: int, height: int) -> tuple[float, float, float, float, float] | None:
+        """``(fit_scale, offset_x, offset_y, min_x, max_y)`` for the fit transform.
+
+        The single source of truth for how world coordinates land on the canvas.
+        Both directions of the mapping and the drawing code all read it, so they
+        cannot drift apart.
+        """
+        if self._scene_bounds is None:
+            return None
+        minx, miny, maxx, maxy = self._scene_bounds
+        span_x = max(maxx - minx, 1e-9)
+        span_y = max(maxy - miny, 1e-9)
+        margin = max(16.0, min(width, height) * 0.06)
+        avail_w = max(1.0, width - 2.0 * margin)
+        avail_h = max(1.0, height - 2.0 * margin)
+        fit_scale = max(1e-6, min(min(avail_w / span_x, avail_h / span_y), 1e6))
+        offset_x = (width - span_x * fit_scale) * 0.5
+        offset_y = (height - span_y * fit_scale) * 0.5
+        return (fit_scale, offset_x, offset_y, minx, maxy)
+
+    def world_to_screen(self, wx: float, wy: float, width: int, height: int) -> tuple[float, float] | None:
+        """World (projected) coordinates to canvas pixels."""
+        metrics = self.fit_metrics(width, height)
+        if metrics is None:
+            return None
+        fit_scale, offset_x, offset_y, minx, maxy = metrics
+        px = offset_x + (wx - minx) * fit_scale
+        py = offset_y + (maxy - wy) * fit_scale
+        radians = math.radians(self.viewport.rotation)
+        cos_r, sin_r = math.cos(radians), math.sin(radians)
+        rx = px * cos_r - py * sin_r
+        ry = px * sin_r + py * cos_r
+        return (self.viewport.pan_x + rx * self.viewport.zoom, self.viewport.pan_y + ry * self.viewport.zoom)
+
+    def screen_to_world(self, sx: float, sy: float, width: int, height: int) -> tuple[float, float] | None:
+        """Canvas pixels back to world (projected) coordinates.
+
+        The inverse of :meth:`world_to_screen`, which is what lets the canvas be
+        used as an input device rather than only as a picture.
+        """
+        metrics = self.fit_metrics(width, height)
+        if metrics is None:
+            return None
+        fit_scale, offset_x, offset_y, minx, maxy = metrics
+        zoom = self.viewport.zoom or 1.0
+        rx = (sx - self.viewport.pan_x) / zoom
+        ry = (sy - self.viewport.pan_y) / zoom
+        radians = math.radians(self.viewport.rotation)
+        cos_r, sin_r = math.cos(radians), math.sin(radians)
+        px = rx * cos_r + ry * sin_r
+        py = -rx * sin_r + ry * cos_r
+        return (minx + (px - offset_x) / fit_scale, maxy - (py - offset_y) / fit_scale)
+
     def _apply_fit_transform(self, canvas: Any, width: int, height: int) -> None:
         """Map world-coordinate geometry bounds into visible canvas space."""
         if self._scene_bounds is None:
@@ -627,13 +727,20 @@ class SkiaRenderer:
 
 
 def _decimate_coords(coords: list[tuple[float, float]], max_vertices: int) -> list[tuple[float, float]]:
+    """Thin a vertex list without changing the shape it describes.
+
+    The stride is chosen so the result fits the budget outright. The previous
+    version could still overshoot after striding, and dealt with it by cutting
+    the list short and jumping to the final vertex -- which draws one long chord
+    straight across the shape. On a coastline-hugging contour, and Santorini's
+    have upwards of eight thousand vertices, that reads as a line ruled across
+    the island.
+    """
     if len(coords) <= max_vertices or max_vertices < 3:
         return coords
 
-    step = max(1, len(coords) // max_vertices)
+    step = math.ceil(len(coords) / max_vertices)
     sampled = coords[::step]
     if sampled[-1] != coords[-1]:
         sampled.append(coords[-1])
-    if len(sampled) > max_vertices:
-        sampled = sampled[: max_vertices - 1] + [coords[-1]]
     return sampled

@@ -11,12 +11,16 @@ from shapely.ops import polygonize, unary_union
 from hipparchus.application.presets import GeometryPipelineProfile, QualityMode, StyleProfile
 from hipparchus.application.quality import quality_profile
 from hipparchus.data_sources.provider import FeatureCollection
+from hipparchus.data_sources.satellite_provider import TRACK_LAYER
+from hipparchus.data_sources.terrain_tiles import ELEVATION_BANDS_LAYER as BAND_LAYER, SUMMIT_LAYER
+from hipparchus.data_sources.usgs_provider import EARTHQUAKE_LAYERS
 from hipparchus.geometry.circle_packing import CirclePackingOptions, pack_circles_in_boundary
 from hipparchus.geometry.hex_grid import HexGridOptions, generate_hex_grid
+from hipparchus.geometry.illumination import IlluminationProfile, illuminate_geometries
 from hipparchus.geometry.projection import ProjectionProfile
 from hipparchus.geometry.simplification import SimplificationOptions, simplify_geometries, simplify_geometry
 from hipparchus.geometry.smoothing import smooth_layer_geometries
-from hipparchus.rendering.models import LayerStyle, RenderLayer, RenderScene, PlaceLabel
+from hipparchus.rendering.models import LayerStyle, RGBAColor, RenderLayer, RenderScene, PlaceLabel
 
 
 @dataclass(slots=True)
@@ -60,6 +64,8 @@ class RenderSceneBuilder:
             clip_bbox = projection.project_bbox_geometry(feature_collection.bbox)
 
         layer_geometries: dict[str, list[BaseGeometry]] = {}
+        # Where each banded geometry sits in its ramp, 0 at the lowest band.
+        band_ramp_positions: dict[str, list[float]] = {}
         max_n = geometry_profile.max_on_screen_features_per_layer
         max_n = max(1, int(max_n * profile.geometry_cap_scale))
         raw_cap = max_n
@@ -88,6 +94,41 @@ class RenderSceneBuilder:
                         diagnostics["smoothed_geometries"] = int(diagnostics["smoothed_geometries"]) + smoothed
                         diagnostics["invalid_geometries"] = int(diagnostics["invalid_geometries"]) + invalid
                         layer_geometries[road_type] = geoms[:max_n]
+            elif layer_name == BAND_LAYER:
+                # Bands carry a colour that lives in the feature's properties,
+                # which the geometry pipeline drops. Running the pipeline one
+                # feature at a time is what keeps geometry and colour paired:
+                # clipping can split a band in two and smoothing can reject one
+                # outright, and either would shift a shared colour list.
+                band_geoms: list[BaseGeometry] = []
+                band_positions: list[float] = []
+                for feature in features.get("features", []):
+                    geom_data = feature.get("geometry")
+                    if geom_data is None:
+                        continue
+                    try:
+                        projected = projection.project_geometry(shape(geom_data))
+                    except Exception:
+                        diagnostics["invalid_geometries"] = int(diagnostics["invalid_geometries"]) + 1
+                        continue
+                    pieces = [projected]
+                    if clip_bbox is not None:
+                        pieces = _clip_geometries(pieces, clip_bbox)
+                    pieces = _optimize_layer_geometries(layer_name, pieces, tolerance)
+                    pieces, smoothed, invalid = smooth_layer_geometries(
+                        layer_name,
+                        pieces,
+                        geometry_profile.layer_smoothing_iterations.get(layer_name, smoothing_iterations),
+                    )
+                    diagnostics["smoothed_geometries"] = int(diagnostics["smoothed_geometries"]) + smoothed
+                    diagnostics["invalid_geometries"] = int(diagnostics["invalid_geometries"]) + invalid
+                    position = _band_position(feature.get("properties", {}))
+                    for piece in pieces:
+                        band_geoms.append(piece)
+                        band_positions.append(position)
+                if band_geoms:
+                    layer_geometries[layer_name] = band_geoms[:max_n]
+                    band_ramp_positions[layer_name] = band_positions[:max_n]
             else:
                 geoms: list[BaseGeometry] = []
                 for feature in features.get("features", []):
@@ -171,14 +212,42 @@ class RenderSceneBuilder:
         place_labels = extract_labels("places", 300)
         shop_labels = extract_labels("shops", 200)
         amenity_labels = extract_labels("amenities", 200)
+        street_labels = _street_labels(feature_collection, projection)
+        # The provider names only the events worth naming, so this reads the
+        # same ``name`` property every other label layer does.
+        earthquake_labels = {
+            layer: extract_labels(layer, 400) for layer in EARTHQUAKE_LAYERS
+        }
+        satellite_labels = extract_labels(TRACK_LAYER, 60)
+        # Real heights, measured at the point they label.
+        summit_labels = extract_labels(SUMMIT_LAYER, 60)
+
+        # Providers return everything that touches the AOI, so a fetch carries
+        # features whose label anchor sits outside the frame. Drop those before
+        # thinning, or the label budget is spent on names nobody can see.
+        place_labels = _labels_within(place_labels, clip_bbox)
+        shop_labels = _labels_within(shop_labels, clip_bbox)
+        amenity_labels = _labels_within(amenity_labels, clip_bbox)
+        street_labels = _labels_within(street_labels, clip_bbox)
+        earthquake_labels = {
+            layer: _place_labels_without_collisions(_labels_within(labels, clip_bbox), max_labels=60)
+            for layer, labels in earthquake_labels.items()
+        }
+        satellite_labels = _place_labels_without_collisions(_labels_within(satellite_labels, clip_bbox), max_labels=20)
+        summit_labels = _place_labels_without_collisions(_labels_within(summit_labels, clip_bbox), max_labels=24)
 
         place_labels = _place_labels_without_collisions(place_labels, max_labels=120)
         amenity_labels = _place_labels_without_collisions(amenity_labels, max_labels=80)
         shop_labels = _place_labels_without_collisions(shop_labels, max_labels=80)
+        street_labels = _place_labels_without_collisions(street_labels, max_labels=90)
 
         layers: list[RenderLayer] = []
         # Ensure all label layers are included
         all_layer_names = set(layer_geometries.keys()) | {"places", "shops", "amenities"}
+        if summit_labels:
+            all_layer_names.add(SUMMIT_LAYER)
+        if street_labels:
+            all_layer_names.add("street_names")
         for layer_name in _ordered_layers(all_layer_names):
             style = style_profile.layer_styles.get(layer_name, LayerStyle())
             geoms = layer_geometries.get(layer_name, [])
@@ -189,9 +258,50 @@ class RenderSceneBuilder:
                 labels = shop_labels
             elif layer_name == "amenities":
                 labels = amenity_labels
+            elif layer_name == "street_names":
+                labels = street_labels
+            elif layer_name in EARTHQUAKE_LAYERS:
+                labels = earthquake_labels.get(layer_name, [])
+            elif layer_name == TRACK_LAYER:
+                labels = satellite_labels
+            elif layer_name == SUMMIT_LAYER:
+                labels = summit_labels
             else:
                 labels = []
-            layers.append(RenderLayer(name=layer_name, geometries=geoms, style=style, labels=labels))
+
+            fill_colors: list[RGBAColor] = []
+            positions = band_ramp_positions.get(layer_name)
+            if positions and style.fill_enabled:
+                high = style.fill_color_high or style.fill_color
+                fill_colors = [_blend(style.fill_color, high, position) for position in positions]
+
+            weights: list[float] = []
+            if style.illumination > 0.0 and geoms:
+                # Last step in the pipeline on purpose: geometry and weight are
+                # produced together, so nothing downstream can desynchronise them.
+                geoms, weights = illuminate_geometries(
+                    geoms,
+                    IlluminationProfile(
+                        azimuth_deg=style.illumination_azimuth,
+                        bands=style.illumination_bands,
+                        lit_scale=style.illumination_lit_scale,
+                        shadow_scale=style.illumination_shadow_scale,
+                    ),
+                )
+                diagnostics["illuminated_layers"] = sorted(
+                    {*(diagnostics.get("illuminated_layers") or []), layer_name}
+                )
+
+            layers.append(
+                RenderLayer(
+                    name=layer_name,
+                    geometries=geoms,
+                    style=style,
+                    labels=labels,
+                    weights=weights,
+                    fill_colors=fill_colors,
+                )
+            )
 
         # Use the bbox from the feature collection if available
         scene_bbox = projection.project_bbox(feature_collection.bbox)
@@ -200,8 +310,13 @@ class RenderSceneBuilder:
             bbox=scene_bbox,
             source_bbox=feature_collection.bbox,
             background=style_profile.background,
+            supersample=profile.supersample,
+            projection=projection,
             metadata={
                 "source": feature_collection.metadata.get("source", "unknown"),
+                # Travels into the exported diagnostics, so a generated map
+                # carries its own disclosure wherever the SVG goes.
+                "synthetic": bool(feature_collection.metadata.get("synthetic", False)),
                 "quality_profile": profile.key,
                 "projection": projection.metadata(feature_collection.bbox),
             },
@@ -435,6 +550,104 @@ def _polygon_tolerance_cap(geometry: BaseGeometry, *, layer_name: str) -> float:
     return min_dimension * ratio
 
 
+def _band_position(properties: dict) -> float:
+    """Where a band sits in its sequence, 0 at the lowest and 1 at the highest."""
+    try:
+        index = float(properties.get("band_index", 0))
+        count = float(properties.get("band_count", 1))
+    except (TypeError, ValueError):
+        return 0.0
+    if count <= 1.0:
+        return 0.0
+    return max(0.0, min(1.0, index / (count - 1.0)))
+
+
+def _blend(low: RGBAColor, high: RGBAColor, position: float) -> RGBAColor:
+    """Linear step along a two-stop ramp."""
+    t = max(0.0, min(1.0, position))
+    return RGBAColor(
+        r=int(round(low.r + (high.r - low.r) * t)),
+        g=int(round(low.g + (high.g - low.g) * t)),
+        b=int(round(low.b + (high.b - low.b) * t)),
+        a=int(round(low.a + (high.a - low.a) * t)),
+    )
+
+
+def _labels_within(labels: list[PlaceLabel], clip_bbox: BaseGeometry | None) -> list[PlaceLabel]:
+    """Keep only labels whose anchor falls inside the drawn map."""
+    if clip_bbox is None or clip_bbox.is_empty:
+        return labels
+    minx, miny, maxx, maxy = clip_bbox.bounds
+    return [
+        label
+        for label in labels
+        if minx <= label.x <= maxx and miny <= label.y <= maxy
+    ]
+
+
+def _street_labels(
+    feature_collection: FeatureCollection,
+    projection: ProjectionProfile,
+    *,
+    max_streets: int = 160,
+) -> list[PlaceLabel]:
+    """One label per named street, on its longest run inside the AOI.
+
+    OSM splits a street into a way per block, so labelling every feature would
+    stamp the same name dozens of times down one road. Keeping only the longest
+    run per name puts the label where the street is most legible and leaves the
+    rest of the sheet clear.
+    """
+    features = feature_collection.geojson_by_layer.get("roads", {}).get("features", [])
+    longest: dict[str, tuple[float, BaseGeometry]] = {}
+
+    for feature in features:
+        properties = feature.get("properties", {}) or {}
+        name = str(properties.get("name", "")).strip()
+        if not name:
+            continue
+        geometry_data = feature.get("geometry")
+        if geometry_data is None:
+            continue
+        try:
+            geometry = shape(geometry_data)
+        except Exception:
+            continue
+        if geometry.is_empty or geometry.length <= 0.0:
+            continue
+        best = longest.get(name)
+        if best is None or geometry.length > best[0]:
+            longest[name] = (geometry.length, geometry)
+
+    ranked = sorted(longest.items(), key=lambda item: item[1][0], reverse=True)[:max_streets]
+
+    labels: list[PlaceLabel] = []
+    for name, (_length, geometry) in ranked:
+        anchor = _label_anchor(geometry)
+        if anchor is None:
+            continue
+        x, y = projection.project_point(anchor[0], anchor[1])
+        labels.append(PlaceLabel(name=name, x=x, y=y, place_type="street"))
+    return labels
+
+
+def _label_anchor(geometry: BaseGeometry) -> tuple[float, float] | None:
+    """Midpoint of a line, or a representative point for anything else."""
+    try:
+        if isinstance(geometry, LineString):
+            point = geometry.interpolate(0.5, normalized=True)
+        elif isinstance(geometry, MultiLineString) and geometry.geoms:
+            longest = max(geometry.geoms, key=lambda line: line.length)
+            point = longest.interpolate(0.5, normalized=True)
+        else:
+            point = geometry.representative_point()
+    except Exception:
+        return None
+    if point.is_empty:
+        return None
+    return (float(point.x), float(point.y))
+
+
 def _ordered_layers(layer_names: set[str] | list[str] | tuple[str, ...]) -> list[str]:
     preferred = [
         # Background layers (large areas)
@@ -445,6 +658,13 @@ def _ordered_layers(layer_names: set[str] | list[str] | tuple[str, ...]) -> list
         "natural",
         "landuse",
         "parks",
+        # Relief sits above land cover and below the built environment, the way
+        # a printed topographic sheet stacks it.
+        "elevation_bands",
+        "terrain_hillshade",
+        "bathymetry",
+        "terrain_contours",
+        "terrain_index_contours",
         # Buildings and structures
         "buildings",
         "barriers",
@@ -461,8 +681,17 @@ def _ordered_layers(layer_names: set[str] | list[str] | tuple[str, ...]) -> list
         "roads",
         # Transport
         "railways",
+        # Orbital geometry floats above the ground it passes over.
+        "satellite_footprints",
+        "satellite_tracks",
+        # Measured point phenomena sit above the base map.
+        "earthquakes_deep",
+        "earthquakes_intermediate",
+        "earthquakes_shallow",
         # Labels on top (ordered by importance)
+        "summits",
         "places",
+        "street_names",
         "amenities",
         "shops",
         # Derived artistic layers

@@ -44,6 +44,17 @@ class LayerStyle:
     line_cap: str = "butt"
     label_halo_color: RGBAColor = field(default_factory=lambda: RGBAColor(255, 255, 255, 230))
     label_halo_width: float = 2.0
+    # Illuminated contours: 0 leaves the layer at one uniform weight, above 0
+    # varies stroke weight along each line by how its slope faces the light.
+    illumination: float = 0.0
+    illumination_azimuth: float = 315.0
+    illumination_bands: int = 5
+    illumination_lit_scale: float = 0.4
+    illumination_shadow_scale: float = 1.9
+    # High end of a two-stop fill ramp. Layers whose features carry a position
+    # in a sequence -- elevation bands -- interpolate from ``fill_color`` to
+    # this; everything else ignores it.
+    fill_color_high: RGBAColor | None = None
 
 
 @dataclass(slots=True)
@@ -64,6 +75,20 @@ class RenderLayer:
     geometries: list[BaseGeometry] = field(default_factory=list)
     style: LayerStyle = field(default_factory=LayerStyle)
     labels: list[PlaceLabel] = field(default_factory=list)  # For place names
+    # Per-geometry stroke-width multipliers, parallel to ``geometries``. Empty
+    # means one uniform weight for the whole layer.
+    weights: list[float] = field(default_factory=list)
+    # Per-geometry fill colours, parallel to ``geometries``. Empty means the
+    # layer's single fill applies to all of them.
+    fill_colors: list[RGBAColor] = field(default_factory=list)
+
+    def weight_at(self, index: int) -> float:
+        return self.weights[index] if index < len(self.weights) else 1.0
+
+    def fill_color_at(self, index: int) -> RGBAColor:
+        if index < len(self.fill_colors):
+            return self.fill_colors[index]
+        return self.style.fill_color
 
 
 @dataclass(slots=True, frozen=True)
@@ -100,6 +125,14 @@ class RenderScene:
     # Ground the layers are drawn on. Carried on the scene so the preview
     # renderer and the SVG exporter agree without consulting the preset.
     background: RGBAColor = field(default_factory=lambda: RGBAColor(250, 250, 250, 255))
+    # Oversampling factor for preview rendering, carried from the quality
+    # profile. Lives on the scene so the renderer never has to import the
+    # application layer, which imports it.
+    supersample: float = 1.0
+    # The projection the geometry was built with. Carried so a click on the
+    # canvas can be turned back into longitude and latitude without guessing
+    # which projection produced the picture.
+    projection: object | None = None
     metadata: dict[str, object] = field(default_factory=dict)
     diagnostics: dict[str, object] = field(default_factory=dict)
 

@@ -1,6 +1,6 @@
 # Hipparchus Manual
 
-**Version 0.3.0**
+**Version 0.4.3**
 
 This manual explains how to use Hipparchus as an online map creation app. It covers installation, launching, fetching map data, working with layers and presets, exporting SVG files, and solving common problems. It applies to macOS, Linux, and Windows.
 
@@ -232,6 +232,16 @@ The left sidebar includes preset locations:
 - Kyoto Center
 - San Francisco Downtown
 - Venice Historic
+- Santorini Caldera — a drowned volcanic caldera; try Elevation, which carries
+  the sea floor as well as the rim
+- Paphos Coast — Cyprus, where the coastal shelf drops away offshore
+- San Francisco Bay — hills, a dense street grid and a fault zone; try
+  Earthquakes with a wider area
+- Miami Beach — barrier islands at sea level, where Night Lights says more than
+  contours can
+- Goa Coast — a monsoon coast of estuaries and low hills
+- Addis Ababa — a highland capital above 2,300 m
+- Shanghai Bund — a delta city at sea level on the Huangpu
 
 Any of these names also works with `HIPPARCHUS_START_AREA` (see section 21).
 
@@ -323,11 +333,92 @@ The top bar includes a `Model` dropdown. `OSM Live` is the default and uses Over
 - `Overture Places/Buildings`: accepts local GeoParquet when `pyarrow` is installed.
 - `Terrain Relief`: accepts contour/elevation GeoJSON/JSON directly and can extract contours from local GeoTIFF DEM files when `rasterio` and `scikit-image` are installed.
 - `Night Lights (VIIRS)`: reads a single-band nighttime-illumination GeoTIFF and extracts iso-radiance contours — how brightly a place is actually lit at night, as editable vector lines. Shares the raster path with `Terrain Relief`, so it needs the same `rasterio` and `scikit-image` backends.
+- `Live Earthquakes (USGS)`: real recorded seismicity for the area, fetched live from the USGS FDSN event service. Events become magnitude-scaled circles in three depth classes, with events above M4 labelled. Use a **wide** AOI — a city-sized window over a quiet region will be empty, while a regional one over a plate boundary draws the arc itself. Tune with `HIPPARCHUS_USGS_DAYS` and `HIPPARCHUS_USGS_MIN_MAGNITUDE`.
+- `Night Lights Online (GIBS)`: NASA nighttime imagery for the area, contoured into iso-brightness lines with no file to download. Pick the GIBS layer with `HIPPARCHUS_GIBS_LAYER` and the epoch with `HIPPARCHUS_GIBS_DATE`. **The contoured value is rendered picture brightness, not calibrated radiance**, and it clips to white over bright city cores, where a saturated window returns few contours or none. The fetch reports `saturated` when that happens. For calibrated work use the file-based `Night Lights (VIIRS)` model with a single-band VNP46A or VNL GeoTIFF.
+- `Satellite Ground Tracks`: where satellites pass overhead, from live Celestrak element sets, with the circle of ground that can currently see each one. Propagation is Hipparchus's own Keplerian model with J2 nodal drift — good to a few kilometres over a few hours for a low orbit, far below the width of a drawn line, but **not an ephemeris**. Do not use it for pointing, conjunction, or re-entry work. Best on a continental or world AOI, since a track crosses a city window only occasionally.
+- `Contour Atlas (OSM + simulated relief)`: live Overpass streets, names, and water drawn over the generated relief. The streets are real; the relief is not.
+- `Terrain Online (real elevation)`: real measured ground for the area, from the public `elevation-tiles-prod` mosaic (SRTM, NED, GMTED). No key, no account, no local file, worldwide. This is the model to use when you want the actual terrain of an actual place.
+- `Terrain Atlas (OSM + real elevation)`: real streets, names, water and buildings drawn over real contours. Keep the AOI modest — Overpass, not the elevation fetch, is what makes a large area slow.
+- `Relief Sheet (dense contours)`: the same seeded landscape as `Simulated Terrain`, sampled finely and contoured densely for the printed-sheet look. Slower to fetch. Pair with the `Relief Sheet` preset.
+- `Simulated Terrain (synthetic)`: generates its own relief and contours it. Needs no file, no account, and no network — and no optional packages either, since it contours through a pure-numpy path rather than `scikit-image`. See "Simulated Terrain" below.
 - `Hybrid Atlas`: combines configured sources and falls back gracefully when optional sources are unavailable.
 
 Install all optional map-source backends with `./setup.sh --maps` (macOS / Linux) or `.\setup.ps1 -Maps` (Windows).
 
 If a selected local model is not configured yet, Hipparchus reports provider status and keeps the app usable instead of failing startup.
+
+### Simulated Terrain
+
+Every other rich model reads data you downloaded first. `Simulated Terrain
+(synthetic)` invents a landscape instead, so contour work is one click away on a
+fresh clone. Pick it from the `Model` dropdown, or use the `Simulated Terrain`
+entry in the Source Library, then fetch any AOI.
+
+**The elevations are not real.** They are procedural noise, not a survey. The
+model label, the provider status line, the feature properties, and the exported
+diagnostics JSON all carry a `synthetic` flag so a generated sheet is never
+mistaken for measured ground. Do not present it as terrain data.
+
+What it does give you:
+
+- The same landscape wherever you pan. The field is a function of longitude and
+  latitude, so moving the AOI at a fixed zoom reveals more of one continuous
+  world rather than re-rolling a new one at every fetch.
+- Terrain that reads as terrain at every zoom. The size of the largest landform
+  follows the window, on a power-of-two ladder: a landform size that suits a
+  city AOI leaves a regional one as undifferentiated mush, and one that suits a
+  regional AOI leaves a city view as a single hillside drawn in parallel lines.
+  Resizing the AOI slightly keeps you on the same rung; zooming far enough
+  crosses a rung and rescales the landscape. That rescale is the deliberate
+  trade for never getting a flat-looking sheet.
+- Elevations that suit the frame. Relief grows with landform size, so a
+  kilometre-wide window shows tens of metres of relief rather than a cliff.
+- A seed that names that world. Set `HIPPARCHUS_SIMULATED_SEED` before launch to
+  travel to a different one; the same seed always returns the same landscape.
+
+  ```bash
+  HIPPARCHUS_SIMULATED_SEED=42 ./run_hprs.sh
+  ```
+
+- Two separate contour layers — `Terrain Contours` and the heavier `Index
+  Contours` every fifth line — which stay separate groups in the exported SVG.
+- A contour interval that follows the relief in view, rounded to a number a
+  person would write down (5 m, 20 m, 100 m). Zooming in refines the interval
+  instead of emptying the sheet.
+
+Pair it with the `Contour Study` preset for a pencil-on-paper topographic sheet.
+
+### What Real Elevation Brings
+
+Beyond contours, the elevation models produce two layers of their own:
+
+- **Summit heights.** The highest ground in each block of the area is labelled
+  with its measured height — `1015 m` on Hymettus, and so on. Only blocks whose
+  peak stands clear of their own surroundings qualify, so a rough slope does not
+  sprout a label on every bump, and only land counts: a high point on the sea
+  floor is not a summit.
+- **Bathymetry.** Terrain tiles encode the sea floor in the same band as the
+  land, so sub-sea contours arrive with the coast at no extra cost. They are
+  kept in their own layer and styled apart, because depth below the sea and
+  height above it are different things and should not read alike.
+
+Both appear in the `Terrain` group of the layer panel and as their own SVG
+groups on export.
+
+### Adding Relief To Any Model
+
+The `Relief` checkbox beside the `Model` dropdown layers real elevation onto
+whatever model is selected. It exists because a model should never be a choice
+between terrain *and* everything else: tick it on `OSM Live` and you get streets,
+names, buildings and contours together; tick it on any other model and the same
+applies. It is skipped automatically when the selected model already fetches
+elevation, so nothing is fetched twice.
+
+Contours obey the layer panel like every other layer — the `Terrain` group in
+the left sidebar toggles `Contours` and `Index Contours` independently.
+
+Relief is a second network fetch, so it is off by default rather than a cost on
+every map.
 
 ### Using Your Own Local Files
 
@@ -422,6 +513,68 @@ These are tuned for clean, editable print output:
 - `Terrain Study`
 - `Monochrome Figure Ground`
 - `Coastal Survey`
+- `Contour Study`
+- `Relief Sheet`
+- `Hypsometric Relief`
+
+### Hypsometric Relief
+
+The classic atlas treatment: filled elevation bands carrying the mass of the
+landscape, with fine contours over them carrying the detail. Contours drop to a
+hairline here because at full weight they fight the fills they sit on, and
+everything built — streets, water, labels — stays legible on top, since the
+point of tinting relief is to place somewhere in its landscape rather than to
+replace it.
+
+Bands come from the real elevation models. The tint runs from a pale low-ground
+green to bare-rock brown; both ends are ordinary style colours
+(`fill_color` and `fill_color_high`), so a saved custom preset can take the ramp
+anywhere, including a single hue from light to dark for monochrome print.
+
+### Relief Sheet
+
+Two presets draw relief, and they use opposite depth cues.
+
+`Relief Sheet` is the dense hairline sheet: hundreds of contour levels at one
+uniform weight, with no accented line every fifth. What reads as depth is line
+*density* — paper left open where the ground is flat, lines crowding to near
+solid ink where it falls away steeply. Accenting or weighting individual lines
+only interrupts that gradient, so this preset does neither.
+
+Pair it with the `Relief Sheet (dense contours)` model, which samples the same
+seeded landscape as `Simulated Terrain` on a finer grid and asks for roughly
+four times the lines. That costs a few seconds per fetch instead of a few
+hundred milliseconds; it is built for a sheet you print, not one you pan around.
+Stroke weight is the delicate part of this preset: too fine and the lines
+antialias to pale grey and the density gradient vanishes, too heavy and crowded
+ground floods to solid black with no structure in it.
+
+### Contour Study
+
+`Contour Study` is built for relief and nothing else. It sets its own warm
+off-white paper, pushes every other layer back to a faint annotation, and draws
+contours as hairlines with a heavier accented line every fifth — so what reads
+as terrain is the density of the linework, not colour or fill. It pairs with
+`Simulated Terrain (synthetic)` and with `Terrain Relief` alike.
+
+It also switches on **illuminated contours**. Each line is split into runs whose
+stroke weight follows how the slope it traces faces a north-west light: flanks
+turned away from the light thicken, flanks facing it thin out, and the sheet
+lifts into relief with no fill, hillshade, or hachure. This is Tanaka's
+illuminated-contour method, and it is what makes a page of hairlines read as
+depth rather than as pattern.
+
+Two consequences worth knowing:
+
+- Slope aspect is carried by winding order — contours arrive wound with the high
+  ground on their left. Only sources that set that winding can be illuminated;
+  the simulated field does, so `Simulated Terrain` and `Contour Atlas` light
+  correctly.
+- An illuminated layer exports more paths, because each weight run is its own
+  SVG path. A sheet that exported ~1,600 contour paths unlit exports roughly
+  five times that lit. They stay grouped by layer and fully editable.
+
+Set `illumination` to `0` on a saved custom preset to switch it back off.
 
 ### Night
 
@@ -487,6 +640,12 @@ The app fetches road data and classifies it by highway type.
 Buildings are important for several derived geometry operations, especially Voronoi generation.
 
 ### Labels
+
+Street names are drawn from the road network: one label per named street, placed
+on its longest run inside the area. OSM splits a street into a way per block, so
+labelling every feature would stamp the same name down a road dozens of times.
+Labels whose anchor falls outside the area are dropped rather than drawn in the
+margin.
 
 - `Place Names`
 - `Shops & Businesses`
@@ -879,22 +1038,27 @@ The diagnostics JSON next to the SVG shows path counts per layer.
 
 Mouse:
 
-- Drag: pan preview.
-- Mouse wheel: zoom preview.
+- Drag: pan the preview.
+- Mouse wheel: zoom the preview.
+- Option-drag or Shift-drag: draw a new area on the map.
 
 Keyboard:
 
+- `Cmd+Enter` (macOS) or `Ctrl+Enter` (Windows / Linux): update the map. It
+  works while the cursor is in the location or coordinate fields, which is
+  exactly when you want it — type a place, then update without reaching for the
+  mouse.
 - `+`: zoom in.
 - `-`: zoom out.
-- `0`: reset view.
-- `r`: reset view.
+- `0` or `r`: reset the view.
 
 Buttons:
 
-- `Fetch`: download and render the current AOI.
+- `Update map`: fetch and render the current area from the ticked sources.
+- `Draw area`: arm the next drag on the map to set a new area.
 - `Find`: geocode text in the Location field.
-- `Export SVG`: save the current scene as SVG.
-- `Dark/Light`: toggle the interface theme.
+- `Export`: save the current scene as SVG.
+- `Appearance`: toggle the interface theme.
 
 ## 21. Configuration Reference
 

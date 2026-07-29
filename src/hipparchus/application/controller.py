@@ -8,6 +8,7 @@ import threading
 import time
 from typing import Callable
 
+from hipparchus.core.fetch_progress import CancellationToken, FetchCancelled, FetchReporter
 from hipparchus.application.presets import GeometryPipelineProfile, QualityMode, StyleProfile
 from hipparchus.application.scene_builder import RenderSceneBuilder
 from hipparchus.data_sources.data_source_manager import DataSourceManager
@@ -42,6 +43,9 @@ class ApplicationController:
         on_scene: SceneCallback,
         on_error: ErrorCallback,
         map_model_id: str | None = None,
+        extra_provider_ids: tuple[str, ...] = (),
+        reporter: FetchReporter | None = None,
+        cancel: CancellationToken | None = None,
     ) -> None:
         """Run data pipeline asynchronously and callback with ready scene."""
         self._request_version += 1
@@ -58,7 +62,17 @@ class ApplicationController:
                     layers=layers,
                 )
                 # Use unified data source manager
-                feature_collection = self.data_source_manager.fetch(query, map_model_id=map_model_id)
+                feature_collection = self.data_source_manager.fetch(
+                    query,
+                    map_model_id=map_model_id,
+                    extra_provider_ids=extra_provider_ids,
+                    reporter=reporter,
+                    cancel=cancel,
+                )
+                if cancel is not None and cancel.cancelled:
+                    # Building and rendering a scene nobody is waiting for
+                    # wastes the seconds cancelling was meant to give back.
+                    raise FetchCancelled("Fetch cancelled before scene build")
                 t_fetch = time.perf_counter()
                 scene = self.scene_builder.build(
                     feature_collection=feature_collection,
@@ -89,6 +103,10 @@ class ApplicationController:
             except FileNotFoundError as exc:
                 _LOGGER.exception("request=%s failed - data file not found", version)
                 on_error(RuntimeError(f"Data file not found: {exc}"))
+            except FetchCancelled:
+                # Cancelling is not a failure: leave the previous map alone and
+                # say nothing to the error path.
+                _LOGGER.info("request=%s cancelled", version)
             except Exception as exc:  # noqa: BLE001
                 _LOGGER.exception("request=%s failed during fetch/build", version)
                 if self._last_scene is not None:

@@ -1,17 +1,17 @@
 # Hipparchus
 
-**Version 0.3.0**
+**Version 0.4.3**
 
 **Hipparchus is an online desktop vector cartography app for creating clean, editable maps from OpenStreetMap data and exporting them as Illustrator-friendly SVG files.**
 
 <table>
   <tr>
-    <td width="50%"><img src="docs/assets/hipparchus-tokyo-dark.png" width="100%" alt="Hipparchus showing central Tokyo with Japanese labels in dark appearance"></td>
-    <td width="50%"><img src="docs/assets/hipparchus-kyoto-light.png" width="100%" alt="Hipparchus showing central Kyoto with Japanese labels in light appearance"></td>
+    <td width="50%"><img src="docs/assets/gallery-santorini-hypsometric.png" width="100%" alt="Santorini drawn as filled elevation bands with contours and summit heights, from real elevation data"></td>
+    <td width="50%"><img src="docs/assets/gallery-san-francisco-terrain-atlas.png" width="100%" alt="San Francisco streets and place names drawn over real elevation"></td>
   </tr>
   <tr>
-    <td align="center"><em>Tokyo Central (dark appearance)</em></td>
-    <td align="center"><em>Kyoto Center (light appearance)</em></td>
+    <td align="center"><em>Santorini — real elevation, <code>Hypsometric Relief</code></em></td>
+    <td align="center"><em>San Francisco — streets over real elevation</em></td>
   </tr>
 </table>
 
@@ -35,10 +35,25 @@ Hipparchus is a standalone map creation tool focused on live online data, clean 
 - Visible blue water rendering for lakes and coastline-derived sea areas.
 - Hipparchus 2 quality pipeline with projected render coordinates, cartographic smoothing, high-quality preview/export profiles, richer SVG diagnostics, and editable SVG labels.
 - Cartographic presets including `OSM Standard`, `Urban Structure`, `Fragmented Urban`, `Organic Field`, and `Blueprint Relief`.
-- Additional print-oriented presets including `Editorial Print`, `Clean Atlas`, `Soft Urban`, `Technical Blueprint`, `Terrain Study`, `Monochrome Figure Ground`, and `Coastal Survey`.
+- Additional print-oriented presets including `Editorial Print`, `Clean Atlas`, `Soft Urban`, `Technical Blueprint`, `Terrain Study`, `Monochrome Figure Ground`, `Coastal Survey`, `Contour Study`, `Relief Sheet`, and `Hypsometric Relief`.
 - A dark `Night` preset that paints its own ground, so lit streets read against an unlit city in both the preview and the SVG export.
-- Eight map models covering live OSM, local OSM `.osm.pbf`, vector tiles, Natural Earth, Overture, terrain relief, night lights, and a hybrid atlas — each backed by an optional dependency that never becomes mandatory.
+- Sixteen map models covering live OSM, local OSM `.osm.pbf`, vector tiles, Natural Earth, Overture, terrain relief, night lights, simulated terrain, live earthquakes, online night lights, satellite ground tracks, a contour atlas, and a hybrid atlas — each backed by an optional dependency that never becomes mandatory.
 - `Night Lights (VIIRS)` model that turns a nighttime-illumination GeoTIFF into iso-radiance contours: how brightly a place is actually lit at night, as editable vector lines.
+- `Terrain Online (real elevation)` and `Terrain Atlas (OSM + real elevation)` models that fetch **real measured elevation** for any area on Earth from public terrain tiles — no key, no account, no downloaded file — and contour it into editable linework. Terrarium-encoded tiles are stitched, cropped and contoured, with the Web Mercator projection inverted properly so contours land where the ground actually is.
+- Filled hypsometric tints: real elevation turned into graded elevation bands under the contours, with holes and nesting resolved from the data rather than assumed, so an enclosed basin reads as a hollow instead of filling itself in. Each band exports as its own path with its own fill.
+- Supersampled preview rendering: the quality profile's oversampling factor is applied and resampled down with a Mitchell filter, so hairline contours stop aliasing. `High Preview` renders at 1.5x.
+- Summit labels carrying **measured** heights read straight off the elevation data, so a contour sheet tells you the number as well as the shape.
+- Bathymetry as its own layer: terrain tiles carry the sea floor in the same band as the land, so sub-sea contours come free with the coast and are styled apart from it.
+- A `Relief` toggle that layers real elevation onto *any* model, so choosing a street map never means giving up terrain, and terrain never means giving up streets, labels or buildings.
+- `Simulated Terrain (synthetic)` model that generates its own relief and contours it — no data file, no account, no network, and no optional packages. The field is anchored to longitude and latitude, so panning at a fixed zoom reveals more of one continuous landscape, and a seed (`HIPPARCHUS_SIMULATED_SEED`) always returns the same one. Landform size and relief follow the window, so a city AOI and a regional one both read as terrain rather than as a single hillside or a wall of mush. Everything it produces is flagged `synthetic`; the elevations are invented, not measured.
+- Separate `Terrain Contours` and `Index Contours` layers, exported as their own SVG groups, with the interval rounded to a readable step that follows the relief in view.
+- A `Relief Sheet` model and preset for the dense hairline look: hundreds of levels on a fine grid, no accented lines and no weight variation, so depth is carried entirely by how tightly the contours crowd — open paper on flat ground, near-solid ink where it falls away. Costs a few seconds per fetch rather than a few hundred milliseconds.
+- Illuminated contours: stroke weight varies along each line by how the slope it traces faces the light, so a flat sheet of hairlines lifts into relief without any fill or shading. Contours are wound with the high ground on their left, which is what carries slope aspect through to the renderer.
+- Street-name labels taken from the road network, one per named street on its longest run inside the area, alongside the existing place, shop, and amenity labels.
+- A `Contour Atlas` model that draws live OpenStreetMap streets, names, and water over the generated relief.
+- `Live Earthquakes (USGS)`: recorded seismicity for the area from the USGS FDSN catalogue, as magnitude-scaled circles split into the standard shallow/intermediate/deep classes and labelled by magnitude. Live over HTTPS, no key, no local file — measured data.
+- `Night Lights Online (GIBS)`: NASA nighttime imagery fetched per area from GIBS and contoured into vector iso-lines, so night-lights work needs no downloaded GeoTIFF. The contoured quantity is rendered picture brightness, not calibrated radiance, and every feature says so.
+- `Satellite Ground Tracks`: live Celestrak element sets propagated into ground tracks and horizon footprints, using a built-in Keplerian/J2 propagator — no dependency, and explicitly approximate rather than ephemeris-grade.
 - Local source paths for map models can be supplied in the UI or with environment variables such as `HIPPARCHUS_LOCAL_OSM_PBF`, `HIPPARCHUS_VECTOR_TILES`, `HIPPARCHUS_NATURAL_EARTH`, `HIPPARCHUS_OVERTURE`, `HIPPARCHUS_TERRAIN_DEM`, and `HIPPARCHUS_NIGHT_LIGHTS`.
 - Derived geometry layers including Voronoi cells, Delaunay mesh, hex grid, and circle packing.
 - Persistent custom presets saved to the user app data folder.
@@ -73,11 +88,78 @@ Prerequisites the setup step cannot install for you: a **Python 3.11+** interpre
 
 Map data is downloaded on demand from the public Overpass API the first time you fetch an area, so no map files are bundled or required up front.
 
-## Screenshots
+## The interface
 
-The screenshots above show Hipparchus running on macOS, in dark and light appearance: central Tokyo and central Kyoto, both fetched live from Overpass with Japanese labels resolved through the CJK font fallback. Each window exposes the same configurable layers, presets, and provider settings.
+A map is built from **sources**, and sources stack. Ticking Elevation onto a
+street map adds contours to it; it never replaces what is already there. Below
+that, **Layers** lists what the map you just fetched actually contains, with
+counts, and **Style** is chosen from thumbnails drawn from the presets
+themselves.
 
-## Gallery
+![The Hipparchus interface](documents/interface-proposal.png)
+
+The images at the top of this page and in the gallery are the app's own output,
+rendered through the same pipeline that writes the SVG.
+
+## Gallery: the measured sources
+
+Eight maps of seven places, each from live data through the same pipeline that
+produces the SVG export. Nothing here is drawn by hand or touched up.
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/assets/gallery-santorini-hypsometric.png" width="100%" alt="Santorini as filled elevation bands"></td>
+    <td width="50%"><img src="docs/assets/gallery-paphos-contour-study.png" width="100%" alt="Paphos in illuminated contours"></td>
+  </tr>
+  <tr>
+    <td align="center"><em>Santorini — the drowned caldera, sea floor contoured with the rim<br><code>Terrain Online</code> + <code>Hypsometric Relief</code></em></td>
+    <td align="center"><em>Paphos — the Cypriot coastal shelf<br><code>Terrain Online</code> + <code>Contour Study</code></em></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/assets/gallery-addis-ababa-hypsometric.png" width="100%" alt="Addis Ababa as filled elevation bands"></td>
+    <td width="50%"><img src="docs/assets/gallery-goa-relief-sheet.png" width="100%" alt="Goa as a dense hairline relief sheet"></td>
+  </tr>
+  <tr>
+    <td align="center"><em>Addis Ababa — a highland capital, 2,075 m to 3,127 m<br><code>Terrain Online</code> + <code>Hypsometric Relief</code></em></td>
+    <td align="center"><em>Goa — estuaries and low hills<br><code>Terrain Online</code> + <code>Relief Sheet</code></em></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/assets/gallery-san-francisco-terrain-atlas.png" width="100%" alt="San Francisco streets over real elevation"></td>
+    <td width="50%"><img src="docs/assets/gallery-san-francisco-seismicity.png" width="100%" alt="Recorded earthquakes around San Francisco Bay"></td>
+  </tr>
+  <tr>
+    <td align="center"><em>San Francisco — streets, names and summits over real elevation<br><code>OpenStreetMap</code> + <code>Elevation</code></em></td>
+    <td align="center"><em>San Francisco Bay — five years of recorded earthquakes<br><code>Live Earthquakes (USGS)</code></em></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/assets/gallery-miami-terrain.png" width="100%" alt="Miami barrier islands and causeways"></td>
+    <td width="50%"><img src="docs/assets/gallery-shanghai-night-lights.png" width="100%" alt="The Yangtze delta at night"></td>
+  </tr>
+  <tr>
+    <td align="center"><em>Miami — barrier islands and causeways at sea level<br><code>OpenStreetMap</code> + <code>Elevation</code></em></td>
+    <td align="center"><em>Shanghai — the Yangtze delta by its own light<br><code>Night Lights Online (GIBS)</code></em></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/assets/gallery-miami-night-lights.png" width="100%" alt="South Florida at night"></td>
+    <td width="50%"></td>
+  </tr>
+  <tr>
+    <td align="center"><em>South Florida — Homestead to Palm Beach<br><code>Night Lights Online (GIBS)</code></em></td>
+    <td align="center"></td>
+  </tr>
+</table>
+
+All seven places are built in as saved areas. The elevation figures above are
+read straight from the data: Santorini's caldera floor at −79 m against a
+525 m rim, San Francisco topping out at 284 m, Addis Ababa never dropping below
+2,075 m.
+
+Two honest notes. The elevation mosaic is a *surface* model, so in dense cities
+the maxima include buildings rather than ground. And night lights is a coarse
+regional product — a city-sized frame upsamples into blocks, which is why those
+two frames are drawn at regional scale.
+
+## Gallery: the cartographic presets
 
 Ten renders of the built-in cartographic presets, each from live OpenStreetMap data through the same pipeline that produces the SVG export. Labels are switched off here so the styles read clearly at a glance. `Night` appears twice because a dark ground reads differently on a compact centre than on a river city.
 
