@@ -1,6 +1,6 @@
 # Hipparchus File Structure
 
-**Version 0.3.0**
+**Version 0.4.3**
 
 This document describes the repository layout of Hipparchus, an online desktop
 vector cartography application. It complements the "Project Layout" section of
@@ -26,7 +26,7 @@ Hipparchus/
 ├── tests/                    Unit tests
 ├── scripts/                  Launch, preflight, precache, and clip scripts
 ├── docs/                     Documentation assets (screenshots)
-├── documents/               Design and planning notes
+├── documents/               Design, planning notes, and the interface proposal
 └── datasets/                 Local sample data (gitignored except README)
 ```
 
@@ -42,13 +42,12 @@ hipparchus/
 
 ```text
 src/hipparchus/
-├── __init__.py               Package root; exposes __version__ = "0.3.0"
+├── __init__.py               Package root; exposes __version__ = "0.4.3"
 ├── __main__.py               `python -m hipparchus` entry point
 ├── main.py                   Application launcher / main() entry
 │
 ├── application/              Orchestration between UI, data, and rendering
 │   ├── controller.py         Central controller wiring requests to services
-│   ├── fetch_progress.py     Per-source progress and cancellation
 │   ├── layer_inventory.py    What a rendered map contains, for the layer panel
 │   ├── preset_store.py       Persistent custom preset storage
 │   ├── presets.py            Built-in cartographic presets
@@ -63,6 +62,7 @@ src/hipparchus/
 │   └── store.py              Cache read/write store
 │
 ├── core/                     App bootstrap and shared state
+│   ├── fetch_progress.py     Per-source progress and cancellation
 │   ├── application.py        Application object and lifecycle
 │   ├── config.py             Configuration and environment variables
 │   ├── project_state.py      In-memory project / session state
@@ -152,6 +152,7 @@ tests/
 ├── test_overpass_geojson.py
 ├── test_overpass_provider.py
 ├── test_overpass_query.py
+├── test_package_imports.py
 ├── test_preset_store.py
 ├── test_project_state.py
 ├── test_projection.py
@@ -180,6 +181,15 @@ scripts/
 ```text
 docs/
 └── assets/
+    ├── gallery-santorini-hypsometric.png
+    ├── gallery-paphos-contour-study.png
+    ├── gallery-addis-ababa-hypsometric.png
+    ├── gallery-goa-relief-sheet.png
+    ├── gallery-san-francisco-terrain-atlas.png
+    ├── gallery-san-francisco-seismicity.png
+    ├── gallery-miami-terrain.png
+    ├── gallery-miami-night-lights.png
+    ├── gallery-shanghai-night-lights.png
     ├── hipparchus-tokyo-dark.png
     ├── hipparchus-kyoto-light.png
     └── gallery-*.png          Ten preset renders used by the README gallery
