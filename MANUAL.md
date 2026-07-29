@@ -1,6 +1,6 @@
 # Hipparchus Manual
 
-**Version 0.3.0**
+**Version 0.4.3**
 
 This manual explains how to use Hipparchus as an online map creation app. It covers installation, launching, fetching map data, working with layers and presets, exporting SVG files, and solving common problems. It applies to macOS, Linux, and Windows.
 
@@ -232,6 +232,16 @@ The left sidebar includes preset locations:
 - Kyoto Center
 - San Francisco Downtown
 - Venice Historic
+- Santorini Caldera — a drowned volcanic caldera; try Elevation, which carries
+  the sea floor as well as the rim
+- Paphos Coast — Cyprus, where the coastal shelf drops away offshore
+- San Francisco Bay — hills, a dense street grid and a fault zone; try
+  Earthquakes with a wider area
+- Miami Beach — barrier islands at sea level, where Night Lights says more than
+  contours can
+- Goa Coast — a monsoon coast of estuaries and low hills
+- Addis Ababa — a highland capital above 2,300 m
+- Shanghai Bund — a delta city at sea level on the Huangpu
 
 Any of these names also works with `HIPPARCHUS_START_AREA` (see section 21).
 

@@ -20,7 +20,7 @@ from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 from hipparchus.application.controller import ApplicationController
-from hipparchus.application.fetch_progress import CancellationToken, FetchReporter
+from hipparchus.core.fetch_progress import CancellationToken, FetchReporter
 from hipparchus.application.source_stack import SourceStack
 from hipparchus.application.style_previews import featured_names
 from hipparchus.ui import minimap
@@ -53,6 +53,16 @@ LOCATION_PRESETS: dict[str, tuple[float, float, float, float]] = {
     "Kyoto Center": (135.73, 34.98, 135.79, 35.03),
     "San Francisco Downtown": (-122.44, 37.76, -122.39, 37.80),
     "Venice Historic": (12.31, 45.42, 12.36, 45.45),
+    # Places chosen because they show what the new sources can do: a drowned
+    # caldera, a coastal shelf, a fault zone, a delta at sea level, a monsoon
+    # coast, a highland capital, and an estuary city.
+    "Santorini Caldera": (25.32, 36.33, 25.50, 36.48),
+    "Paphos Coast": (32.36, 34.72, 32.50, 34.83),
+    "San Francisco Bay": (-122.53, 37.70, -122.35, 37.84),
+    "Miami Beach": (-80.32, 25.70, -80.11, 25.86),
+    "Goa Coast": (73.74, 15.38, 74.00, 15.60),
+    "Addis Ababa": (38.65, 8.90, 38.88, 9.10),
+    "Shanghai Bund": (121.35, 31.15, 121.60, 31.33),
 }
 
 LEFT_SIDEBAR_WIDTH = 360
