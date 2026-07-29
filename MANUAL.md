@@ -380,6 +380,14 @@ What it does give you:
   HIPPARCHUS_SIMULATED_SEED=42 ./run_hprs.sh
   ```
 
+`HIPPARCHUS_START_SOURCES` ticks sources at launch, so a run can be told what
+the map is made of as well as where it is:
+
+```bash
+HIPPARCHUS_START_SOURCES=terrain_tiles HIPPARCHUS_START_AREA="Santorini Caldera" \
+  HIPPARCHUS_FETCH_ON_START=1 ./run_hprs.sh
+```
+
 - Two separate contour layers — `Terrain Contours` and the heavier `Index
   Contours` every fifth line — which stay separate groups in the exported SVG.
 - A contour interval that follows the relief in view, rounded to a number a

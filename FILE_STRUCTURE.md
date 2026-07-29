@@ -190,8 +190,8 @@ docs/
     ├── gallery-miami-terrain.png
     ├── gallery-miami-night-lights.png
     ├── gallery-shanghai-night-lights.png
-    ├── hipparchus-tokyo-dark.png
-    ├── hipparchus-kyoto-light.png
+    ├── hipparchus-santorini-light.png
+    ├── hipparchus-athens-dark.png
     └── gallery-*.png          Ten preset renders used by the README gallery
 
 documents/

@@ -291,6 +291,13 @@ class MainWindow:
         for provider_id, existing in self.controller.data_source_manager.get_optional_source_paths().items():
             if existing:
                 self.source_stack.set_path(provider_id, existing)
+        if self.config.start_sources:
+            # An explicit list replaces the defaults rather than adding to them,
+            # so a launch can ask for terrain alone.
+            for definition in self.source_stack.definitions:
+                self.source_stack.set_enabled(definition.source_id, False)
+            for source_id in self.config.start_sources:
+                self.source_stack.set_enabled(source_id, True)
         self._sources_panel: SourcesPanel | None = None
         self._layers_panel: LayersPanel | None = None
         self._style_picker: StylePicker | None = None

@@ -74,6 +74,9 @@ map is composed rather than chosen.
   and (from earlier in this cycle) **`Night`**, which paints its own ground.
 - Seven new saved places: **Santorini, Paphos, San Francisco Bay, Miami, Goa,
   Addis Ababa and Shanghai**, each chosen to show what a source can do.
+- `HIPPARCHUS_START_SOURCES` ticks sources at launch, completing the set
+  alongside `HIPPARCHUS_START_AREA` and `HIPPARCHUS_START_PRESET`: a launch can
+  now be told what the map is made of, not just where it is.
 - Label font family picker wired to the renderer, CJK label fallback, an export
   background toggle, and `HIPPARCHUS_START_PRESET`.
 

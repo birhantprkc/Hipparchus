@@ -264,13 +264,18 @@ automated test of the render handshake unreliable. `scripts/smoke_render.py`
 covers it instead, and should be run after any change to the path from scene to
 canvas. Worth revisiting if the port to a native UI removes the constraint.
 
-### F4. The layout has not been seen by a human yet
+### F4. Layout details visible in the screenshots
 
-Everything above was verified by constructing the window headless, driving a
-real fetch through it and reading the result. That proves it works; it does not
-prove it looks right. Spacing, whether the right rail scrolls comfortably with
-Sources, Layers and Style stacked, and how the drawn icons sit against native
-Aqua controls all need eyes on a running app.
+The interface has now been captured from the running app (see the README), which
+settles the big question -- it works and reads as intended. Smaller things the
+screenshots show:
+
+- The Style thumbnails sit below the fold on a 1050 px window; the right rail
+  needs scrolling to reach them.
+- "Uncheck all" is truncated to "Uncheck" by its button width.
+- The locator draws a graticule but no coastline, so at world scale it reads as
+  an empty grid with a marker. MapKit or a coarse Natural Earth outline would
+  fix it.
 
 ## E. Testing
 
