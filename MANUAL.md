@@ -517,6 +517,14 @@ These are tuned for clean, editable print output:
 - `Relief Sheet`
 - `Hypsometric Relief`
 
+### Monochrome Figure Ground
+
+Buildings as solid figure against open ground, and — since 0.4.3 — relief drawn
+in the same spirit. Contours are ink rather than grey, and their weight varies
+along each line with how the slope it traces faces the light, so a ridge reads
+as a ridge without any fill or hillshade. Before, a blanket rule left every
+contour at one width and a third opacity, which read as haze.
+
 ### Hypsometric Relief
 
 The classic atlas treatment: filled elevation bands carrying the mass of the

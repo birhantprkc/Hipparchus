@@ -86,6 +86,11 @@ map is composed rather than chosen.
   checks the whole handshake against live data.
 - The callback loop rescheduled itself outside its own error handling, so a
   single bad payload stopped every future scene, image and progress update.
+- **`Monochrome Figure Ground` drew relief as grey haze.** Its blanket rule set
+  every layer to one stroke width at a third opacity, so contours came out flat
+  and uniform. They are now ink, and illuminated: weight varies along each line
+  with the slope it traces, while buildings still read as solid figure against
+  open ground.
 - Long paths were thinned by truncating the vertex list and jumping to the final
   vertex, which **ruled a straight chord across the shape**. Invisible until real
   coastlines arrived: seven of Santorini's contours exceed the 5,000-vertex cap.

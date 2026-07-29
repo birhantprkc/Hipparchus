@@ -715,6 +715,25 @@ def _monochrome_figure_ground_styles() -> dict[str, LayerStyle]:
     styles["parks"] = LayerStyle(stroke_width=0.0, fill_enabled=True, fill_color=RGBAColor(242, 242, 242), stroke_color=RGBAColor(242, 242, 242), opacity=1.0)
     styles["roads_residential"] = LayerStyle(stroke_width=1.2, fill_enabled=False, stroke_color=RGBAColor(255, 255, 255), casing_width=2.0, casing_color=RGBAColor(30, 30, 30), line_cap="round")
     styles["places"] = LayerStyle(stroke_width=0.0, fill_enabled=False, stroke_color=RGBAColor(20, 20, 20), label_halo_color=RGBAColor(255, 255, 255, 245), label_halo_width=2.8)
+
+    # Relief in a figure-ground preset has to earn its contrast the same way the
+    # buildings do. The blanket rule above left every contour at one weight and
+    # a third opacity, which reads as grey haze; these are ink, and their weight
+    # varies along each line with the slope it traces.
+    contour_ink = RGBAColor(22, 22, 22)
+    styles["terrain_contours"] = LayerStyle(
+        stroke_width=0.34, fill_enabled=False, stroke_color=contour_ink, opacity=0.92, line_cap="round",
+        illumination=1.0, illumination_bands=6, illumination_lit_scale=0.25, illumination_shadow_scale=2.1,
+    )
+    styles["terrain_index_contours"] = LayerStyle(
+        stroke_width=0.58, fill_enabled=False, stroke_color=contour_ink, opacity=1.0, line_cap="round",
+        illumination=1.0, illumination_bands=6, illumination_lit_scale=0.4, illumination_shadow_scale=1.8,
+    )
+    styles["bathymetry"] = LayerStyle(
+        stroke_width=0.35, fill_enabled=False, stroke_color=RGBAColor(120, 120, 120), opacity=0.7, line_cap="round",
+        illumination=1.0, illumination_lit_scale=0.4, illumination_shadow_scale=1.6,
+    )
+    styles["summits"] = LayerStyle(stroke_width=0.0, fill_enabled=False, stroke_color=RGBAColor(20, 20, 20), label_halo_color=RGBAColor(255, 255, 255, 245), label_halo_width=2.6)
     return styles
 
 
