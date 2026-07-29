@@ -1,6 +1,6 @@
 # Hipparchus Manual
 
-**Version 0.4.3**
+**Version 0.3.2**
 
 This manual explains how to use Hipparchus as an online map creation app. It covers installation, launching, fetching map data, working with layers and presets, exporting SVG files, and solving common problems. It applies to macOS, Linux, and Windows.
 
@@ -380,6 +380,14 @@ What it does give you:
   HIPPARCHUS_SIMULATED_SEED=42 ./run_hprs.sh
   ```
 
+`HIPPARCHUS_START_SOURCES` ticks sources at launch, so a run can be told what
+the map is made of as well as where it is:
+
+```bash
+HIPPARCHUS_START_SOURCES=terrain_tiles HIPPARCHUS_START_AREA="Santorini Caldera" \
+  HIPPARCHUS_FETCH_ON_START=1 ./run_hprs.sh
+```
+
 - Two separate contour layers — `Terrain Contours` and the heavier `Index
   Contours` every fifth line — which stay separate groups in the exported SVG.
 - A contour interval that follows the relief in view, rounded to a number a
@@ -516,6 +524,14 @@ These are tuned for clean, editable print output:
 - `Contour Study`
 - `Relief Sheet`
 - `Hypsometric Relief`
+
+### Monochrome Figure Ground
+
+Buildings as solid figure against open ground, and — since 0.4.3 — relief drawn
+in the same spirit. Contours are ink rather than grey, and their weight varies
+along each line with how the slope it traces faces the light, so a ridge reads
+as a ridge without any fill or hillshade. Before, a blanket rule left every
+contour at one width and a third opacity, which read as haze.
 
 ### Hypsometric Relief
 

@@ -21,7 +21,7 @@ from hipparchus.data_sources.simulated_field import (
 )
 from hipparchus.export.svg_clean import CleanSVGExporter
 from hipparchus.geometry.smoothing import smoothing_rule_for_layer
-from hipparchus.rendering.models import RenderLayer
+from hipparchus.rendering.models import RGBAColor, RenderLayer
 
 
 CONTOUR_PRESET = "Contour Study"
@@ -88,6 +88,50 @@ class ReliefSheetPresetTests(unittest.TestCase):
         ).fetch_bbox(ATHENS)
         self.assertTrue(collection.features_by_layer["terrain_contours"])
         self.assertEqual(collection.features_by_layer["terrain_index_contours"], [])
+
+
+class MonochromeFigureGroundTests(unittest.TestCase):
+    """Relief in this preset carries weight along the line, not one flat width.
+
+    A blanket rule sets every layer to a single stroke and a third opacity;
+    contours must be lifted back out of it or relief reads as grey haze.
+    """
+
+    PRESET = "Monochrome Figure Ground"
+
+    def _styles(self):
+        return default_preset(self.PRESET).style_profile.layer_styles
+
+    def test_contours_are_illuminated(self) -> None:
+        for layer in ("terrain_contours", "terrain_index_contours"):
+            with self.subTest(layer=layer):
+                self.assertGreater(self._styles()[layer].illumination, 0.0)
+
+    def test_the_weight_range_is_wide_enough_to_see(self) -> None:
+        for layer in ("terrain_contours", "terrain_index_contours"):
+            with self.subTest(layer=layer):
+                style = self._styles()[layer]
+                self.assertGreater(style.illumination_shadow_scale, style.illumination_lit_scale * 3)
+
+    def test_contours_are_not_left_at_the_blanket_opacity(self) -> None:
+        for layer in ("terrain_contours", "terrain_index_contours"):
+            with self.subTest(layer=layer):
+                self.assertGreater(self._styles()[layer].opacity, 0.8)
+
+    def test_a_rendered_scene_carries_varied_weights(self) -> None:
+        scene = _scene(self.PRESET)
+        by_name = {layer.name: layer for layer in scene.layers}
+        for layer in ("terrain_contours", "terrain_index_contours"):
+            with self.subTest(layer=layer):
+                weights = by_name[layer].weights
+                self.assertEqual(len(weights), len(by_name[layer].geometries))
+                self.assertGreater(len(set(weights)), 2, "relief drawn at one flat weight")
+
+    def test_the_figure_ground_character_is_intact(self) -> None:
+        """Buildings still read as solid figure against open ground."""
+        styles = self._styles()
+        self.assertTrue(styles["buildings"].fill_enabled)
+        self.assertEqual(styles["roads_residential"].stroke_color, RGBAColor(255, 255, 255))
 
 
 class ContourSceneTests(unittest.TestCase):

@@ -25,6 +25,10 @@ class MinimapGeometry:
     meridians: tuple[float, ...]
     parallels: tuple[float, ...]
     marker: tuple[float, float] | None = None
+    # Drawn heavier than the rest of the graticule. Without a coastline these
+    # are the only marks that say which way up the world is.
+    equator: float = 0.0
+    prime_meridian: float = 0.0
 
     @property
     def is_speck(self) -> bool:
@@ -71,7 +75,26 @@ def geometry(
     )
     centre = project((min_lon + max_lon) / 2.0, (min_lat + max_lat) / 2.0, width, height)
     marker = centre if (right - left) < 6.0 or (bottom - top) < 6.0 else None
-    return MinimapGeometry(box=box, meridians=meridians, parallels=parallels, marker=marker)
+    origin_x, origin_y = project(0.0, 0.0, width, height)
+    return MinimapGeometry(
+        box=box,
+        meridians=meridians,
+        parallels=parallels,
+        marker=marker,
+        equator=origin_y,
+        prime_meridian=origin_x,
+    )
+
+
+def hemisphere_labels(width: int, height: int) -> tuple[tuple[str, float, float], ...]:
+    """Compass marks, so the locator reads as a globe rather than a table."""
+    inset = 7.0
+    return (
+        ("N", width / 2.0, inset),
+        ("S", width / 2.0, height - inset),
+        ("W", inset, height / 2.0),
+        ("E", width - inset, height / 2.0),
+    )
 
 
 def describe(bounds: tuple[float, float, float, float]) -> str:

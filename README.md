@@ -1,6 +1,6 @@
 # Hipparchus
 
-**Version 0.4.3**
+**Version 0.3.2**
 
 **Hipparchus is an online desktop vector cartography app for creating clean, editable maps from OpenStreetMap data and exporting them as Illustrator-friendly SVG files.**
 
@@ -96,9 +96,24 @@ that, **Layers** lists what the map you just fetched actually contains, with
 counts, and **Style** is chosen from thumbnails drawn from the presets
 themselves.
 
-![The Hipparchus interface](documents/interface-proposal.png)
+<table>
+  <tr>
+    <td width="50%"><img src="docs/assets/hipparchus-santorini-light.png" width="100%" alt="The Hipparchus interface in light appearance, showing Santorini drawn from real elevation"></td>
+    <td width="50%"><img src="docs/assets/hipparchus-sydney-dark.png" width="100%" alt="The Hipparchus interface in dark appearance, showing Sydney Harbour with streets over real elevation"></td>
+  </tr>
+  <tr>
+    <td align="center"><em>Santorini from real elevation — <code>Hypsometric Relief</code></em></td>
+    <td align="center"><em>Sydney Harbour, streets over real elevation — dark appearance</em></td>
+  </tr>
+</table>
 
-The images at the top of this page and in the gallery are the app's own output,
+Both are screenshots of the running app, not mockups. The layer list on the
+right is the map that was actually fetched: Santorini shows 798 index contours
+and 24 summit heights with the label layers greyed because that area has none;
+Sydney shows 28 layers and 154,572 features, grouped from terrain through to
+labels.
+
+The maps at the top of this page and in the gallery are the app's own output,
 rendered through the same pipeline that writes the SVG.
 
 ## Gallery: the measured sources

@@ -63,6 +63,7 @@ LOCATION_PRESETS: dict[str, tuple[float, float, float, float]] = {
     "Goa Coast": (73.74, 15.38, 74.00, 15.60),
     "Addis Ababa": (38.65, 8.90, 38.88, 9.10),
     "Shanghai Bund": (121.35, 31.15, 121.60, 31.33),
+    "Sydney Harbour": (151.14, -33.90, 151.30, -33.80),
 }
 
 LEFT_SIDEBAR_WIDTH = 360
@@ -291,6 +292,13 @@ class MainWindow:
         for provider_id, existing in self.controller.data_source_manager.get_optional_source_paths().items():
             if existing:
                 self.source_stack.set_path(provider_id, existing)
+        if self.config.start_sources:
+            # An explicit list replaces the defaults rather than adding to them,
+            # so a launch can ask for terrain alone.
+            for definition in self.source_stack.definitions:
+                self.source_stack.set_enabled(definition.source_id, False)
+            for source_id in self.config.start_sources:
+                self.source_stack.set_enabled(source_id, True)
         self._sources_panel: SourcesPanel | None = None
         self._layers_panel: LayersPanel | None = None
         self._style_picker: StylePicker | None = None
@@ -1198,10 +1206,21 @@ class MainWindow:
             canvas.create_line(x, 0, x, height, fill=palette["border"])
         for y in layout.parallels:
             canvas.create_line(0, y, width, y, fill=palette["border"])
+        # Equator and prime meridian carry the orientation a coastline would.
+        canvas.create_line(0, layout.equator, width, layout.equator, fill=palette["muted"])
+        canvas.create_line(layout.prime_meridian, 0, layout.prime_meridian, height, fill=palette["muted"])
+        for text, lx, ly in minimap.hemisphere_labels(width, height):
+            canvas.create_text(lx, ly, text=text, fill=palette["muted"], font=("SF Pro Text", 8))
+
         canvas.create_rectangle(*layout.box, outline=palette["select_text"], width=2)
         if layout.marker is not None:
             mx, my = layout.marker
-            canvas.create_oval(mx - 5, my - 5, mx + 5, my + 5, outline=palette["select_text"], width=2)
+            canvas.create_oval(mx - 6, my - 6, mx + 6, my + 6, outline=palette["select_text"], width=2)
+            # A crosshair reads at a glance where a small ring alone does not.
+            for dx, dy in ((-11, 0), (7, 0)):
+                canvas.create_line(mx + dx, my, mx + dx + 4, my, fill=palette["select_text"], width=2)
+            for dy in (-11, 7):
+                canvas.create_line(mx, my + dy, mx, my + dy + 4, fill=palette["select_text"], width=2)
         self._minimap_caption.set(minimap.describe(bounds))
 
     def _set_aoi(self, min_lon: float, min_lat: float, max_lon: float, max_lat: float) -> None:
@@ -1272,8 +1291,13 @@ class MainWindow:
                     self._set_idle("Error")
         except queue.Empty:
             pass
-
-        self._root.after(60, self._drain_callback_queue)
+        except Exception:  # noqa: BLE001
+            # The loop must survive a bad callback. Rescheduling below happens
+            # either way; without this an exception here would silently stop
+            # every future scene, image and progress update.
+            self._logger.exception("callback queue handler failed")
+        finally:
+            self._root.after(60, self._drain_callback_queue)
 
     def _apply_scene(self, scene: RenderScene, cache_state: str) -> None:
         self._current_scene = scene
@@ -1463,10 +1487,8 @@ class MainWindow:
                 font=("SF Pro Text", 13),
                 justify="center",
             )
-            self._status_var.set(f"Rendered · {getattr(self, '_layer_summary', '')}".rstrip(" ·"))
-        if hasattr(self, "_cancel_button"):
-            self._cancel_button.state(["disabled"])
-            self._set_idle("Renderer fallback")
+            self._status_var.set("Renderer fallback active")
+            self._finish_render("Renderer fallback")
             return
 
         self._canvas_image = self._photo_image_from_png(png)
@@ -1489,7 +1511,13 @@ class MainWindow:
             self._perf_summary_var.set(
                 f"{summary}\nRender: {float(render_ms):.1f} ms | PNG: {png_bytes / 1024.0:.1f} KiB | Paths: {drawn_paths}"
             )
-        self._set_idle("Idle")
+        self._finish_render("Idle")
+
+    def _finish_render(self, label: str) -> None:
+        """Common end of a render: stop the spinner and disarm Cancel."""
+        if hasattr(self, "_cancel_button"):
+            self._cancel_button.state(["disabled"])
+        self._set_idle(label)
 
     def _photo_image_from_png(self, png_bytes: bytes) -> tk.PhotoImage:
         """Robust PNG->PhotoImage loader for macOS Tk variants."""

@@ -42,3 +42,36 @@ class ConfigStartOptionsTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class StartSourcesTests(unittest.TestCase):
+    """A launch can be told what the map is made of, not just where it is."""
+
+    def _load(self, value: str | None):
+        import os
+        from hipparchus.core.config import ConfigLoader
+
+        previous = os.environ.get("HIPPARCHUS_START_SOURCES")
+        if value is None:
+            os.environ.pop("HIPPARCHUS_START_SOURCES", None)
+        else:
+            os.environ["HIPPARCHUS_START_SOURCES"] = value
+        try:
+            return ConfigLoader.load()
+        finally:
+            if previous is None:
+                os.environ.pop("HIPPARCHUS_START_SOURCES", None)
+            else:
+                os.environ["HIPPARCHUS_START_SOURCES"] = previous
+
+    def test_unset_means_the_defaults_apply(self) -> None:
+        self.assertEqual(self._load(None).start_sources, ())
+
+    def test_a_comma_separated_list_is_parsed(self) -> None:
+        self.assertEqual(
+            self._load("overpass, terrain_tiles").start_sources,
+            ("overpass", "terrain_tiles"),
+        )
+
+    def test_blank_entries_are_dropped(self) -> None:
+        self.assertEqual(self._load(" , terrain_tiles ,, ").start_sources, ("terrain_tiles",))

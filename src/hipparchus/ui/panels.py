@@ -64,6 +64,7 @@ class SourcesPanel:
         self.on_choose_path = on_choose_path
         self._vars: dict[str, tk.BooleanVar] = {}
         self._expanded: set[str] = set()
+        self._show_offline = False
         self._body = ttk.Frame(parent)
         self._body.pack(fill="x")
         self.rebuild()
@@ -71,8 +72,36 @@ class SourcesPanel:
     def rebuild(self) -> None:
         for child in self._body.winfo_children():
             child.destroy()
-        for definition in self.stack.definitions:
+
+        # Sources that need a file on disk are the minority case, and four tall
+        # cards for them pushed Style off the bottom of the rail. They stay one
+        # click away rather than always occupying the panel.
+        online = [item for item in self.stack.definitions if not item.needs_path]
+        offline = [item for item in self.stack.definitions if item.needs_path]
+
+        for definition in online:
             self._source_row(definition)
+
+        if not offline:
+            return
+
+        configured = sum(1 for item in offline if self.stack.is_available(item.source_id))
+        row = ttk.Frame(self._body)
+        row.pack(fill="x", pady=(4, 0))
+        suffix = f" ({configured} ready)" if configured else ""
+        ttk.Button(
+            row,
+            text=("Hide file sources" if self._show_offline else f"File sources{suffix}"),
+            command=self._toggle_offline,
+        ).pack(fill="x")
+
+        if self._show_offline:
+            for definition in offline:
+                self._source_row(definition)
+
+    def _toggle_offline(self) -> None:
+        self._show_offline = not self._show_offline
+        self.rebuild()
 
     def _source_row(self, definition: SourceDefinition) -> None:
         source_id = definition.source_id
@@ -202,10 +231,10 @@ class LayersPanel:
         actions.pack(fill="x", pady=(0, 4))
         IconButton(actions, "check", command=lambda: self.set_all(True), size=20,
                    tooltip="Show every layer").pack(side="left")
-        ttk.Button(actions, text="Check all", width=9, command=lambda: self.set_all(True)).pack(side="left", padx=(2, 8))
+        ttk.Button(actions, text="Check all", width=11, command=lambda: self.set_all(True)).pack(side="left", padx=(2, 8))
         IconButton(actions, "cross", command=lambda: self.set_all(False), size=20,
                    tooltip="Hide every layer").pack(side="left")
-        ttk.Button(actions, text="Uncheck all", width=10, command=lambda: self.set_all(False)).pack(side="left", padx=(2, 0))
+        ttk.Button(actions, text="Clear all", width=10, command=lambda: self.set_all(False)).pack(side="left", padx=(2, 0))
 
         self._body = ttk.Frame(parent)
         self._body.pack(fill="x")

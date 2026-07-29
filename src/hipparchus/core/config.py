@@ -27,6 +27,7 @@ class AppConfig:
     start_area: str
     fetch_on_start: bool
     start_preset: str
+    start_sources: tuple[str, ...]
 
 
 class ConfigLoader:
@@ -55,6 +56,14 @@ class ConfigLoader:
         # Validated against the populated dropdown in the window, not here, so
         # custom presets are selectable too.
         start_preset = os.getenv("HIPPARCHUS_START_PRESET", "").strip()
+        # Sources to tick at launch, comma separated, e.g. "overpass,terrain_tiles".
+        # Completes the set alongside START_AREA and START_PRESET: without it a
+        # launch cannot be told what the map should be made of.
+        start_sources = tuple(
+            name.strip()
+            for name in os.getenv("HIPPARCHUS_START_SOURCES", "").split(",")
+            if name.strip()
+        )
 
         return AppConfig(
             app_name=app_name,
@@ -70,4 +79,5 @@ class ConfigLoader:
             start_area=start_area,
             fetch_on_start=fetch_on_start,
             start_preset=start_preset,
+            start_sources=start_sources,
         )
