@@ -727,13 +727,20 @@ class SkiaRenderer:
 
 
 def _decimate_coords(coords: list[tuple[float, float]], max_vertices: int) -> list[tuple[float, float]]:
+    """Thin a vertex list without changing the shape it describes.
+
+    The stride is chosen so the result fits the budget outright. The previous
+    version could still overshoot after striding, and dealt with it by cutting
+    the list short and jumping to the final vertex -- which draws one long chord
+    straight across the shape. On a coastline-hugging contour, and Santorini's
+    have upwards of eight thousand vertices, that reads as a line ruled across
+    the island.
+    """
     if len(coords) <= max_vertices or max_vertices < 3:
         return coords
 
-    step = max(1, len(coords) // max_vertices)
+    step = math.ceil(len(coords) / max_vertices)
     sampled = coords[::step]
     if sampled[-1] != coords[-1]:
         sampled.append(coords[-1])
-    if len(sampled) > max_vertices:
-        sampled = sampled[: max_vertices - 1] + [coords[-1]]
     return sampled

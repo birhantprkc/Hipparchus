@@ -115,3 +115,55 @@ class ProjectionRoundTripTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class DecimationTests(unittest.TestCase):
+    """Thinning a long line must not draw a chord across the shape."""
+
+    @staticmethod
+    def _wiggly_ring(count: int) -> list[tuple[float, float]]:
+        import math
+
+        return [
+            (
+                math.cos(i / count * 2 * math.pi) * (1 + 0.3 * math.sin(i / 40)),
+                math.sin(i / count * 2 * math.pi) * (1 + 0.3 * math.sin(i / 40)),
+            )
+            for i in range(count)
+        ]
+
+    def test_a_long_ring_is_thinned_without_a_jump(self) -> None:
+        import math
+
+        from hipparchus.rendering.skia_renderer import _decimate_coords
+
+        ring = self._wiggly_ring(12000)
+        thinned = _decimate_coords(ring, 5000)
+
+        self.assertLessEqual(len(thinned), 5000 + 1)
+        steps = [math.dist(a, b) for a, b in zip(thinned, thinned[1:])]
+        # Every step should stay near the local spacing; a truncation jump would
+        # be the width of the whole shape.
+        self.assertLess(max(steps), 20 * (sum(steps) / len(steps)))
+
+    def test_the_endpoints_are_kept(self) -> None:
+        from hipparchus.rendering.skia_renderer import _decimate_coords
+
+        ring = self._wiggly_ring(9000)
+        thinned = _decimate_coords(ring, 1000)
+        self.assertEqual(thinned[0], ring[0])
+        self.assertEqual(thinned[-1], ring[-1])
+
+    def test_short_lines_are_left_alone(self) -> None:
+        from hipparchus.rendering.skia_renderer import _decimate_coords
+
+        line = [(0.0, 0.0), (1.0, 1.0), (2.0, 0.0)]
+        self.assertEqual(_decimate_coords(line, 5000), line)
+
+    def test_the_budget_is_respected_at_any_size(self) -> None:
+        from hipparchus.rendering.skia_renderer import _decimate_coords
+
+        for count in (5001, 8132, 40000):
+            with self.subTest(count=count):
+                thinned = _decimate_coords(self._wiggly_ring(count), 5000)
+                self.assertLessEqual(len(thinned), 5001)
