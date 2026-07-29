@@ -257,6 +257,13 @@ still in `ui/main_window.py`, now only feeding Apply Settings. The stack is the
 only path a fetch takes, so these can go, along with `_map_model_var` and
 `_map_models_by_id`.
 
+### F5. GUI tests hang, so the canvas check is a script
+
+Creating a second Tk root in one process hangs on macOS, which makes an
+automated test of the render handshake unreliable. `scripts/smoke_render.py`
+covers it instead, and should be run after any change to the path from scene to
+canvas. Worth revisiting if the port to a native UI removes the constraint.
+
 ### F4. The layout has not been seen by a human yet
 
 Everything above was verified by constructing the window headless, driving a

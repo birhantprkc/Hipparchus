@@ -1272,8 +1272,13 @@ class MainWindow:
                     self._set_idle("Error")
         except queue.Empty:
             pass
-
-        self._root.after(60, self._drain_callback_queue)
+        except Exception:  # noqa: BLE001
+            # The loop must survive a bad callback. Rescheduling below happens
+            # either way; without this an exception here would silently stop
+            # every future scene, image and progress update.
+            self._logger.exception("callback queue handler failed")
+        finally:
+            self._root.after(60, self._drain_callback_queue)
 
     def _apply_scene(self, scene: RenderScene, cache_state: str) -> None:
         self._current_scene = scene
@@ -1463,10 +1468,8 @@ class MainWindow:
                 font=("SF Pro Text", 13),
                 justify="center",
             )
-            self._status_var.set(f"Rendered · {getattr(self, '_layer_summary', '')}".rstrip(" ·"))
-        if hasattr(self, "_cancel_button"):
-            self._cancel_button.state(["disabled"])
-            self._set_idle("Renderer fallback")
+            self._status_var.set("Renderer fallback active")
+            self._finish_render("Renderer fallback")
             return
 
         self._canvas_image = self._photo_image_from_png(png)
@@ -1489,7 +1492,13 @@ class MainWindow:
             self._perf_summary_var.set(
                 f"{summary}\nRender: {float(render_ms):.1f} ms | PNG: {png_bytes / 1024.0:.1f} KiB | Paths: {drawn_paths}"
             )
-        self._set_idle("Idle")
+        self._finish_render("Idle")
+
+    def _finish_render(self, label: str) -> None:
+        """Common end of a render: stop the spinner and disarm Cancel."""
+        if hasattr(self, "_cancel_button"):
+            self._cancel_button.state(["disabled"])
+        self._set_idle(label)
 
     def _photo_image_from_png(self, png_bytes: bytes) -> tk.PhotoImage:
         """Robust PNG->PhotoImage loader for macOS Tk variants."""
