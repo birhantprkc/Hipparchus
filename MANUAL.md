@@ -1070,7 +1070,7 @@ Keyboard:
 
 Buttons:
 
-- `Update map`: fetch and render the current area from the ticked sources.
+- `Render map`: fetch and render the current area from the ticked sources.
 - `Draw area`: arm the next drag on the map to set a new area.
 - `Find`: geocode text in the Location field.
 - `Export`: save the current scene as SVG.

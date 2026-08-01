@@ -475,7 +475,7 @@ class MainWindow:
         ttk.Button(controls, text="Find", command=self._on_location_lookup_clicked).pack(side="left", padx=(0, 4))
         ttk.Button(
             controls,
-            text=shortcuts.with_accelerator("Update map"),
+            text=shortcuts.with_accelerator("Render map"),
             command=self._on_fetch_clicked,
         ).pack(side="left", padx=(0, 4))
         IconButton(controls, "marquee", command=self._arm_area_selection, size=26,
@@ -1653,7 +1653,7 @@ class MainWindow:
             return "break"
 
         self._set_aoi(*bounds)
-        self._status_var.set("Area set from the map - Update map to fetch it")
+        self._status_var.set("Area set from the map - Render map to fetch it")
         return "break"
 
     def _canvas_box_to_bounds(
