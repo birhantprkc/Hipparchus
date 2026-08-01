@@ -25,7 +25,7 @@ from hipparchus.core.fetch_progress import CancellationToken, FetchReporter
 from hipparchus.application.source_stack import SourceStack
 from hipparchus.application.style_previews import featured_names
 from hipparchus.ui import minimap
-from hipparchus.ui import icons, shortcuts, theme
+from hipparchus.ui import actions, icons, menubar, shortcuts, theme, tooltip
 from hipparchus.ui.icons import IconButton
 from hipparchus.ui.panels import LayersPanel, SourcesPanel, StylePicker, section_heading
 from hipparchus.application.presets import (
@@ -296,7 +296,7 @@ class MainWindow:
         self._apply_theme()
         self._refresh_minimap()
         self._sync_label_font_to_renderer()
-        self._bind_shortcuts()
+        self._build_menus()
         self._root.after(50, self._drain_callback_queue)
         if self.config.start_area or self.config.fetch_on_start:
             self._root.after(300, self._maybe_fetch_on_start)
@@ -434,16 +434,10 @@ class MainWindow:
                    tooltip="Draw a new area on the map").pack(side="left", padx=(0, 4))
         ttk.Button(controls, text="Draw area", command=self._arm_area_selection).pack(side="left", padx=(0, 12))
 
-        # Middle - Preset
-        ttk.Label(controls, text="Preset:").pack(side="left", padx=(0, 4))
-        self._preset_menu = ttk.OptionMenu(controls, self._preset_var, self._preset_var.get(), *self._preset_options)
-        self._preset_menu.pack(side="left", padx=(0, 8))
-
-        # Middle - Quality
-        ttk.Label(controls, text="Quality:").pack(side="left", padx=(0, 4))
-        quality_labels = quality_menu_labels()
-        self._quality_menu = ttk.OptionMenu(controls, self._quality_var, quality_labels[0], *quality_labels)
-        self._quality_menu.pack(side="left", padx=(0, 8))
+        # Preset and Quality are not here. They belong beside the swatches
+        # that show what a preset looks like, and a second copy of a control is
+        # a second place for it to be wrong: this one held its own stale list,
+        # because _refresh_preset_menu only ever reached the other.
 
         ttk.Label(controls, textvariable=self._composition_var, font=theme.font("label")).pack(side="left", padx=(4, 8))
 
@@ -544,21 +538,45 @@ class MainWindow:
                    tooltip="Rotate clockwise").grid(row=0, column=3, padx=(0, 2))
         ttk.Button(rotation_frame, text="0°", width=3, command=self._reset_rotation).grid(row=0, column=4)
 
-    def _bind_shortcuts(self) -> None:
-        """Register the keyboard accelerators.
+    def _build_menus(self) -> None:
+        """Hand the menu bar the window's verbs.
 
-        ``bind_all`` rather than ``bind``: the shortcut has to work while the
-        focus sits in the location field or a coordinate entry, which is
-        precisely when someone reaches for it.
+        Every one of them is a control that also exists on screen: a shortcut
+        for something with no button is a secret, not a feature. The menu and
+        the button call the same function rather than each doing it themselves
+        — two copies of an action become two behaviours within a release.
+
+        The menu also owns the key bindings, so an item cannot advertise ⌘E and
+        bind nothing: Tk's ``accelerator=`` draws the shortcut and binds
+        nothing at all.
         """
-        for sequence in shortcuts.update_map_sequences():
-            self._root.bind_all(sequence, self._on_update_map_shortcut)
+        self._actions = actions.Actions()
+        for key, handler in (
+            ("render_map", self._on_fetch_clicked),
+            ("cancel_fetch", self._on_cancel_fetch),
+            ("search_place", self._focus_place_search),
+            ("draw_area", self._arm_area_selection),
+            ("export_svg", self._on_export_clicked),
+            ("zoom_in", lambda: self._zoom_view(1.5)),
+            ("zoom_out", lambda: self._zoom_view(0.67)),
+            ("fit_window", self._reset_view),
+            ("rotate_left", lambda: self._rotate_view(-15)),
+            ("rotate_right", lambda: self._rotate_view(15)),
+            ("reset_rotation", self._reset_rotation),
+            ("toggle_theme", self._toggle_theme),
+        ):
+            self._actions.register(key, handler)
 
-    def _on_update_map_shortcut(self, _event: "tk.Event | None" = None) -> str:
-        """Update the map from the keyboard, as if the button were pressed."""
-        self._on_fetch_clicked()
-        # Stop the plain Return binding on the focused widget firing as well.
-        return "break"
+        menubar.build(self._root, self._actions, on_place=self._use_saved_place)
+
+    def _focus_place_search(self) -> None:
+        """Put the cursor in the search box, ready to type over what is there.
+
+        ⌘F has somewhere to land only because the box is on screen; that is the
+        rule, not a coincidence.
+        """
+        self._location_entry.focus_set()
+        self._location_entry.select_range(0, "end")
 
     def _toggle_coordinate_editor(self) -> None:
         """Show or hide the exact coordinates.
@@ -681,11 +699,28 @@ class MainWindow:
         self._style_picker = StylePicker(parent, featured_names(), on_select=self._on_style_selected)
         self._style_picker.set_selected(self._preset_var.get())
 
+        # Still here, because a name is the faster way in when you already know
+        # which one you want — and because a saved style has no swatch.
         row = ttk.Frame(parent)
         row.pack(fill="x", pady=(6, 0))
         ttk.Label(row, text="All styles", font=theme.font("caption")).pack(side="left")
         self._preset_menu = ttk.OptionMenu(row, self._preset_var, self._preset_var.get(), *self._preset_options)
         self._preset_menu.pack(side="left", fill="x", expand=True, padx=(6, 0))
+
+        # Quality belongs with Style, not in the toolbar: a preset says what the
+        # map should look like, quality says how much work to spend getting
+        # there, and the second question only arises once the first is answered.
+        row = ttk.Frame(parent)
+        row.pack(fill="x", pady=(4, 0))
+        ttk.Label(row, text="Quality", font=theme.font("caption")).pack(side="left")
+        quality_labels = quality_menu_labels()
+        self._quality_menu = ttk.OptionMenu(row, self._quality_var, self._quality_var.get(), *quality_labels)
+        self._quality_menu.pack(side="left", fill="x", expand=True, padx=(6, 0))
+        tooltip.attach(
+            row,
+            "A preset says what the map should look like; quality says how much "
+            "work to spend getting there.",
+        )
 
         ttk.Separator(parent, orient="horizontal").pack(fill="x", pady=12)
         self._build_settings_tab(parent)

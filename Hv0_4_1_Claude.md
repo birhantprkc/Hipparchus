@@ -619,4 +619,43 @@ rewrites its contents — `toolbar.py` in Phase 1, `map_canvas.py` in Phase 3,
 is 2 084 lines today and comes down as each phase lands rather than in one
 behaviour-preserving move that touches everything at once.
 
-*Working tree is dirty and uncommitted — nothing pushed.*
+### Phase 1 — the menu bar and the keyboard ✅
+
+509 tests → **567 passing**.
+
+| File | What | Tests |
+|---|---|---|
+| `ui/actions.py` | The verb table: what the window can do, named once, read by both the menu and the control on screen | `test_actions.py` — 19 |
+| `ui/menubar.py` | The menu bar built from that table, binding every shortcut it draws | `test_menubar.py` — 22 |
+| `ui/shortcuts.py` | Extended from one hard-coded accelerator to a general model: a spec like `Cmd+Shift+E` becomes both the Tk sequences and the label | `test_shortcuts.py` — 29 |
+
+**Delivered:** Map and View menus; ⌘↵ ⌘. ⌘F ⌘E ⌘+ ⌘− ⌘0 ⌘[ ⌘] and ⌘1…⌘9 for
+the saved places, all bound and all driving a control that is also on screen.
+Quality moved from the toolbar to the Style column. The duplicated Preset
+dropdown is gone.
+
+**A bug that would have shipped.** Tk reads a bare digit 1–5 in a binding as a
+*mouse button number*, so `<Command-1>` binds Command-**click**. ⌘1 to ⌘5 for
+the saved places would have done nothing at all while ⌘6 to ⌘9 worked — and the
+menu would have drawn the shortcut regardless, because Tk's `accelerator=` is
+decoration that binds nothing. Every sequence now names the `Key` field
+explicitly, and two tests hold that: one on the sequence shape, one asserting no
+binding in the finished window is a Button binding.
+
+**A live bug fixed on the way.** `_preset_menu` was assigned twice — once by the
+toolbar, once by the style column — so `_refresh_preset_menu` only ever updated
+the second. Saving a preset left the toolbar's dropdown showing a stale list.
+Removing the duplicate control removed the bug with it.
+
+**Deferred by design.** The Locator, Paste Coordinates, Undo, Settings, and PDF
+and PNG export are absent from the menus because they do not exist yet. A verb
+with no handler is not listed at all — greying it would be a promise, and a
+menu item that does nothing teaches distrust. They appear as their phases land.
+
+**Note on verification.** Driving a macOS Tk app from a script leaves it
+un-activated, so synthetic key events are not routed and every shortcut looks
+dead. Shown the way a person would see it, ⌘↵ renders once (no double binding),
+⌘2 moves the frame to Athens, ⌘F lands the cursor in the search box and ⌘0
+fits. Worth writing down: the first reading of that is "Phase 1 does not work".
+
+*Nothing pushed.*
