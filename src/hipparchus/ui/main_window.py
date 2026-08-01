@@ -5,7 +5,6 @@ from __future__ import annotations
 import base64
 from copy import deepcopy
 from dataclasses import dataclass, field, replace
-import json
 import logging
 import os
 import platform
@@ -16,16 +15,15 @@ import threading
 import time
 import tkinter as tk
 from tkinter import filedialog, messagebox, simpledialog, ttk
-from urllib.parse import urlencode
-from urllib.request import Request, urlopen
 
-from hipparchus.application import places, provenance, session_edit
+from hipparchus.application import geocoding, places, provenance, session_edit
 from hipparchus.application.controller import ApplicationController
 from hipparchus.core.fetch_progress import CancellationToken, FetchReporter
 from hipparchus.application.source_stack import SourceStack
 from hipparchus.ui import minimap
 from hipparchus.ui import actions, icons, menubar, shortcuts, theme, tooltip
 from hipparchus.ui.icons import IconButton
+from hipparchus.ui.search_field import SearchField
 from hipparchus.ui.locator_window import LocatorWindow
 from hipparchus.ui.map_canvas import MapCanvas
 from hipparchus.ui.world_map import WorldMap
@@ -276,7 +274,6 @@ class MainWindow:
         )
         self._composition_var = tk.StringVar(value="OpenStreetMap")
         self._location_preset_var = tk.StringVar(value="London Center")
-        self._location_query_var = tk.StringVar(value="")
         # Get Overpass settings from data source manager
         overpass_settings = self.controller.data_source_manager.get_overpass_settings()
         self._provider_endpoint_var = tk.StringVar(value=overpass_settings["endpoint"])
@@ -447,11 +444,16 @@ class MainWindow:
         controls.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(8, 0))
 
         # Left side - Location and Fetch
-        ttk.Label(controls, text="Location:").pack(side="left", padx=(0, 4))
-        self._location_entry = ttk.Entry(controls, textvariable=self._location_query_var, width=18)
-        self._location_entry.pack(side="left", padx=(0, 6))
-        self._location_entry.bind("<Return>", lambda _e: self._on_location_lookup_clicked())
-        ttk.Button(controls, text="Find", command=self._on_location_lookup_clicked).pack(side="left", padx=(0, 4))
+        # Results are offered, not applied. The field used to take the first
+        # answer and silently move the frame, so searching for Athens and
+        # getting Athens, Georgia looked like the application misbehaving.
+        self._search = SearchField(
+            controls,
+            on_search=self._on_search,
+            on_chosen=self._on_search_result_chosen,
+            on_saved_place=self._use_saved_place,
+        )
+        self._search.pack(side="left", padx=(0, 8))
         self._render_button = ttk.Button(
             controls,
             text=shortcuts.with_accelerator("Render map"),
@@ -833,8 +835,7 @@ class MainWindow:
         ⌘F has somewhere to land only because the box is on screen; that is the
         rule, not a coincidence.
         """
-        self._location_entry.focus_set()
-        self._location_entry.select_range(0, "end")
+        self._search.focus()
 
     def _toggle_coordinate_editor(self) -> None:
         """Show or hide the exact coordinates.
@@ -1558,48 +1559,52 @@ class MainWindow:
                 menu.add_command(label=name, command=tk._setit(self._preset_var, name))
             first = False
 
-    def _on_location_lookup_clicked(self) -> None:
-        query = self._location_query_var.get().strip()
-        if not query:
-            messagebox.showinfo("Location", "Type a location in plain English first.")
-            return
+    def _on_search(self, query: str) -> None:
+        """Ask for places by name, off the UI thread."""
+        self._search.set_searching(True)
+        self._set_busy("Searching…")
 
-        self._set_busy("Finding coordinates...")
-
-        def _worker() -> None:
+        def worker() -> None:
             try:
-                aoi = self._lookup_location_aoi(query)
-                self._pending_queue.put(("aoi", aoi))
-            except Exception as exc:  # noqa: BLE001
-                self._pending_queue.put(("error", exc))
+                self._pending_queue.put(("places", (query, geocoding.search(query))))
+            except Exception as exc:  # noqa: BLE001 - any failure is the same answer
+                self._pending_queue.put(("search_failed", (query, exc)))
 
-        threading.Thread(target=_worker, daemon=True).start()
+        threading.Thread(target=worker, daemon=True).start()
 
-    def _lookup_location_aoi(self, query: str) -> tuple[float, float, float, float]:
-        t0 = time.perf_counter()
-        params = urlencode({"q": query, "format": "jsonv2", "limit": 1})
-        request = Request(
-            f"https://nominatim.openstreetmap.org/search?{params}",
-            headers={"User-Agent": "Hipparchus/0.1"},
+    def _show_search_results(self, payload: object) -> None:
+        if not isinstance(payload, tuple) or len(payload) != 2:
+            return
+        query, results = payload
+        self._search.set_searching(False)
+        self._set_idle("Idle")
+        message = None if results else geocoding.nothing_found_message(str(query))
+        self._search.show_results(results, message)
+        self._status.set_message(
+            f"{len(results)} places found" if results else f"Nothing found for “{query}”"
         )
-        try:
-            with urlopen(request, timeout=10.0) as response:  # noqa: S310
-                payload = json.loads(response.read().decode("utf-8"))
-        except Exception as exc:
-            raise RuntimeError(f"Location lookup failed: {exc}")
 
-        self._debug("location_lookup query=%s elapsed_ms=%.1f", query, (time.perf_counter() - t0) * 1000.0)
-        if not payload:
-            raise RuntimeError(f"No match found for '{query}'")
-        bbox = payload[0].get("boundingbox")
-        if not bbox or len(bbox) != 4:
-            raise RuntimeError("Location lookup did not return a bounding box")
+    def _search_failed(self, payload: object) -> None:
+        """A geocoder that will not answer is news, not a dialogue."""
+        if not isinstance(payload, tuple) or len(payload) != 2:
+            return
+        query, exc = payload
+        self._search.set_searching(False)
+        self._set_idle("Idle")
+        self._search.show_results((), f"Could not reach the geocoder: {exc}")
+        self._status.set_message(f"Search for “{query}” failed: {exc}", error=True)
 
-        min_lat = float(bbox[0])
-        max_lat = float(bbox[1])
-        min_lon = float(bbox[2])
-        max_lon = float(bbox[3])
-        return (min_lon, min_lat, max_lon, max_lat)
+    def _on_search_result_chosen(self, place: object) -> None:
+        """Adopt the frame the chosen result would give."""
+        bbox = getattr(place, "bbox", None)
+        if bbox is None:
+            return
+        self._set_aoi(*bbox)
+        self._location_preset_var.set("")
+        self._minimap_caption.set(minimap.describe(bbox))
+        if self._locator is not None:
+            self._locator.show(bbox)
+        self._status.set_message(f"Frame set from “{getattr(place, 'name', '')}”")
 
     def _apply_location_preset(self) -> None:
         place = places.by_name(self._location_preset_var.get())
@@ -1729,8 +1734,10 @@ class MainWindow:
                 if kind == "scene":
                     scene, cache_state = payload
                     self._apply_scene(scene, cache_state)
-                elif kind == "aoi":
-                    self._apply_location_aoi(payload)
+                elif kind == "places":
+                    self._show_search_results(payload)
+                elif kind == "search_failed":
+                    self._search_failed(payload)
                 elif kind == "image":
                     self._apply_canvas_png(payload)
                 elif kind == "progress":
@@ -1864,15 +1871,6 @@ class MainWindow:
             return
         Path(target).write_text(text + "\n", encoding="utf-8")
         self._status.set_message("Diagnostics saved")
-
-    def _apply_location_aoi(self, payload: object) -> None:
-        if not isinstance(payload, tuple) or len(payload) != 4:
-            self._set_idle("Lookup failed")
-            return
-        min_lon, min_lat, max_lon, max_lat = payload
-        self._set_aoi(float(min_lon), float(min_lat), float(max_lon), float(max_lat))
-        self._status.set_message("Coordinates updated from location")
-        self._set_idle("Location ready")
 
     def _sync_layer_visibility_to_scene(self) -> None:
         if self._current_scene is None:

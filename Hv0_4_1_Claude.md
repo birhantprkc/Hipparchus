@@ -980,6 +980,44 @@ the two ways in look like one thing.
 `NSEvent` monitor with its pen trace — 596 lines solving an AppKit problem Tk
 does not have.
 
+### Phase 9 — search ✅
+
+**760 passing, 80 skipped.**
+
+| File | What | Tests |
+|---|---|---|
+| `application/geocoding.py` | Parsing Nominatim's answers, and clamping them into frames a map wants | `test_geocoding.py` — 20 |
+| `ui/search_field.py` | The field, the spinner, the clear, the saved-places chevron, and the results popover | — |
+
+**Results are offered, not applied.** The field used to take the first answer
+and silently move the frame, so searching for "Athens" and landing in Georgia
+looked like the application misbehaving. Each result now shows its region and
+**the frame it would give**, because a search that would fetch half a country is
+worth seeing before Render map is pressed.
+
+**The clamping is the part that matters**, and it is what the tests are mostly
+about. A geocoder answers with the extent of a *thing*; a map wants the extent of
+a *place*. Measured on real payload shapes:
+
+| asked for | answered with | offered as |
+|---|---|---|
+| Everest | a 40 m summit marker | 0.04° × 0.04° |
+| Santorini | the island | 0.18° × 0.15°, untouched |
+| Spain | the country, ~13° across | 2.81° × 2.16° |
+| a bare point | no extent at all | 0.14° × 0.11° |
+
+**A departure from the Mac, recorded rather than hidden.** The Mac queries two
+geocoders and merges them, because MapKit is good at landmarks and unreliable at
+named geographic areas. There is no MapKit here and no second free geocoder
+worth the added network dependency, so this is Nominatim alone — asked for
+several answers rather than one, and clamped. B11.1 is therefore **partial by
+decision, not by omission**.
+
+Also: nothing found is a line in the popover rather than a modal dialogue — an
+ordinary outcome, not something worth stopping the application for. A geocoder
+that will not answer says so the same way. Searching still waits for Return; it
+does not ask a shared service running on donated hardware on every keystroke.
+
 ---
 
 ## A correction about verification
