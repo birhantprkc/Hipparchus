@@ -27,6 +27,7 @@ from hipparchus.application.style_previews import featured_names
 from hipparchus.ui import minimap
 from hipparchus.ui import actions, icons, menubar, shortcuts, theme, tooltip
 from hipparchus.ui.icons import IconButton
+from hipparchus.ui.map_canvas import MapCanvas
 from hipparchus.ui.panels import LayersPanel, SourcesPanel, StylePicker, section_heading
 from hipparchus.application.presets import (
     ArtisticPreset,
@@ -43,6 +44,7 @@ from hipparchus.application.quality import (
 )
 from hipparchus.application.session import Area, Session
 from hipparchus.application.session_history import SessionHistory
+from hipparchus.application.viewport import shaped_to_window
 from hipparchus.application.preset_store import PresetStore
 from hipparchus.core.config import AppConfig
 from hipparchus.data_sources.provider import BBoxQuery
@@ -536,26 +538,9 @@ class MainWindow:
         self._places_body.pack(fill="x")
         self._rebuild_saved_places()
 
-        ttk.Separator(parent, orient="horizontal").pack(fill="x", pady=12)
-        ttk.Label(parent, text="VIEW", font=theme.font("section")).pack(anchor="w", pady=(0, 6))
-        rotation_frame = ttk.Frame(parent)
-        rotation_frame.pack(fill="x", pady=(0, 8))
-        rotation_frame.grid_columnconfigure(1, weight=1)
-        ttk.Label(rotation_frame, text="Rotation", font=theme.font("label")).grid(row=0, column=0, sticky="w", padx=(0, 4))
-        self._rotation_var = tk.DoubleVar(value=0.0)
-        ttk.Scale(
-            rotation_frame,
-            from_=-180,
-            to=180,
-            variable=self._rotation_var,
-            orient="horizontal",
-            command=self._on_rotation_changed,
-        ).grid(row=0, column=1, sticky="ew", padx=(0, 4))
-        IconButton(rotation_frame, "rotate-left", command=lambda: self._rotate_view(-15), size=22,
-                   tooltip="Rotate anticlockwise").grid(row=0, column=2, padx=(0, 2))
-        IconButton(rotation_frame, "rotate-right", command=lambda: self._rotate_view(15), size=22,
-                   tooltip="Rotate clockwise").grid(row=0, column=3, padx=(0, 2))
-        ttk.Button(rotation_frame, text="0°", width=3, command=self._reset_rotation).grid(row=0, column=4)
+        # No VIEW section: turning the view is a control for the map, and it
+        # lives on the map now, in the same stack as the zooming. Two halves of
+        # "look at this differently" in two different places was one too many.
 
     # -- the session, and undo ------------------------------------------------
 
@@ -819,69 +804,42 @@ class MainWindow:
 
 
     def _build_center_canvas(self, parent: ttk.Frame) -> None:
-        ttk.Label(parent, text="Map Preview", font=theme.font("heading")).grid(row=0, column=0, sticky="w", pady=(0, 8))
-        canvas_wrap = ttk.Frame(parent)
-        canvas_wrap.grid(row=1, column=0, sticky="nsew")
-        canvas_wrap.grid_rowconfigure(0, weight=1)
-        canvas_wrap.grid_columnconfigure(0, weight=1)
+        """The map, which owns its own viewport and its own pointing.
 
-        self._canvas = tk.Canvas(
-            canvas_wrap,
-            background=self._canvas_surround_color(),
-            highlightthickness=1,
-            highlightbackground="#d0d0d0",
+        Everything that was here — pan, zoom, the marquee, the control stack,
+        the keyboard — lives in `ui/map_canvas.py` now, where it can be tested
+        against a real canvas without a render pipeline behind it.
+        """
+        ttk.Label(parent, text="Map Preview", font=theme.font("heading")).grid(
+            row=0, column=0, sticky="w", pady=(0, 8)
         )
-        self._canvas.grid(row=0, column=0, sticky="nsew")
-        self._v_scroll = ttk.Scrollbar(canvas_wrap, orient="vertical", command=self._on_vscroll)
-        self._v_scroll.grid(row=0, column=1, sticky="ns")
-        self._h_scroll = ttk.Scrollbar(canvas_wrap, orient="horizontal", command=self._on_hscroll)
-        self._h_scroll.grid(row=1, column=0, sticky="ew")
-        self._sync_scrollbars()
+
+        self._map = MapCanvas(
+            parent,
+            renderer=self.renderer,
+            scene=lambda: self._current_scene,
+            background=self._canvas_surround_color,
+            on_redraw=self._schedule_redraw,
+            on_area_drawn=self._on_area_drawn,
+            on_status=self._status_var.set,
+        )
+        self._map.grid(row=1, column=0, sticky="nsew")
+        self._canvas = self._map.widget
+
         self._canvas.create_text(
             450,
             280,
             text="Fetch an area to render artistic map structures",
-            fill="#555555",
+            fill=theme.current().muted,
             font=theme.font("lead"),
             justify="center",
             tags=("placeholder",),
         )
 
-        # Drawing an area: Option-drag, Shift-drag, or arm the toolbar button.
-        # Three ways in, because modifier handling differs across platforms and
-        # a feature nobody can find is a feature nobody has.
-        for sequence in ("<Alt-ButtonPress-1>", "<Option-ButtonPress-1>", "<Shift-ButtonPress-1>"):
-            self._canvas.bind(sequence, self._on_select_start)
-        for sequence in ("<Alt-B1-Motion>", "<Option-B1-Motion>", "<Shift-B1-Motion>"):
-            self._canvas.bind(sequence, self._on_select_move)
-        for sequence in ("<Alt-ButtonRelease-1>", "<Option-ButtonRelease-1>", "<Shift-ButtonRelease-1>"):
-            self._canvas.bind(sequence, self._on_select_end)
-
-        self._canvas.bind("<ButtonPress-1>", self._on_drag_start)
-        self._canvas.bind("<B1-Motion>", self._on_drag_move)
-        self._canvas.bind("<ButtonRelease-1>", self._on_drag_end)
-        self._canvas.bind("<MouseWheel>", self._on_mouse_wheel)
-        self._canvas.bind("<Button-4>", self._on_mouse_wheel_linux)
-        self._canvas.bind("<Button-5>", self._on_mouse_wheel_linux)
-        # Keyboard shortcuts for zoom
-        # Zoom lives on the map, where the mockup puts it.
-        controls = tk.Frame(canvas_wrap, bg="#ffffff", highlightthickness=1, highlightbackground="#d5d4cf")
-        controls.place(relx=1.0, rely=0.0, anchor="ne", x=-16, y=16)
-        for icon, action, tip in (
-            ("plus", lambda: self._zoom_view(1.5), "Zoom in"),
-            ("minus", lambda: self._zoom_view(0.67), "Zoom out"),
-            ("fit", self._reset_view, "Fit the map to the window"),
-        ):
-            IconButton(controls, icon, command=action, size=26, tooltip=tip).pack(padx=3, pady=3)
-
-        self._canvas.bind("<plus>", lambda e: self._zoom_view(1.5))
-        self._canvas.bind("<minus>", lambda e: self._zoom_view(0.67))
-        self._canvas.bind("<KP_Add>", lambda e: self._zoom_view(1.5))
-        self._canvas.bind("<KP_Subtract>", lambda e: self._zoom_view(0.67))
-        self._canvas.bind("<0>", lambda e: self._reset_view())
-        self._canvas.bind("<KeyPress-r>", lambda e: self._reset_view())
-        # Focus the canvas so it can receive keyboard events
-        self._canvas.focus_set()
+    def _on_area_drawn(self, bounds: tuple[float, float, float, float]) -> None:
+        """A box drawn on the map becomes the area to fetch."""
+        self._set_aoi(*bounds)
+        self._status_var.set("Area set from the map — Render map to fetch it")
 
     def _build_right_sidebar(self, parent: ttk.Frame) -> None:
         section_heading(parent, "Sources", "they stack")
@@ -955,7 +913,40 @@ class MainWindow:
     def _on_style_selected(self, name: str) -> None:
         self._preset_var.set(name)
 
+    def _sync_area_to_what_is_on_screen(self) -> None:
+        """Make the request match the view, then square it to the window.
+
+        The one place pan, zoom and rotation are allowed to reach the requested
+        area. Everywhere else they frame the screen and nothing more — but
+        pressing Render map is asking the app to act on what it is *showing*,
+        and without this, zooming out and pressing it re-fetches the same old
+        area while the screen still shows the wider one, which looks exactly
+        like nothing happening.
+
+        Then shaped to the window — always, whatever the area came from and
+        whether or not anything is drawn yet. It only ever grows the area, and
+        an area already the right shape comes back untouched, so pressing the
+        button twice does not walk the map outwards.
+        """
+        visible = self._map.visible_area()
+        if visible is not None:
+            self._set_aoi(*visible)
+            self._map.reset_view()
+
+        aspect = self._map.aspect()
+        if aspect is None:
+            return
+        try:
+            current = self._current_aoi_values()
+        except ValueError:
+            # Mid-edit coordinates are not an error; the fetch below will say so.
+            return
+        shaped = shaped_to_window(current, aspect)
+        if shaped != current:
+            self._set_aoi(*shaped)
+
     def _on_fetch_clicked(self) -> None:
+        self._sync_area_to_what_is_on_screen()
         try:
             # Validate and parse coordinates
             min_lon_str = self._aoi_vars["min_lon"].get().strip()
@@ -1743,177 +1734,24 @@ class MainWindow:
             self.renderer.set_layer_visibility(name, bool(var.get()))
         self._schedule_redraw()
 
-    def _on_mouse_wheel(self, event: tk.Event) -> None:
-        factor = 1.12 if event.delta > 0 else 0.89
-        self.renderer.zoom(factor)
-        self._schedule_redraw()
-
-    def _on_mouse_wheel_linux(self, event: tk.Event) -> None:
-        factor = 1.12 if getattr(event, "num", 0) == 4 else 0.89
-        self.renderer.zoom(factor)
-        self._schedule_redraw()
+    # Pan, zoom, turning and drawing an area all live in `ui/map_canvas.py`
+    # now. The verbs below are what the menu bar and the toolbar call; each is
+    # one line, because the canvas already knows how to do the thing.
 
     def _zoom_view(self, factor: float) -> None:
-        """Zoom in or out by the given factor."""
-        self.renderer.zoom(factor)
-        self._schedule_redraw()
-        # Ensure canvas has focus for keyboard shortcuts
-        self._canvas.focus_set()
+        self._map.zoom(factor)
 
     def _reset_view(self) -> None:
-        """Reset zoom and pan to default."""
-        from hipparchus.rendering.models import ViewportState
-        self.renderer.set_viewport(ViewportState())
-        self._scroll_x = 0.5
-        self._scroll_y = 0.5
-        self._rotation_var.set(0.0)
-        self._sync_scrollbars()
-        self._schedule_redraw()
-        # Ensure canvas has focus for keyboard shortcuts
-        self._canvas.focus_set()
+        self._map.reset_view()
 
     def _rotate_view(self, degrees: float) -> None:
-        """Rotate view by given degrees."""
-        self.renderer.rotate(degrees)
-        new_rotation = (self._rotation_var.get() + degrees) % 360
-        if new_rotation > 180:
-            new_rotation -= 360
-        self._rotation_var.set(new_rotation)
-        self._schedule_redraw()
-        self._canvas.focus_set()
+        self._map.turn(degrees)
 
     def _reset_rotation(self) -> None:
-        """Reset rotation to 0 degrees."""
-        self.renderer.set_rotation(0.0)
-        self._rotation_var.set(0.0)
-        self._schedule_redraw()
-        self._canvas.focus_set()
-
-    def _on_rotation_changed(self, value: str) -> None:
-        """Handle rotation slider change."""
-        try:
-            degrees = float(value)
-            self.renderer.set_rotation(degrees)
-            self._schedule_redraw()
-        except ValueError:
-            pass
+        self._map.north_up()
 
     def _arm_area_selection(self) -> None:
-        """Next drag on the canvas draws an area instead of panning."""
-        self._select_armed = True
-        self._canvas.configure(cursor="crosshair")
-        self._status_var.set("Drag on the map to draw a new area")
-
-    def _disarm_area_selection(self) -> None:
-        self._select_armed = False
-        self._canvas.configure(cursor="")
-
-    def _on_select_start(self, event: tk.Event) -> "str | None":
-        if self._current_scene is None:
-            return None
-        self._select_origin = (event.x, event.y)
-        if self._select_rect is not None:
-            self._canvas.delete(self._select_rect)
-        self._select_rect = self._canvas.create_rectangle(
-            event.x, event.y, event.x, event.y,
-            # The app's own turquoise, chosen against the ground it is drawn
-            # on rather than against the panels: the canvas shows the scene's
-            # background, which is one of sixteen presets and has nothing to do
-            # with whether the window is in dark mode.
-            outline=theme.accent_for(self._canvas_surround_color()),
-            width=2,
-            dash=(4, 3),
-        )
-        return "break"  # the pan handler must not see this press too
-
-    def _on_select_move(self, event: tk.Event) -> "str | None":
-        if self._select_origin is None or self._select_rect is None:
-            return None
-        x0, y0 = self._select_origin
-        self._canvas.coords(self._select_rect, x0, y0, event.x, event.y)
-        return "break"
-
-    def _on_select_end(self, event: tk.Event) -> "str | None":
-        origin = self._select_origin
-        self._select_origin = None
-        if self._select_rect is not None:
-            self._canvas.delete(self._select_rect)
-            self._select_rect = None
-        self._disarm_area_selection()
-        if origin is None:
-            return None
-
-        x0, y0 = origin
-        if abs(event.x - x0) < 8 or abs(event.y - y0) < 8:
-            # A stray click is not an area; ignore it rather than jumping the
-            # map to a sliver nobody meant to draw.
-            self._status_var.set("Area too small - drag a box to set one")
-            return "break"
-
-        bounds = self._canvas_box_to_bounds((x0, y0), (event.x, event.y))
-        if bounds is None:
-            self._status_var.set("Could not read that area from the map")
-            return "break"
-
-        self._set_aoi(*bounds)
-        self._status_var.set("Area set from the map - Render map to fetch it")
-        return "break"
-
-    def _canvas_box_to_bounds(
-        self,
-        first: tuple[int, int],
-        second: tuple[int, int],
-    ) -> tuple[float, float, float, float] | None:
-        """Two canvas corners to a lon/lat bbox, through the render transform."""
-        scene = self._current_scene
-        projection = getattr(scene, "projection", None) if scene is not None else None
-        if projection is None:
-            return None
-        width = max(1, self._canvas.winfo_width())
-        height = max(1, self._canvas.winfo_height())
-
-        corners = []
-        for x, y in (first, second):
-            world = self.renderer.screen_to_world(float(x), float(y), width, height)
-            if world is None:
-                return None
-            corners.append(projection.unproject_point(*world))
-
-        lons = [point[0] for point in corners]
-        lats = [point[1] for point in corners]
-        min_lon, max_lon = min(lons), max(lons)
-        min_lat, max_lat = min(lats), max(lats)
-        if max_lon - min_lon < 1e-6 or max_lat - min_lat < 1e-6:
-            return None
-        return (min_lon, min_lat, max_lon, max_lat)
-
-    def _on_drag_start(self, event: tk.Event) -> None:
-        if self._select_armed:
-            self._on_select_start(event)
-            return
-        self._drag_last_xy = (event.x, event.y)
-        self._canvas.configure(cursor="fleur")
-
-    def _on_drag_move(self, event: tk.Event) -> None:
-        if self._select_origin is not None:
-            self._on_select_move(event)
-            return
-        if self._drag_last_xy is None:
-            return
-        lx, ly = self._drag_last_xy
-        dx = event.x - lx
-        dy = event.y - ly
-        self._drag_last_xy = (event.x, event.y)
-        self.renderer.pan(dx, dy)
-        self._update_scroll_state(dx=dx, dy=dy)
-        self._schedule_redraw()
-
-    def _on_drag_end(self, _: tk.Event) -> None:
-        if self._select_origin is not None:
-            self._on_select_end(_)
-            return
-        self._drag_last_xy = None
-        self._canvas.configure(cursor="")
+        self._map.arm_area_selection()
 
     def _on_hscroll(self, *args: str) -> None:
         if self._current_scene is None:

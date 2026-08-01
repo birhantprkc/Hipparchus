@@ -704,4 +704,47 @@ almost entirely and is dead code — nothing in the app reads or writes it. It
 should go when `Session` grows the "saved project" half, rather than leaving two
 serialisation formats to rot apart.
 
+### Phase 3 — the canvas ✅
+
+638 tests → **683 passing**, stable across five consecutive runs.
+
+| File | What | Tests |
+|---|---|---|
+| `application/viewport.py` | The arithmetic behind Render map: the fit margin, the ground on screen from all four corners, and shaping an area to the window in projected space | `test_viewport.py` — 21 |
+| `ui/map_canvas.py` | The canvas and everything you can do by pointing at it: pan, zoom, turn, marquee, the floating control stack, the caption, the keyboard | `test_map_canvas.py` — 24 |
+
+**Delivered:** the control stack now carries turning and a bearing readout that
+appears only when the view is turned and doubles as the way back to north; Fit
+undoes the turn as well as the zoom; a caption on the map says what the map
+answers to; arrows pan (⇧ three times as far), `[` and `]` turn, `+ − 0` as
+before. Rotation left the sidebar — it is a control for the map, and it lives on
+the map now.
+
+**Render map acts on what is on screen.** It reads the visible ground, sets the
+area to it, resets the view, then squares the request to the window. Verified
+live: the request grows to the canvas's own 1.132 aspect, only ever grows, and
+pressing it twice changes nothing.
+
+**Two pieces of arithmetic worth their tests.** The visible area is read from
+**all four corners** and **inset by the fit margin** — the raw corners describe
+an area about an eighth larger than the one on show, so fetch-fit-fetch walks
+the map outwards a little each press, which reads as it slowly zooming out on
+its own. And shaping works in **projected space**: Mercator stretches latitude,
+so at Athens a degree of latitude is about 1.27 times the height a degree of
+longitude is wide, and shaping by degrees alone leaves the letterbox it was
+meant to remove. My first implementation divided degrees by metres; the aspect
+test caught it at 0.028 against an expected 0.79.
+
+**`main_window.py`: 2 315 → 2 153 lines**, with 234 lines of viewport handling
+removed and the canvas now testable on its own.
+
+**Two mistakes of mine, both caught by the suite.** I deleted the whole Phase 2
+session block while removing the sidebar's rotation section — one slice that ran
+from the wrong anchor. It was committed, so I recovered it from the commit
+rather than retyping it. And my keyboard tests were flaky one run in five:
+`focus_set` only takes effect once the *window* has focus from the window
+manager, which it may not have with other test roots about. `focus_force` makes
+it deterministic. A test that fails one time in five is worse than no test,
+because it teaches people to re-run rather than to look.
+
 *Nothing pushed.*
