@@ -27,6 +27,7 @@ from hipparchus.ui import minimap
 from hipparchus.ui import actions, icons, menubar, shortcuts, theme, tooltip
 from hipparchus.ui.icons import IconButton
 from hipparchus.ui.map_canvas import MapCanvas
+from hipparchus.ui.world_map import WorldMap
 from hipparchus.ui.status_bar import StatusBar
 from hipparchus.ui.panels import LayersPanel, SourcesPanel, StylePicker, section_heading
 from hipparchus.application.presets import (
@@ -502,10 +503,36 @@ class MainWindow:
         # buttons that used to describe an area without ever showing it are
         # replaced by the locator plus Draw area on the map itself.
         ttk.Label(parent, text="FRAME", font=theme.font("section")).pack(anchor="w", pady=(0, 6))
-        self._minimap = tk.Canvas(parent, width=200, height=104, highlightthickness=1, bd=0)
-        self._minimap.pack(fill="x", pady=(0, 2))
+        # A real map rather than a graticule with a rectangle on it. Before
+        # anything has been fetched the main canvas is blank, so this is the
+        # only place an area can be chosen by looking at the world rather than
+        # by naming it or typing four numbers.
+        #
+        # In a strip this narrow there is no room to aim at anything, so what
+        # is shown *is* the area: panning and zooming choose.
+        self._locator = WorldMap(
+            parent, on_area_changed=self._on_locator_moved, height=150
+        )
+        self._locator.pack(fill="x", pady=(0, 2))
+
+        row = ttk.Frame(parent)
+        row.pack(fill="x", pady=(0, 8))
         self._minimap_caption = tk.StringVar(value="")
-        ttk.Label(parent, textvariable=self._minimap_caption, font=theme.font("caption")).pack(anchor="w", pady=(0, 8))
+        ttk.Label(
+            row, textvariable=self._minimap_caption, font=theme.font("caption")
+        ).pack(side="left")
+        IconButton(
+            row, "globe", command=self._locator.show_whole_world, size=18,
+            tooltip="Back to the whole world",
+        ).pack(side="right")
+        IconButton(
+            row, "plus", command=lambda: self._locator.zoom(1.6), size=18,
+            tooltip="Zoom in",
+        ).pack(side="right", padx=(0, 2))
+        IconButton(
+            row, "minus", command=lambda: self._locator.zoom(1 / 1.6), size=18,
+            tooltip="Zoom out",
+        ).pack(side="right", padx=(0, 2))
 
         readout = ttk.Frame(parent)
         readout.pack(fill="x")
@@ -1585,48 +1612,34 @@ class MainWindow:
             float(self._aoi_vars["max_lat"].get()),
         )
 
+    def _on_locator_moved(self, bounds: tuple[float, float, float, float]) -> None:
+        """What the locator shows becomes the area to fetch.
+
+        Browsing and choosing are the same act in a strip this size: there is
+        nothing to aim at, so the view is the choice. The floating panel — where
+        there *is* room — is where the two come apart.
+        """
+        self._set_aoi(*bounds)
+        # Hand-chosen, so it is no longer one of the saved places.
+        self._location_preset_var.set("")
+        self._minimap_caption.set(minimap.describe(bounds))
+
     def _refresh_minimap(self) -> None:
-        """Redraw the locator from the coordinate fields."""
-        canvas = getattr(self, "_minimap", None)
-        if canvas is None:
+        """Point the locator at whatever the coordinates now say.
+
+        The graticule this replaces was drawn from the same numbers; the
+        difference is that the locator can be dragged, so this is the one
+        direction — coordinates to view — rather than the only one.
+        """
+        locator = getattr(self, "_locator", None)
+        if locator is None:
             return
         try:
-            bounds = (
-                float(self._aoi_vars["min_lon"].get()),
-                float(self._aoi_vars["min_lat"].get()),
-                float(self._aoi_vars["max_lon"].get()),
-                float(self._aoi_vars["max_lat"].get()),
-            )
+            bounds = self._current_aoi_values()
         except (ValueError, KeyError):
             # Mid-edit coordinates are not an error; the locator just waits.
             return
-
-        palette = theme.palette(self._theme_mode)
-        width = int(canvas.cget("width"))
-        height = int(canvas.cget("height"))
-        layout = minimap.geometry(bounds, width, height)
-
-        canvas.delete("all")
-        canvas.configure(bg=palette.panel_alt, highlightbackground=palette.border)
-        for x in layout.meridians:
-            canvas.create_line(x, 0, x, height, fill=palette.border)
-        for y in layout.parallels:
-            canvas.create_line(0, y, width, y, fill=palette.border)
-        # Equator and prime meridian carry the orientation a coastline would.
-        canvas.create_line(0, layout.equator, width, layout.equator, fill=palette.muted)
-        canvas.create_line(layout.prime_meridian, 0, layout.prime_meridian, height, fill=palette.muted)
-        for text, lx, ly in minimap.hemisphere_labels(width, height):
-            canvas.create_text(lx, ly, text=text, fill=palette.muted, font=theme.font("caption2"))
-
-        canvas.create_rectangle(*layout.box, outline=palette.select_text, width=2)
-        if layout.marker is not None:
-            mx, my = layout.marker
-            canvas.create_oval(mx - 6, my - 6, mx + 6, my + 6, outline=palette.select_text, width=2)
-            # A crosshair reads at a glance where a small ring alone does not.
-            for dx, dy in ((-11, 0), (7, 0)):
-                canvas.create_line(mx + dx, my, mx + dx + 4, my, fill=palette.select_text, width=2)
-            for dy in (-11, 7):
-                canvas.create_line(mx, my + dy, mx, my + dy + 4, fill=palette.select_text, width=2)
+        locator.show(bounds)
         self._minimap_caption.set(minimap.describe(bounds))
 
     def _set_aoi(self, min_lon: float, min_lat: float, max_lon: float, max_lat: float) -> None:

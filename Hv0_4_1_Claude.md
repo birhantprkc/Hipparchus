@@ -897,4 +897,54 @@ foot of the settings rail is gone. Saving a style lives with the styles now.
 **Still visually unverified**, like Phase 5 — lint-clean, logic tested, not
 looked at in a window. `HIPPARCHUS_GUI_TESTS=1 pytest` when convenient.
 
+### Phase 7 — the Locator ✅
+
+**721 passing, 80 skipped.** The one item in this document that is a rewrite
+rather than a port.
+
+| File | What | Tests |
+|---|---|---|
+| `application/world_view.py` | Where the locator is looking and how closely — projection, pan, zoom, and the two rules that keep it usable | `test_world_view.py` — 26 |
+| `application/world_outline.py` | The Natural Earth coastline and borders, read once | `test_world_outline.py` — 13 |
+| `ui/world_map.py` | The canvas, the pointer, and the redraw | — |
+
+**Route 1 from D1, as recommended and confirmed.** Natural Earth 1:110m, already
+in the repository: no network, no key, no tile policy, and the application
+drawing its own data with its own projection rather than borrowing a basemap.
+15 782 vertices for the whole world — the 10m set is two orders of magnitude
+more, for detail nobody can see in a 150-pixel strip.
+
+**Two rules kept in the view rather than the widget**, because both go wrong
+quietly: the view can never be pushed off the earth, and zooming holds the point
+you aimed at — otherwise the map lurches away from whatever you are pointing at
+and getting anywhere becomes a fight.
+
+**The strip means what is shown *is* the area.** There is no room to aim at
+anything smaller, so panning and zooming choose. That is the Mac's own contract
+for the rail; the floating panel, where there is room, is where browsing and
+choosing come apart — Phase 8.
+
+**Three real findings.**
+
+1. **fiona returns `Geometry` objects now, not dictionaries.** My
+   `isinstance(geometry, dict)` guard discarded every shape in the file and
+   reported an empty world *without raising anything* — the precise failure mode
+   the module was written to avoid.
+2. **My test skipped instead of shouting.** It stood down when loading produced
+   nothing, which is how a reader that silently discards its input goes
+   unnoticed. It now skips only when the dataset is genuinely absent, and fails
+   when the dataset is present and nothing comes back.
+3. **Natural Earth carries points outside the world** — 180.0000004 of longitude
+   among them. Mercator has no place for those, and unclamped they draw a line
+   across the whole map.
+
+**Performance, by construction rather than by hope:** a redraw floor of 24 ms so
+a drag cannot queue frames faster than they draw, and a cheap rejection of any
+line with no vertex in view — at city scale almost all of the world is
+off-canvas, and asking Tk to clip fifteen thousand vertices it will not show is
+the difference between a smooth drag and a stuttering one.
+
+**Visually unverified**, like Phases 5 and 6, and this one most wants looking at:
+`HIPPARCHUS_GUI_TESTS=1 pytest`, or simply run the app.
+
 *Nothing pushed.*
