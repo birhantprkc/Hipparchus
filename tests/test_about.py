@@ -102,5 +102,50 @@ class KeyArtTests(unittest.TestCase):
             module.KEY_ART = original
 
 
+
+
+class MakersMarkTests(unittest.TestCase):
+    """The mark is the same vector file the macOS app ships, so the two
+    applications carry the same mark rather than two drawings of it."""
+
+    def test_the_mark_ships_with_the_package(self) -> None:
+        from hipparchus.ui.about_window import LOGO
+
+        self.assertTrue(LOGO.is_file())
+
+    def test_it_is_kept_at_a_whole_multiple_of_the_size_it_is_drawn(self) -> None:
+        """Tk scales no other way, and a fractional reduction smears."""
+        from PIL import Image
+
+        from hipparchus.ui.about_window import LOGO, LOGO_SIZE
+
+        with Image.open(LOGO) as image:
+            self.assertEqual(image.height % LOGO_SIZE, 0)
+
+    def test_it_has_transparency_to_sit_on_the_map(self) -> None:
+        from PIL import Image
+
+        from hipparchus.ui.about_window import LOGO
+
+        with Image.open(LOGO) as image:
+            self.assertIn("A", image.getbands())
+
+    def test_it_carries_the_mark_s_own_blue(self) -> None:
+        """Same colours, not an approximation of them."""
+        from PIL import Image
+
+        from hipparchus.ui.about_window import LOGO
+
+        with Image.open(LOGO) as image:
+            rgba = image.convert("RGBA")
+            colours = {rgba.getpixel((x, y))[:3]
+                       for x in range(0, rgba.width, 3)
+                       for y in range(0, rgba.height, 3)
+                       if rgba.getpixel((x, y))[3] > 250}
+        self.assertTrue(
+            any(abs(r - 55) < 12 and abs(g - 97) < 12 and abs(b - 160) < 12 for r, g, b in colours),
+            "the mark's blue is not in the file",
+        )
+
 if __name__ == "__main__":
     unittest.main()

@@ -12,9 +12,8 @@ And its converse, which is why `menu_items` filters: a verb with no handler
 does not appear in the menu at all. A menu item that does nothing teaches
 distrust, and a greyed one with no stated reason is barely better.
 
-Verbs are added here as the phase that implements them lands. What is missing from
-this table — paste coordinates — is missing because it does not exist yet, not
-because it was forgotten.
+Verbs are added here as the phase that implements them lands. The table is complete: every verb the
+macOS app has that applies here is in it.
 """
 
 from __future__ import annotations
@@ -53,6 +52,7 @@ VERBS: tuple[Verb, ...] = (
     Verb("open_locator", "Open Locator", "Map", "Cmd+L", separator_before=True),
     Verb("search_place", "Search for a Place", "Map", "Cmd+F"),
     Verb("draw_area", "Draw Area on the Map", "Map"),
+    Verb("paste_coordinates", "Paste Coordinates", "Map", "Cmd+Shift+V"),
     Verb("export_svg", "Export SVG…", "Map", "Cmd+E", separator_before=True),
     Verb("export_pdf", "Export PDF…", "Map", "Cmd+Shift+E"),
     Verb("export_png", "Export PNG…", "Map", "Cmd+Alt+E"),

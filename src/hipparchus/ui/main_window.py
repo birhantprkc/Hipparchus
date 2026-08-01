@@ -17,6 +17,7 @@ import tkinter as tk
 from tkinter import filedialog, messagebox, simpledialog, ttk
 
 from hipparchus.application import geocoding, places, provenance, session_edit
+from hipparchus.application.coordinate_import import parse as parse_coordinates
 from hipparchus.application.locator import describe_area
 from hipparchus.application.controller import ApplicationController
 from hipparchus.core.fetch_progress import CancellationToken, FetchReporter
@@ -453,7 +454,21 @@ class MainWindow:
             ).grid(row=row, column=1, sticky="e", pady=1)
 
         self._coords_expanded = tk.BooleanVar(value=False)
-        ttk.Button(parent, text="Edit coordinates", command=self._toggle_coordinate_editor).pack(fill="x", pady=(8, 0))
+        row = ttk.Frame(parent)
+        row.pack(fill="x", pady=(8, 0))
+        ttk.Button(
+            row, text="Edit coordinates", command=self._toggle_coordinate_editor
+        ).pack(side="left", fill="x", expand=True)
+        # ⇧⌘V drives a control that is also on screen, which is the rule the
+        # whole keyboard map is held to.
+        IconButton(
+            row, "clipboard", command=self._paste_coordinates, size=22,
+            tooltip=(
+                "Read the clipboard for an area: a bounding box in this app's own "
+                "west, south, east, north order, two corners, a single point, or a "
+                "Google or Apple Maps link."
+            ),
+        ).pack(side="left", padx=(4, 0))
 
         # Built once and shown on demand, so the exact numbers stay reachable
         # without occupying the rail by default.
@@ -676,6 +691,7 @@ class MainWindow:
             ("open_locator", self._open_locator),
             ("search_place", self._focus_place_search),
             ("draw_area", self._arm_area_selection),
+            ("paste_coordinates", self._paste_coordinates),
             ("export_svg", self._on_export_clicked),
             ("export_pdf", self._on_export_pdf),
             ("export_png", self._on_export_png),
@@ -726,6 +742,37 @@ class MainWindow:
         self._minimap_caption.set(describe_area(bounds))
         if self._locator is not None:
             self._locator.show(bounds)
+
+    def _paste_coordinates(self) -> None:
+        """Read the clipboard for an area.
+
+        Nobody has four numbers ready to type into four separate boxes; they
+        have a bbox, two corners, a point, or a map link. Anything that is not
+        clearly a coordinate leaves the frame alone — moving it somewhere
+        arbitrary on a sentence that happened to contain numbers would be worse
+        than doing nothing.
+        """
+        try:
+            text = self._root.clipboard_get()
+        except tk.TclError:
+            self._status.set_message("There is nothing on the clipboard.", error=True)
+            return
+
+        area = parse_coordinates(text)
+        if area is None:
+            self._status.set_message(
+                "That does not look like a coordinate. A bounding box, two "
+                "corners, a point, or a map link will all work.",
+                error=True,
+            )
+            return
+
+        self._set_aoi(*area)
+        self._location_preset_var.set("")
+        self._minimap_caption.set(describe_area(area))
+        if self._locator is not None:
+            self._locator.show(area)
+        self._status.set_message(f"Frame set from the clipboard · {describe_area(area)}")
 
     def _focus_place_search(self) -> None:
         """Put the cursor in the search box, ready to type over what is there.

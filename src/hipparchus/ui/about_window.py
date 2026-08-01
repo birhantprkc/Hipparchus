@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import tkinter as tk
 from tkinter import ttk
+from pathlib import Path
 from typing import Callable
 import webbrowser
 
@@ -23,6 +24,23 @@ from hipparchus.ui import theme
 
 WIDTH = 640
 ART_HEIGHT = 250
+
+#: The mark is drawn at this height. Its file is kept at twice it, so the
+#: reduction is by a whole number — Tk scales no other way.
+LOGO_SIZE = 44
+LOGO = Path(__file__).resolve().parent / "assets" / "tvd-logo.png"
+
+
+def _load_logo() -> "tk.PhotoImage | None":
+    """The maker's mark, or nothing. Absent is absent."""
+    if not LOGO.is_file():
+        return None
+    try:
+        image = tk.PhotoImage(file=str(LOGO))
+    except tk.TclError:  # pragma: no cover - a Tk without PNG support
+        return None
+    factor = max(1, round(image.height() / LOGO_SIZE))
+    return image if factor == 1 else image.subsample(factor, factor)
 
 
 class AboutWindow:
@@ -94,41 +112,57 @@ class AboutWindow:
         window.geometry(f"{WIDTH}x{window.winfo_reqheight()}")
 
     def _key_art(self, window: tk.Toplevel, palette: theme.Palette) -> None:
-        """The map across the top, with the name over it.
+        """The map across the top, with the lockup over it.
+
+        Drawn on a canvas rather than assembled from labels: a Tk label paints
+        its own background, so the type sat in opaque boxes over the map. Canvas
+        text has no background at all, which is what putting a lockup *on* a
+        picture requires.
 
         The map is the product, so it goes first and at full width; the type
-        sits in it rather than beside it.
+        sits in it rather than beside it. The scrim that keeps white legible
+        over the palest part of the map is baked into the picture, because a Tk
+        canvas cannot composite a translucent layer over an image.
         """
-        art_path = self._about.key_art
-        holder = tk.Frame(window, height=ART_HEIGHT, width=WIDTH, bg=palette.panel_alt)
-        holder.pack(fill="x")
-        holder.pack_propagate(False)
+        canvas = tk.Canvas(
+            window, width=WIDTH, height=ART_HEIGHT,
+            highlightthickness=0, bd=0, background=palette.panel_alt,
+        )
+        canvas.pack(fill="x")
 
+        art_path = self._about.key_art
         if art_path is not None:
             try:
                 self._art = tk.PhotoImage(file=str(art_path))
-                tk.Label(holder, image=self._art, bd=0).place(x=0, y=0)
+                canvas.create_image(0, 0, anchor="nw", image=self._art)
             except tk.TclError:
                 # Absent is absent: a broken-image box is worse than no picture.
                 self._art = None
 
-        # The lockup sits in the quiet lower-left corner of the caldera. White
-        # over the map, because the map is what it belongs to.
-        lockup = tk.Frame(holder, bg="")
-        lockup.place(x=26, y=ART_HEIGHT - 74)
-        tk.Label(
-            lockup, text=self._about.title, font=("Helvetica", 30, "bold"),
-            fg="#ffffff", bg=palette.panel_alt if self._art is None else "#8a8a70",
-        ).pack(anchor="w")
-        tk.Label(
-            lockup, text=self._about.subtitle, font=theme.font("body"),
-            fg="#ffffff", bg=palette.panel_alt if self._art is None else "#8a8a70",
-        ).pack(anchor="w")
+        ink = "#ffffff" if self._art is not None else palette.text
+        baseline = ART_HEIGHT - 26
 
-        tk.Label(
-            holder, text=self._about.version, font=theme.digits("caption"),
-            fg="#ffffff", bg=palette.panel_alt if self._art is None else "#8a8a70",
-        ).place(relx=1.0, y=ART_HEIGHT - 30, anchor="ne", x=-26)
+        # The mark, at the same weight and colour the macOS app uses — the same
+        # vector file, rendered at twice the height it is drawn at so Tk's
+        # whole-number scaling lands on real pixels.
+        self._logo = _load_logo()
+        text_left = 26
+        if self._logo is not None:
+            canvas.create_image(26, baseline, anchor="sw", image=self._logo)
+            text_left = 26 + LOGO_SIZE + 14
+
+        canvas.create_text(
+            text_left, baseline - 30, anchor="sw", text=self._about.title,
+            fill=ink, font=("Helvetica", 30, "bold"),
+        )
+        canvas.create_text(
+            text_left + 2, baseline, anchor="sw", text=self._about.subtitle,
+            fill=ink, font=theme.font("body"),
+        )
+        canvas.create_text(
+            WIDTH - 26, baseline, anchor="se", text=self._about.version,
+            fill=ink, font=theme.digits("caption"),
+        )
 
     def _words(self, window: tk.Toplevel, palette: theme.Palette) -> None:
         ttk.Label(
@@ -139,10 +173,23 @@ class AboutWindow:
     def _footer(self, window: tk.Toplevel, palette: theme.Palette) -> None:
         # The licences, one disclosure away: findable, which is the
         # requirement, without being the first thing anybody reads.
+        row = ttk.Frame(window)
+        row.pack(fill="x", padx=26, pady=(14, 0))
         self._legal_button = ttk.Button(
-            window, text="Data, licences and credits ▸", command=self._toggle_legal
+            row, text="Data, licences and credits ▸", command=self._toggle_legal
         )
-        self._legal_button.pack(anchor="w", padx=26, pady=(14, 0))
+        self._legal_button.pack(side="left")
+
+        # Up here rather than in the footer, which had a credit line, two links
+        # and a button in it already and clipped this to the word "Show".
+        if self._set_show_on_launch is not None:
+            self._at_launch = tk.BooleanVar(
+                value=self._show_on_launch() if self._show_on_launch else True
+            )
+            ttk.Checkbutton(
+                row, text="Show this at launch", variable=self._at_launch,
+                command=lambda: self._set_show_on_launch(bool(self._at_launch.get())),
+            ).pack(side="right")
 
         self._legal = ttk.Label(
             window, text=self._about.legal, font=theme.font("caption"),
@@ -164,21 +211,12 @@ class AboutWindow:
 
         ttk.Button(bar, text="Continue", command=self.close).pack(side="right")
 
-        if self._set_show_on_launch is not None:
-            self._at_launch = tk.BooleanVar(
-                value=self._show_on_launch() if self._show_on_launch else True
-            )
-            ttk.Checkbutton(
-                bar, text="Show at launch", variable=self._at_launch,
-                command=lambda: self._set_show_on_launch(bool(self._at_launch.get())),
-            ).pack(side="right", padx=(0, 12))
-
     def _toggle_legal(self) -> None:
         if self._legal_shown:
             self._legal.pack_forget()
             self._legal_button.configure(text="Data, licences and credits ▸")
         else:
-            self._legal.pack(anchor="w", padx=26, pady=(6, 0), before=self._legal_button)
+            self._legal.pack(anchor="w", padx=26, pady=(6, 0), after=self._legal_button.master)
             self._legal_button.configure(text="Data, licences and credits ▾")
         self._legal_shown = not self._legal_shown
         if self._window is not None:
