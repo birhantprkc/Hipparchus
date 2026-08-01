@@ -946,6 +946,40 @@ the difference between a smooth drag and a stuttering one.
 
 **Visually unverified**, like Phases 5 and 6, and this one most wants looking at.
 
+### Phase 8 — the floating Locator ✅
+
+**740 passing, 80 skipped.**
+
+| File | What | Tests |
+|---|---|---|
+| `application/locator.py` | What a click comes to, what a dragged rectangle comes to, and the draw-mode state machine | `test_locator.py` — 19 |
+| `ui/locator_window.py` | The floating window: control stack, key legend, readout, Render map | — |
+
+**The distinction the second window exists for.** In the rail there is no room
+to aim at anything, so what is shown *is* the area. In the panel there is room,
+so **panning and zooming go looking and a click chooses** — which is what lets
+you pick a place, zoom out to check you picked the right one, and still have it
+picked. `WorldMap` now takes that contract as a parameter rather than assuming
+one, so both windows use the same map with different meanings.
+
+**Delivered:** a click chooses and keeps the size you were already working at —
+you are choosing a place, not starting again. Draw mode is a button rather than
+a modifier, because this is where somebody arrives not knowing the app, and it
+turns itself off after one rectangle so the next pan does not draw another by
+accident. The key legend is on the map, since this window has no menu bar to
+discover shortcuts from. The readout says the coordinates to five places,
+selectable, and what Render map will fetch — a click that shows nothing back is
+indistinguishable from a click that did nothing. Escape leaves draw mode, or
+closes the window when there is no mode to leave. Closing hides rather than
+destroys, so it comes back showing wherever it was left.
+
+⌘L opens it, and the same map glyph appears in the toolbar and in the rail, so
+the two ways in look like one thing.
+
+**Not ported, as decided in F3:** the build timestamp in the title, and the
+`NSEvent` monitor with its pen trace — 596 lines solving an AppKit problem Tk
+does not have.
+
 ---
 
 ## A correction about verification

@@ -13,9 +13,8 @@ does not appear in the menu at all. A menu item that does nothing teaches
 distrust, and a greyed one with no stated reason is barely better.
 
 Verbs are added here as the phase that implements them lands. What is missing
-from this table — the Locator, paste coordinates, undo, settings, PDF and PNG
-export — is missing because it does not exist yet, not because it was
-forgotten.
+from this table — paste coordinates, settings, PDF and PNG export — is missing
+because it does not exist yet, not because it was forgotten.
 """
 
 from __future__ import annotations
@@ -51,7 +50,8 @@ VERBS: tuple[Verb, ...] = (
     Verb("redo", "Redo", "Edit", "Cmd+Shift+Z"),
     Verb("render_map", "Render Map", "Map", "Cmd+Return"),
     Verb("cancel_fetch", "Cancel Fetch", "Map", "Cmd+."),
-    Verb("search_place", "Search for a Place", "Map", "Cmd+F", separator_before=True),
+    Verb("open_locator", "Open Locator", "Map", "Cmd+L", separator_before=True),
+    Verb("search_place", "Search for a Place", "Map", "Cmd+F"),
     Verb("draw_area", "Draw Area on the Map", "Map"),
     Verb("export_svg", "Export SVG…", "Map", "Cmd+E", separator_before=True),
     Verb("zoom_in", "Zoom In", "View", "Cmd++"),

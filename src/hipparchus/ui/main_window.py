@@ -26,6 +26,7 @@ from hipparchus.application.source_stack import SourceStack
 from hipparchus.ui import minimap
 from hipparchus.ui import actions, icons, menubar, shortcuts, theme, tooltip
 from hipparchus.ui.icons import IconButton
+from hipparchus.ui.locator_window import LocatorWindow
 from hipparchus.ui.map_canvas import MapCanvas
 from hipparchus.ui.world_map import WorldMap
 from hipparchus.ui.status_bar import StatusBar
@@ -309,6 +310,7 @@ class MainWindow:
         self._restoring = False
         self._menubar = None
         self._render_tip = None
+        self._locator_window = None
         self._history = SessionHistory(Session())
 
         self._build_window()
@@ -459,6 +461,8 @@ class MainWindow:
         # The reason is on the button that will not work, so hovering it answers
         # the question instead of a click having to.
         self._render_tip = tooltip.attach(self._render_button, "Fetch and draw the chosen area.")
+        IconButton(controls, "map", command=self._open_locator, size=26,
+                   tooltip="Open the Locator in its own floating window").pack(side="left", padx=(0, 4))
         IconButton(controls, "marquee", command=self._arm_area_selection, size=26,
                    tooltip="Draw a new area on the map").pack(side="left", padx=(0, 4))
         ttk.Button(controls, text="Draw area", command=self._arm_area_selection).pack(side="left", padx=(0, 12))
@@ -525,6 +529,10 @@ class MainWindow:
             row, "globe", command=self._locator.show_whole_world, size=18,
             tooltip="Back to the whole world",
         ).pack(side="right")
+        IconButton(
+            row, "map", command=self._open_locator, size=18,
+            tooltip="Open the Locator in its own window, big enough to click a place on",
+        ).pack(side="right", padx=(0, 6))
         IconButton(
             row, "plus", command=lambda: self._locator.zoom(1.6), size=18,
             tooltip="Zoom in",
@@ -769,6 +777,7 @@ class MainWindow:
             ("redo", self._on_redo),
             ("render_map", self._on_fetch_clicked),
             ("cancel_fetch", self._on_cancel_fetch),
+            ("open_locator", self._open_locator),
             ("search_place", self._focus_place_search),
             ("draw_area", self._arm_area_selection),
             ("export_svg", self._on_export_clicked),
@@ -786,6 +795,37 @@ class MainWindow:
             self._root, self._actions, on_place=self._use_saved_place
         )
         self._refresh_undo_menu()
+
+    def _open_locator(self) -> None:
+        """The Locator, in a window big enough to click a place on.
+
+        Built on first use and kept afterwards, so a second press brings the
+        same window back still showing wherever it was left — rebuilding it
+        would start over at the whole world every time, which is the opposite
+        of a locator.
+        """
+        if self._locator_window is None:
+            self._locator_window = LocatorWindow(
+                self._root,
+                on_area_chosen=self._on_locator_chose,
+                on_render=self._on_fetch_clicked,
+                current_area=self._area_or_none,
+            )
+        self._locator_window.show()
+
+    def _area_or_none(self) -> tuple[float, float, float, float] | None:
+        try:
+            return self._current_aoi_values()
+        except (ValueError, KeyError):
+            return None
+
+    def _on_locator_chose(self, bounds: tuple[float, float, float, float]) -> None:
+        """A place clicked, or a rectangle drawn, in the floating window."""
+        self._set_aoi(*bounds)
+        self._location_preset_var.set("")
+        self._minimap_caption.set(minimap.describe(bounds))
+        if self._locator is not None:
+            self._locator.show(bounds)
 
     def _focus_place_search(self) -> None:
         """Put the cursor in the search box, ready to type over what is there.
@@ -2227,6 +2267,8 @@ class MainWindow:
             background=palette.panel_alt,
             hover=palette.button_active,
         )
+        if getattr(self, "_locator_window", None) is not None:
+            self._locator_window.restyle()
         self._refresh_minimap()
 
     def _toggle_theme(self) -> None:

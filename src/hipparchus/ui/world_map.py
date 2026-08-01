@@ -21,6 +21,7 @@ from __future__ import annotations
 import tkinter as tk
 from typing import Any, Callable
 
+from hipparchus.application.locator import Mode, area_between
 from hipparchus.application.world_outline import Outline, load as load_outline
 from hipparchus.application.world_view import WorldView
 from hipparchus.ui import theme
@@ -46,7 +47,22 @@ class WorldMap:
         on_area_changed: Callable[[tuple[float, float, float, float]], None],
         height: int = 150,
         outline: Outline | None = None,
+        reports_view: bool = True,
+        on_point_clicked: Callable[[float, float], None] | None = None,
+        on_area_drawn: Callable[[tuple[float, float, float, float]], None] | None = None,
     ) -> None:
+        #: Whether moving the view *is* choosing.
+        #:
+        #: True in the rail, where there is no room to aim at anything, so what
+        #: is shown is the area. False in the panel, where there is room: there
+        #: panning and zooming go looking and a click chooses, which is what
+        #: lets you pick a place, zoom out to check, and still have it picked.
+        self._reports_view = reports_view
+        self._on_point_clicked = on_point_clicked
+        self._on_area_drawn = on_area_drawn
+        self._mode = Mode()
+        self._press_at: tuple[int, int] | None = None
+        self._rubber_band: int | None = None
         self._on_area_changed = on_area_changed
         #: Loaded once and shared: reading the shapefile per instance would be
         #: the same work twice for the rail and the panel.
@@ -120,6 +136,12 @@ class WorldMap:
         self._draw()
         self._report()
 
+    def pan(self, dx: float, dy: float) -> None:
+        """Move the view by this many pixels — what the arrow keys drive."""
+        self._view = self._view.panned(dx, dy)
+        self._schedule_draw()
+        self._report()
+
     def restyle(self) -> None:
         palette = theme.current()
         self.widget.configure(
@@ -134,9 +156,13 @@ class WorldMap:
         self._draw()
 
     def _on_press(self, event: tk.Event) -> None:
-        self._drag_from = (event.x, event.y)
+        self._press_at = (event.x, event.y)
+        self._drag_from = None if self._mode.is_drawing else (event.x, event.y)
 
     def _on_drag(self, event: tk.Event) -> None:
+        if self._mode.is_drawing and self._press_at is not None:
+            self._draw_rubber_band(self._press_at, (event.x, event.y))
+            return
         if self._drag_from is None:
             return
         last_x, last_y = self._drag_from
@@ -144,15 +170,76 @@ class WorldMap:
         self._view = self._view.panned(event.x - last_x, event.y - last_y)
         self._schedule_draw()
 
-    def _on_release(self, _event: tk.Event) -> None:
-        if self._drag_from is None:
-            return
+    def _on_release(self, event: tk.Event) -> None:
+        press, self._press_at = self._press_at, None
         self._drag_from = None
+        self._clear_rubber_band()
+
+        if press is None:
+            return
+
+        if self._mode.is_drawing:
+            self._finish_drawing(press, (event.x, event.y))
+            return
+
+        # A press that barely moved is a click, not a drag. The tolerance is
+        # there because a hand on a trackpad — or holding a pen — is never
+        # perfectly still, and a choice that needs a motionless hand is a
+        # choice most attempts miss.
+        if _is_a_click(press, (event.x, event.y)) and self._on_point_clicked is not None:
+            lon, lat = self._view.to_world(event.x, event.y)
+            self._on_point_clicked(lon, lat)
+            return
+
         self._draw()
         # Reported when the drag ends rather than throughout it: the area is
         # what you settled on, and a report per motion event would fill the undo
         # history with a hundred entries for one gesture.
         self._report()
+
+    # -- drawing an area ------------------------------------------------------
+
+    @property
+    def mode(self) -> Mode:
+        return self._mode
+
+    def toggle_draw_mode(self) -> bool:
+        drawing = self._mode.toggle()
+        self.widget.configure(cursor="crosshair" if drawing else "fleur")
+        return drawing
+
+    def leave_draw_mode(self) -> bool:
+        left = self._mode.leave()
+        if left:
+            self._clear_rubber_band()
+            self.widget.configure(cursor="fleur")
+        return left
+
+    def _draw_rubber_band(self, first: tuple[int, int], second: tuple[int, int]) -> None:
+        self._clear_rubber_band()
+        self._rubber_band = self.widget.create_rectangle(
+            first[0], first[1], second[0], second[1],
+            outline=theme.accent_for(theme.current().panel_alt),
+            width=2,
+            dash=(4, 3),
+        )
+
+    def _clear_rubber_band(self) -> None:
+        if self._rubber_band is not None:
+            try:
+                self.widget.delete(self._rubber_band)
+            except tk.TclError:  # pragma: no cover - the window is going away
+                pass
+            self._rubber_band = None
+
+    def _finish_drawing(self, first: tuple[int, int], second: tuple[int, int]) -> None:
+        # One rectangle, then back to browsing: leaving the mode on makes the
+        # next pan draw another area by accident.
+        self._mode.finished_drawing()
+        self.widget.configure(cursor="fleur")
+        area = area_between(self._view.to_world(*first), self._view.to_world(*second))
+        if area is not None and self._on_area_drawn is not None:
+            self._on_area_drawn(area)
 
     def _on_wheel(self, event: tk.Event) -> None:
         self._zoom_about(ZOOM_STEP if event.delta > 0 else 1 / ZOOM_STEP, event)
@@ -254,7 +341,8 @@ class WorldMap:
             self.widget.create_line(x, 0, x, height, fill=palette.muted)
 
     def _report(self) -> None:
-        if not self._settling:
+        """Say what is on screen — only where the view *is* the choice."""
+        if self._reports_view and not self._settling:
             self._on_area_changed(self._view.bounds())
 
 
@@ -267,3 +355,16 @@ def _shared_outline() -> Outline:
     if _OUTLINE is None:
         _OUTLINE = load_outline()
     return _OUTLINE
+
+
+#: How far a press may move and still be a click. A hand on a trackpad is never
+#: perfectly still, and a choice that needs a motionless hand is one most
+#: attempts miss.
+CLICK_TOLERANCE = 4
+
+
+def _is_a_click(first: tuple[int, int], second: tuple[int, int]) -> bool:
+    return (
+        abs(second[0] - first[0]) <= CLICK_TOLERANCE
+        and abs(second[1] - first[1]) <= CLICK_TOLERANCE
+    )
