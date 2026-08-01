@@ -1096,6 +1096,37 @@ Shown once at launch, with a **Show at launch** checkbox on the splash itself an
 the preference in the shared `settings.json`; reachable afterwards from the View
 menu. Close and Continue mean the same thing.
 
+### Phase 12 — PDF and PNG export ✅
+
+**814 passing, 80 skipped.**
+
+| File | What | Tests |
+|---|---|---|
+| `rendering/skia_renderer.py` | `render_png` at an exact size, `render_pdf` onto a document canvas | via the exporters |
+| `export/service.py` | `PDFExporter` and `PNGExporter`, which previously did nothing at all | `test_raster_export.py` — 12 |
+
+**Both classes have existed since `service.py` was written, each with a body of
+`_ = destination`.** A menu item wired to either would have written no file and
+reported no error. They are real now.
+
+**The PDF is drawn, not photographed.** It goes through the same `_draw_scene`
+the window and the PNG use, onto a Skia document canvas, so the paths in the file
+are the paths on screen at whatever size the reader opens it. A test asserts the
+file contains no image XObject — a PDF made by embedding a bitmap would be a
+picture of a map rather than the map. An A4 sheet of the test scene comes to
+1 KiB of vector against 28 KiB for the raster.
+
+**Refused rather than written empty.** Exporting with no scene raises instead of
+producing a file with the right extension and nothing in it, which is worse than
+an error because it looks like it worked.
+
+**⌘E / ⇧⌘E / ⌥⌘E** for SVG, PDF and PNG, matching the Mac. Paper size and
+orientation come from the Page section; the file is revealed when it is written.
+
+**This phase is the one that needed no window at all** — rendering to a file is
+headless by nature, so all of it is checked end to end rather than taken on
+trust.
+
 ---
 
 ## A correction about verification

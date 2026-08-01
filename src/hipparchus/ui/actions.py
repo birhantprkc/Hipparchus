@@ -12,9 +12,9 @@ And its converse, which is why `menu_items` filters: a verb with no handler
 does not appear in the menu at all. A menu item that does nothing teaches
 distrust, and a greyed one with no stated reason is barely better.
 
-Verbs are added here as the phase that implements them lands. What is missing
-from this table — paste coordinates, PDF and PNG export — is missing because it
-does not exist yet, not because it was forgotten.
+Verbs are added here as the phase that implements them lands. What is missing from
+this table — paste coordinates — is missing because it does not exist yet, not
+because it was forgotten.
 """
 
 from __future__ import annotations
@@ -54,6 +54,8 @@ VERBS: tuple[Verb, ...] = (
     Verb("search_place", "Search for a Place", "Map", "Cmd+F"),
     Verb("draw_area", "Draw Area on the Map", "Map"),
     Verb("export_svg", "Export SVG…", "Map", "Cmd+E", separator_before=True),
+    Verb("export_pdf", "Export PDF…", "Map", "Cmd+Shift+E"),
+    Verb("export_png", "Export PNG…", "Map", "Cmd+Alt+E"),
     Verb("zoom_in", "Zoom In", "View", "Cmd++"),
     Verb("zoom_out", "Zoom Out", "View", "Cmd+-"),
     Verb("fit_window", "Fit to Window", "View", "Cmd+0"),

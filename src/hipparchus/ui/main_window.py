@@ -25,7 +25,7 @@ from hipparchus.ui import actions, icons, menubar, shortcuts, theme, tooltip
 from hipparchus.ui.about_window import AboutWindow
 from hipparchus.ui.icons import IconButton
 from hipparchus.ui.search_field import SearchField
-from hipparchus.ui.settings_window import SettingsWindow
+from hipparchus.ui.settings_window import SettingsWindow, reveal
 from hipparchus.ui.locator_window import LocatorWindow
 from hipparchus.ui.map_canvas import MapCanvas
 from hipparchus.ui.world_map import WorldMap
@@ -54,7 +54,7 @@ from hipparchus.core.config import AppConfig
 from hipparchus.core.settings_store import SettingsStore, UserSettings
 from hipparchus.data_sources.provider import BBoxQuery
 from hipparchus.export.profiles import MapComposition, SVGExportProfile
-from hipparchus.export.service import SVGExporter
+from hipparchus.export.service import PDFExporter, PNGExporter, SVGExporter
 from hipparchus.plugins.interfaces import LoadedPlugin
 from hipparchus.rendering.engine import Renderer
 from hipparchus.rendering.models import RenderScene, ViewportState
@@ -681,6 +681,8 @@ class MainWindow:
             ("search_place", self._focus_place_search),
             ("draw_area", self._arm_area_selection),
             ("export_svg", self._on_export_clicked),
+            ("export_pdf", self._on_export_pdf),
+            ("export_png", self._on_export_png),
             ("zoom_in", lambda: self._zoom_view(1.5)),
             ("zoom_out", lambda: self._zoom_view(0.67)),
             ("fit_window", self._reset_view),
@@ -2050,6 +2052,41 @@ class MainWindow:
         )
         diagnostics = exporter.export_with_profile(Path(target), profile=profile)
         self._status.set_message(f"Exported {diagnostics.total_paths} paths")
+
+    def _on_export_pdf(self) -> None:
+        """The map as vector paths, at the paper size the Page section names."""
+        self._export_raster(
+            PDFExporter, ".pdf", [("PDF", "*.pdf"), ("All files", "*.*")], "PDF"
+        )
+
+    def _on_export_png(self) -> None:
+        self._export_raster(
+            PNGExporter, ".png", [("PNG", "*.png"), ("All files", "*.*")], "PNG"
+        )
+
+    def _export_raster(self, exporter, suffix: str, filetypes, label: str) -> None:
+        """One path for both, because they differ only in the file they write."""
+        if self._current_scene is None:
+            self._status.set_message("There is no map to export yet.", error=True)
+            return
+        target = filedialog.asksaveasfilename(
+            title=f"Export {label}", defaultextension=suffix, filetypes=filetypes
+        )
+        if not target:
+            return
+
+        width, height = self._export_dimensions()
+        self._set_busy(f"Writing {label}…")
+        try:
+            exporter(scene=self._current_scene, width=width, height=height).export(Path(target))
+        except Exception as exc:  # noqa: BLE001
+            self._status.set_message(f"{label} export failed: {exc}", error=True)
+            return
+        finally:
+            self._set_idle("Idle")
+
+        self._status.set_message(f"Exported {Path(target).name} · {width}×{height}")
+        reveal(Path(target))
 
     def _export_composition(self) -> MapComposition:
         return MapComposition(

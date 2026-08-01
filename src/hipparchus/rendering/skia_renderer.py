@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 import logging
 import math
+from pathlib import Path
 import threading
 from typing import Any
 
@@ -257,6 +258,56 @@ class SkiaRenderer:
                 )
 
             return png_bytes
+
+    def render_png(self, width: int, height: int, *, scale: float = 1.0) -> bytes:
+        """The scene at an exact pixel size, for export rather than preview.
+
+        The preview draws at the display's device scale because it is going on
+        a screen. An export is going into a file at the size that was asked
+        for, so the scale is the caller's to choose — a poster at 300 dpi is a
+        different request from a window on a laptop.
+        """
+        skia = _import_skia()
+        with self._lock:
+            supersample = max(1.0, min(float(self.scene.supersample), MAX_SUPERSAMPLE))
+            pixel_width = max(1, int(width * scale * supersample))
+            pixel_height = max(1, int(height * scale * supersample))
+
+            surface = skia.Surface(pixel_width, pixel_height)
+            canvas = surface.getCanvas()
+            canvas.scale(scale * supersample, scale * supersample)
+            self._draw_scene(canvas, width, height)
+
+            image = surface.makeImageSnapshot()
+            if supersample > 1.0:
+                image = _resample(
+                    image, max(1, int(width * scale)), max(1, int(height * scale)), skia
+                )
+            data = image.encodeToData()
+            return bytes(data) if data is not None else b""
+
+    def render_pdf(self, destination: Path, width: int, height: int) -> None:
+        """The scene as a PDF, drawn rather than photographed.
+
+        The same `_draw_scene` the window and the PNG use, onto a document
+        canvas — so the paths in the file are the paths on screen, at whatever
+        size the reader opens it. A PDF made by embedding a bitmap would be a
+        picture of a map; this is the map.
+        """
+        skia = _import_skia()
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        with self._lock:
+            stream = skia.FILEWStream(str(destination))
+            try:
+                document = skia.PDF.MakeDocument(stream)
+                if document is None:  # pragma: no cover - skia without PDF support
+                    raise RuntimeError("this build of Skia cannot write PDF")
+                canvas = document.beginPage(float(width), float(height))
+                self._draw_scene(canvas, width, height)
+                document.endPage()
+                document.close()
+            finally:
+                stream.flush()
 
     def _draw_scene(self, canvas: Any, width: int, height: int) -> None:
         skia = _import_skia()

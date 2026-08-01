@@ -51,18 +51,59 @@ class SVGExporter:
 
 @dataclass(slots=True)
 class PDFExporter:
-    """Placeholder PDF exporter."""
+    """The scene as a PDF, drawn rather than photographed.
+
+    Through the same renderer the window and the SVG use, onto a document
+    canvas — so the paths in the file are the paths on screen, at whatever size
+    the reader opens it. A PDF made by embedding a bitmap would be a picture of
+    a map rather than the map.
+    """
+
+    scene: RenderScene | None
+    width: int = 2480
+    height: int = 3508
 
     def export(self, destination: Path) -> None:
-        _ = destination
+        renderer = _renderer_for(self.scene)
+        renderer.render_pdf(destination, self.width, self.height)
 
 
 @dataclass(slots=True)
 class PNGExporter:
-    """Placeholder PNG exporter."""
+    """The scene as a bitmap, at the size that was asked for.
+
+    Unlike the preview, which draws at the display's device scale because it is
+    going on a screen, an export goes into a file at a stated size: a poster at
+    300 dpi is a different request from a window on a laptop.
+    """
+
+    scene: RenderScene | None
+    width: int = 2048
+    height: int = 2048
+    scale: float = 1.0
 
     def export(self, destination: Path) -> None:
-        _ = destination
+        renderer = _renderer_for(self.scene)
+        data = renderer.render_png(self.width, self.height, scale=self.scale)
+        if not data:
+            raise ValueError("the renderer produced no image")
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_bytes(data)
+
+
+def _renderer_for(scene: RenderScene | None):
+    """A renderer holding this scene, or a refusal.
+
+    Refused rather than written empty: a file with the right extension and
+    nothing in it is worse than an error, because it looks like it worked.
+    """
+    if scene is None:
+        raise ValueError("there is no map to export yet")
+    from hipparchus.rendering.skia_renderer import SkiaRenderer
+
+    renderer = SkiaRenderer()
+    renderer.set_scene(scene)
+    return renderer
 
 
 @dataclass(slots=True)
