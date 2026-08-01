@@ -11,6 +11,7 @@ The host is expected to provide: ``source_stack``, ``_theme_palette()``,
 
 from __future__ import annotations
 
+from pathlib import Path
 import tkinter as tk
 from tkinter import ttk
 from typing import Any, Callable
@@ -53,12 +54,15 @@ class SourcesPanel:
         on_toggle: Callable[[str, bool], None],
         on_setting: Callable[[str, str, Any], None],
         on_choose_path: Callable[[str], None],
+        file_reason: Callable[[str], str] | None = None,
     ) -> None:
         self.parent = parent
         self.stack = stack
         self.on_toggle = on_toggle
         self.on_setting = on_setting
         self.on_choose_path = on_choose_path
+        #: Why a chosen file cannot be read, asked of the host per source.
+        self.file_reason = file_reason
         self._vars: dict[str, tk.BooleanVar] = {}
         self._expanded: set[str] = set()
         self._show_offline = False
@@ -79,22 +83,48 @@ class SourcesPanel:
         for definition in online:
             self._source_row(definition)
 
-        if not offline:
+        if offline:
+            configured = sum(1 for item in offline if self.stack.is_available(item.source_id))
+            row = ttk.Frame(self._body)
+            row.pack(fill="x", pady=(4, 0))
+            suffix = f" ({configured} ready)" if configured else ""
+            ttk.Button(
+                row,
+                text=("Hide file sources" if self._show_offline else f"File sources{suffix}"),
+                command=self._toggle_offline,
+            ).pack(fill="x")
+
+            if self._show_offline:
+                for definition in offline:
+                    self._source_row(definition)
+
+        # Last, and never behind an early return: a stack with no file-backed
+        # sources at all is exactly the case where nothing being ticked is
+        # easiest to arrive at.
+        self._nothing_ticked_warning()
+
+    def _nothing_ticked_warning(self) -> None:
+        """Say it here, where a source can be ticked, not after Render map.
+
+        The answer used to be a modal dialogue raised by a click that could
+        never have worked — which is the reason arriving after the cost."""
+        if self.stack.plan() is not None:
             return
-
-        configured = sum(1 for item in offline if self.stack.is_available(item.source_id))
         row = ttk.Frame(self._body)
-        row.pack(fill="x", pady=(4, 0))
-        suffix = f" ({configured} ready)" if configured else ""
-        ttk.Button(
+        row.pack(fill="x", pady=(6, 2))
+        IconButton(
+            row, "warning", command=lambda: None, size=16,
+            colour=theme.current().warning,
+            background=theme.current().bg,
+            hover=theme.current().bg,
+        ).pack(side="left", padx=(0, 6), anchor="n")
+        ttk.Label(
             row,
-            text=("Hide file sources" if self._show_offline else f"File sources{suffix}"),
-            command=self._toggle_offline,
-        ).pack(fill="x")
-
-        if self._show_offline:
-            for definition in offline:
-                self._source_row(definition)
+            text="Nothing is ticked, so there is nothing to draw. Choose a source above.",
+            font=theme.font("caption"),
+            wraplength=230,
+            justify="left",
+        ).pack(side="left", fill="x", expand=True)
 
     def _toggle_offline(self) -> None:
         self._show_offline = not self._show_offline
@@ -143,7 +173,7 @@ class SourcesPanel:
         )
         tag.pack(side="right", anchor="n")
 
-        if definition.settings or definition.needs_path:
+        if definition.settings:
             IconButton(
                 header,
                 "chevron-up" if source_id in self._expanded else "chevron-down",
@@ -152,8 +182,64 @@ class SourcesPanel:
                 tooltip="Settings for this source",
             ).pack(side="right", padx=(0, 6))
 
+        # A file-backed source shows its file, and the way to choose one,
+        # without being expanded first.
+        #
+        # Behind the chevron, the only control that makes the row usable was
+        # invisible: four permanently greyed rows with no stated reason and no
+        # visible way out read as four broken features. The row is greyed
+        # because it has no file — so the row should say so, where the greying
+        # is.
+        if definition.needs_path:
+            self._file_picker(card, definition)
+
         if source_id in self._expanded:
             self._settings_body(card, definition)
+
+    def _file_picker(self, card: ttk.Frame, definition: SourceDefinition) -> None:
+        """The chosen file, why it is or is not usable, and the way to change it."""
+        row = ttk.Frame(card)
+        row.pack(fill="x", padx=(22, 0), pady=(4, 0))
+
+        path = self.stack.path(definition.source_id)
+        text = ttk.Frame(row)
+        text.pack(side="left", fill="x", expand=True)
+        ttk.Label(
+            text,
+            text=Path(path).name if path else "No file chosen",
+            font=theme.font("caption"),
+        ).pack(anchor="w")
+
+        # The reason, when there is one worth giving. It was computed all along
+        # and shown only as a paragraph at the foot of the rail, which left the
+        # one format this cannot read looking like a format it silently ignored.
+        reason = self.file_reason(definition.source_id) if self.file_reason else ""
+        if reason and path:
+            note = tk.Text(
+                text,
+                height=_wrapped_lines(reason),
+                wrap="word",
+                font=theme.font("caption2"),
+                fg=theme.current().warning,
+                bg=theme.current().bg,
+                relief="flat",
+                highlightthickness=0,
+                bd=0,
+                width=30,
+            )
+            note.insert("1.0", reason)
+            # Readable and copyable — a conversion command nobody can copy is a
+            # command nobody will run — but not an input.
+            note.configure(state="disabled")
+            note.pack(anchor="w", fill="x", pady=(1, 0))
+
+        # Never dimmed with the row: this is the control that undims it.
+        ttk.Button(
+            row,
+            text="Change…" if path else "Choose…",
+            width=9,
+            command=lambda sid=definition.source_id: self.on_choose_path(sid),
+        ).pack(side="right")
 
     def _toggle_expanded(self, source_id: str) -> None:
         if source_id in self._expanded:
@@ -167,22 +253,28 @@ class SourcesPanel:
         body = ttk.Frame(card)
         body.pack(fill="x")
 
-        if definition.needs_path:
-            row = ttk.Frame(body)
-            row.pack(fill="x", pady=2)
-            path = self.stack.path(definition.source_id)
-            ttk.Label(row, text=path or "No file chosen", font=theme.font("caption")).pack(side="left")
-            ttk.Button(
-                row,
-                text="Choose…",
-                width=9,
-                command=lambda sid=definition.source_id: self.on_choose_path(sid),
-            ).pack(side="right")
-
         for setting in self.stack.settings_for(definition.source_id):
             row = ttk.Frame(body)
             row.pack(fill="x", pady=2)
             ttk.Label(row, text=setting.label, width=10, font=theme.font("caption")).pack(side="left")
+
+            if setting.choices:
+                # A list of known answers is not a thing to type. Offering a box
+                # invites a value the source will refuse, and the refusal would
+                # arrive minutes later from a network call.
+                choice_var = tk.StringVar(value=str(setting.value))
+                ttk.OptionMenu(
+                    row,
+                    choice_var,
+                    str(setting.value),
+                    *[str(option) for option in setting.choices],
+                    command=(
+                        lambda value, sid=definition.source_id, key=setting.key:
+                        self.on_setting(sid, key, value)
+                    ),
+                ).pack(side="left", fill="x", expand=True)
+                continue
+
             entry_var = tk.StringVar(value=str(setting.display().split(" ")[0]))
             entry = ttk.Entry(row, textvariable=entry_var, width=8)
             entry.pack(side="left")
@@ -403,3 +495,8 @@ def _hex(color: RGBAColor) -> str:
 def _short_name(name: str) -> str:
     """Thumbnails are narrow; the first word identifies the preset."""
     return name.split(" ")[0]
+
+
+def _wrapped_lines(text: str, width: int = 34) -> int:
+    """How many lines a reason needs, so the box is neither cropped nor a gap."""
+    return max(1, min(4, -(-len(text) // width)))

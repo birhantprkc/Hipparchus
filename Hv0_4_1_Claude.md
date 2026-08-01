@@ -801,4 +801,62 @@ until focus is observable. Chasing it also turned up a real latent bug in
 the address of a destroyed object, so a stale key could come to name a different
 window entirely. It is keyed by the Tk path now.
 
+### Phase 5 — Sources say why ✅
+
+**664 passing, 80 skipped** (the skipped ones create windows — see below).
+
+| File | What | Tests |
+|---|---|---|
+| `application/readiness.py` | Why Render map will not work, as one sentence, known before the click | `test_readiness.py` — 15 |
+
+**Delivered:**
+
+- **Render map is dead when it cannot work, and says why.** The reason is on the
+  button, in a tooltip, so hovering answers the question instead of a click
+  having to. The two modal dialogues it replaces — "No sources selected" and the
+  four "Invalid AOI" boxes — arrived *after* the click, which is the reason
+  arriving after the cost.
+- **The nothing-ticked warning moved into the Sources panel**, where a source
+  can be ticked.
+- **A file-backed source shows its file and its Choose button without being
+  expanded.** Behind the chevron, the only control that made the row usable was
+  invisible: four permanently greyed rows with no stated reason read as four
+  broken features.
+- **Why a file cannot be read is shown in the row**, in warning colour and
+  selectable — the GeoParquet answer carries the command that converts it, and a
+  command nobody can copy is a command nobody will run. It was computed all
+  along and shown only as a paragraph at the foot of the rail.
+- **A setting with a list of known answers gets a menu**, not a box to mistype
+  into — a refusal that would otherwise arrive minutes later from a network call.
+
+### The test suite stopped opening windows
+
+**This one is on me.** The Tk tests built real windows and several called
+`focus_force`, which pulls the keyboard out of whatever the person running the
+suite is typing in. I ran that suite dozens of times on the user's machine while
+they were working. A withdrawn window is still a window: on macOS creating one
+bounces an icon in the Dock and can flash on screen.
+
+Nothing that creates a Tk object runs now unless it is asked for:
+
+```
+HIPPARCHUS_GUI_TESTS=1 pytest
+```
+
+The default run is pure logic and touches no display — 664 tests. The 80 that
+need widgets are skipped by default and mapped **off-screen** when they do run,
+so even then nothing appears where it can be seen.
+
+**What this costs:** Phase 5's widget changes — the panel rows, the file
+reasons, the disabled button — are lint-clean and their logic is tested, but
+they have not been looked at in a running window. They are the first changes in
+this revision that ship unverified visually. Run the line above when convenient
+and I will fix whatever it turns up.
+
+### The maker's mark ✅
+
+Converted from the Mac app's `TVDLogo.pdf` to `src/hipparchus/ui/assets/makers-mark.png`
+at 40px and reduced by an exact factor of two, because Tk scales by whole numbers
+only and anything else lands between pixels. It ships with the package.
+
 *Nothing pushed.*

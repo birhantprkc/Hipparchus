@@ -37,6 +37,7 @@ from hipparchus.application.presets import (
     preset_names,
     resolve_preset_name,
 )
+from hipparchus.application.readiness import why_cannot_render
 from hipparchus.application.quality import (
     quality_label_for,
     quality_menu_labels,
@@ -304,6 +305,7 @@ class MainWindow:
         # traces that record changes, and a restore is not an edit.
         self._restoring = False
         self._menubar = None
+        self._render_tip = None
         self._history = SessionHistory(Session())
 
         self._build_window()
@@ -314,6 +316,7 @@ class MainWindow:
         self._build_menus()
         self._restore_session()
         self._watch_for_changes()
+        self._refresh_render_button()
         # Closing the window is the last chance to remember what it was doing.
         self._root.protocol("WM_DELETE_WINDOW", self._on_close)
         self._queue_job = self._root.after(50, self._drain_callback_queue)
@@ -444,11 +447,15 @@ class MainWindow:
         self._location_entry.pack(side="left", padx=(0, 6))
         self._location_entry.bind("<Return>", lambda _e: self._on_location_lookup_clicked())
         ttk.Button(controls, text="Find", command=self._on_location_lookup_clicked).pack(side="left", padx=(0, 4))
-        ttk.Button(
+        self._render_button = ttk.Button(
             controls,
             text=shortcuts.with_accelerator("Render map"),
             command=self._on_fetch_clicked,
-        ).pack(side="left", padx=(0, 4))
+        )
+        self._render_button.pack(side="left", padx=(0, 4))
+        # The reason is on the button that will not work, so hovering it answers
+        # the question instead of a click having to.
+        self._render_tip = tooltip.attach(self._render_button, "Fetch and draw the chosen area.")
         IconButton(controls, "marquee", command=self._arm_area_selection, size=26,
                    tooltip="Draw a new area on the map").pack(side="left", padx=(0, 4))
         ttk.Button(controls, text="Draw area", command=self._arm_area_selection).pack(side="left", padx=(0, 12))
@@ -619,6 +626,7 @@ class MainWindow:
             after, described.action, coalescing_key=described.coalescing_key
         )
         self._refresh_undo_menu()
+        self._refresh_render_button()
 
     def _refresh_undo_menu(self) -> None:
         """Say what ⌘Z would take back, rather than only that it exists."""
@@ -842,6 +850,7 @@ class MainWindow:
             on_toggle=self._on_source_toggled,
             on_setting=self._on_source_setting_changed,
             on_choose_path=self._choose_source_path,
+            file_reason=self._file_reason,
         )
 
         section_heading(parent, "Layers in this map")
@@ -879,6 +888,19 @@ class MainWindow:
         ttk.Separator(parent, orient="horizontal").pack(fill="x", pady=12)
         self._build_settings_tab(parent)
 
+    def _file_reason(self, source_id: str) -> str:
+        """Why a chosen file cannot be read, in the source's own row.
+
+        The manager has computed this all along and the window showed it only
+        as a paragraph at the foot of the rail — which left the one format this
+        cannot read looking like a format it silently ignored.
+        """
+        statuses = self.controller.data_source_manager.get_provider_statuses()
+        status = statuses.get(source_id)
+        if status is None or status.available:
+            return ""
+        return status.detail or "This file cannot be read."
+
     # -- source stack callbacks ---------------------------------------------
     def _on_source_toggled(self, source_id: str, enabled: bool) -> None:
         self.source_stack.set_enabled(source_id, enabled)
@@ -889,6 +911,7 @@ class MainWindow:
         self._composition_var.set(self.source_stack.summary())
         self._status.set_message(f"Sources: {self.source_stack.summary()}")
         self._record()
+        self._refresh_render_button()
 
     def _on_source_setting_changed(self, source_id: str, key: str, value: object) -> None:
         self.source_stack.set_setting(source_id, key, value)
@@ -905,6 +928,30 @@ class MainWindow:
 
     def _on_style_selected(self, name: str) -> None:
         self._preset_var.set(name)
+
+    def _refresh_render_button(self) -> None:
+        """Say why before the click, not after.
+
+        A dead button with no stated reason is indistinguishable from a broken
+        one, so the reason travels with it — and the same sentence is what the
+        sources panel shows in the place where it can be acted on.
+        """
+        button = getattr(self, "_render_button", None)
+        if button is None:
+            return
+        reason = why_cannot_render(self.source_stack, self._raw_aoi_values())
+        button.state(["disabled"] if reason else ["!disabled"])
+        if self._render_tip is not None:
+            self._render_tip.set_text(reason or "Fetch and draw the chosen area.")
+
+    def _raw_aoi_values(self) -> tuple[str, str, str, str]:
+        """The coordinate boxes as typed, mid-edit and all."""
+        return (
+            self._aoi_vars["min_lon"].get(),
+            self._aoi_vars["min_lat"].get(),
+            self._aoi_vars["max_lon"].get(),
+            self._aoi_vars["max_lat"].get(),
+        )
 
     def _sync_area_to_what_is_on_screen(self) -> None:
         """Make the request match the view, then square it to the window.
@@ -1019,9 +1066,11 @@ class MainWindow:
 
         plan = self.source_stack.plan()
         if plan is None:
-            messagebox.showinfo(
-                "No sources selected",
-                "Tick at least one source in the Sources list to build a map.",
+            # Should be unreachable: the button is dead when this is true, and
+            # says why. Kept as a guard rather than a dialogue, because the
+            # keyboard can still reach a verb the button has withdrawn.
+            self._status.set_message(
+                "Nothing is ticked, so there is nothing to draw.", error=True
             )
             self._set_idle("Idle")
             return
