@@ -74,14 +74,6 @@ class LocatorWindow:
         if self._window is not None and self._window.winfo_exists():
             self._window.withdraw()
 
-    @property
-    def is_open(self) -> bool:
-        return (
-            self._window is not None
-            and self._window.winfo_exists()
-            and self._window.state() != "withdrawn"
-        )
-
     def restyle(self) -> None:
         if self._map is not None:
             self._map.restyle()

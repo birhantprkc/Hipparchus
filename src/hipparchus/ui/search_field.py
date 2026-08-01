@@ -18,7 +18,7 @@ from typing import Callable
 
 from hipparchus.application import places as saved_places
 from hipparchus.application.geocoding import Place
-from hipparchus.ui import theme, tooltip
+from hipparchus.ui import theme
 from hipparchus.ui.icons import IconButton
 
 #: How wide the popover is. Wide enough for a name, its region and its frame.
@@ -232,7 +232,3 @@ class SearchField:
         self.hide_results()
         self.query.set(name)
         self._on_saved_place(name)
-
-
-def attach_help(field: SearchField) -> None:
-    tooltip.attach(field.entry, "Type a place and press Return. Results show the frame each would give.")

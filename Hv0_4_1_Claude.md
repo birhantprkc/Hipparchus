@@ -1127,6 +1127,42 @@ orientation come from the Page section; the file is revealed when it is written.
 headless by nature, so all of it is checked end to end rather than taken on
 trust.
 
+### Phase 13 — cleanup ✅
+
+**803 passing, 80 skipped.** Version **0.4.1**, with a changelog entry.
+
+**Deleted, because something replaced it:**
+
+| gone | superseded by |
+|---|---|
+| `core/project_state.py` and its tests | `application/session.py` |
+| `ui/minimap.py` and its tests | the interactive locator; its one surviving function, `describe`, moved to `application/locator.py` as `describe_area`, where it belongs — it describes an area, not a widget |
+| 43 lines of canvas scroll machinery | direct panning, since Phase 3 |
+| `locator.Chosen`, `places.as_mapping`, two `attach_help` helpers, `locator_window.is_open`, `theme.modes` | nothing — **I wrote all six this session and never wired one of them** |
+
+**A version in two places, which had already drifted.** The root `hipparchus/`
+shim carried its own `__version__` with a comment asking whoever changed one to
+change the other. That is a request nobody can enforce, and it failed the first
+time it was tested: bumping the real package left the About window showing 0.3.2.
+The shim reads the version off the package now, and `test_version.py` holds all
+four places — package, shim, `pyproject.toml`, About window — to one number, and
+requires a changelog entry for it.
+
+**The shape of the thing:**
+
+| | at branch point | now |
+|---|---|---|
+| `ui/` modules | 5 | 16 |
+| `main_window.py` | 2 107 | 2 275 |
+| tests | 454 | 883 (803 run by default, 80 opt-in) |
+
+**`main_window.py` did not shrink, and that is worth stating plainly.** Roughly
+900 lines were moved out into fourteen new modules; rather more came back as
+wiring for things that did not exist before — the settings window, the About
+window, the floating Locator, the search field, two new exporters. What changed
+is not the size of the file but where the *rules* live: nothing in it now decides
+anything that could be decided without a window.
+
 ---
 
 ## A correction about verification

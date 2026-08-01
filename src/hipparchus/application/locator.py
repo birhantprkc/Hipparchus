@@ -25,20 +25,6 @@ DEFAULT_SPAN = (0.12, 0.09)
 MIN_SPAN = 0.0005
 
 
-@dataclass(frozen=True, slots=True)
-class Chosen:
-    """A place that was clicked, and the area it came to.
-
-    The point is kept as well as the box because it reads better than four
-    corners — a click that shows nothing back is indistinguishable from a click
-    that did nothing.
-    """
-
-    lon: float
-    lat: float
-    bbox: tuple[float, float, float, float]
-
-
 def area_around(
     lon: float,
     lat: float,
@@ -135,3 +121,20 @@ KEY_LEGEND: tuple[tuple[str, str], ...] = (
     ("D", "draw an area"),
     ("esc", "stop drawing"),
 )
+
+
+def describe_area(bounds: tuple[float, float, float, float]) -> str:
+    """One line naming where and how big, for under the locator.
+
+    Centre and span rather than four corners: the corners are what the frame
+    *is*, and this is for reading at a glance while dragging.
+    """
+    min_lon, min_lat, max_lon, max_lat = bounds
+    centre_lon = (min_lon + max_lon) / 2.0
+    centre_lat = (min_lat + max_lat) / 2.0
+    lat_hemisphere = "N" if centre_lat >= 0 else "S"
+    lon_hemisphere = "E" if centre_lon >= 0 else "W"
+    return (
+        f"{abs(centre_lat):.2f}° {lat_hemisphere}  {abs(centre_lon):.2f}° {lon_hemisphere}"
+        f"   ·   {abs(max_lon - min_lon):.2f}° × {abs(max_lat - min_lat):.2f}°"
+    )

@@ -87,6 +87,3 @@ def with_shortcuts(
     return [(str(index + 1), place) for index, place in enumerate(chosen[:MAX_SHORTCUTS])]
 
 
-def as_mapping() -> dict[str, tuple[float, float, float, float]]:
-    """The old ``LOCATION_PRESETS`` shape, for code not yet moved over."""
-    return {place.name: place.bbox for place in PLACES}

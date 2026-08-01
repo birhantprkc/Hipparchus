@@ -11,6 +11,7 @@ import unittest
 
 from hipparchus.application.locator import (
     DEFAULT_SPAN,
+    describe_area,
     KEY_LEGEND,
     MIN_SPAN,
     Mode,
@@ -125,6 +126,31 @@ class LegendTests(unittest.TestCase):
             with self.subTest(key=key):
                 self.assertIn(key, listed)
 
+
+
+
+class DescriptionTests(unittest.TestCase):
+    """The caption under the locator: where, and how big, at a glance."""
+
+    def test_it_names_the_centre_and_the_span(self) -> None:
+        caption = describe_area((23.68, 37.94, 23.80, 38.03))
+        self.assertIn("37.98", caption)
+        self.assertIn("23.74", caption)
+        self.assertIn("0.12", caption)
+
+    def test_hemispheres_are_named_rather_than_signed(self) -> None:
+        self.assertIn("N", describe_area((0.0, 10.0, 1.0, 11.0)))
+        self.assertIn("S", describe_area((0.0, -11.0, 1.0, -10.0)))
+        self.assertIn("E", describe_area((10.0, 0.0, 11.0, 1.0)))
+        self.assertIn("W", describe_area((-11.0, 0.0, -10.0, 1.0)))
+
+    def test_the_equator_and_the_meridian_read_as_north_and_east(self) -> None:
+        caption = describe_area((-0.5, -0.5, 0.5, 0.5))
+        self.assertIn("N", caption)
+        self.assertIn("E", caption)
+
+    def test_it_is_one_line(self) -> None:
+        self.assertNotIn("\n", describe_area((23.68, 37.94, 23.80, 38.03)))
 
 if __name__ == "__main__":
     unittest.main()

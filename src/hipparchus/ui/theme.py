@@ -107,10 +107,6 @@ def palette(mode: str) -> Palette:
     return _PALETTES.get(mode, _PALETTES["light"])
 
 
-def modes() -> tuple[str, ...]:
-    return tuple(_PALETTES)
-
-
 # The appearance in force. Module state rather than a parameter threaded
 # everywhere, because the widgets that need it — a swatch border, a tooltip's
 # ground — are created deep in code that has no business taking a theme

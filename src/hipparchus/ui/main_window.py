@@ -17,10 +17,10 @@ import tkinter as tk
 from tkinter import filedialog, messagebox, simpledialog, ttk
 
 from hipparchus.application import geocoding, places, provenance, session_edit
+from hipparchus.application.locator import describe_area
 from hipparchus.application.controller import ApplicationController
 from hipparchus.core.fetch_progress import CancellationToken, FetchReporter
 from hipparchus.application.source_stack import SourceStack
-from hipparchus.ui import minimap
 from hipparchus.ui import actions, icons, menubar, shortcuts, theme, tooltip
 from hipparchus.ui.about_window import AboutWindow
 from hipparchus.ui.icons import IconButton
@@ -129,10 +129,6 @@ class MainWindow:
         self._render_request_id = 0
         self._render_inflight = False
         self._busy_counter = 0
-        self._scroll_x = 0.5
-        self._scroll_y = 0.5
-        self._scroll_step = 0.06
-        self._scroll_span_pixels = 1800.0
         self._fetch_started_at: float | None = None
         self._debug_enabled_var = tk.BooleanVar(value=True)
         self._perf_summary_var = tk.StringVar(value="No diagnostics yet.")
@@ -727,7 +723,7 @@ class MainWindow:
         """A place clicked, or a rectangle drawn, in the floating window."""
         self._set_aoi(*bounds)
         self._location_preset_var.set("")
-        self._minimap_caption.set(minimap.describe(bounds))
+        self._minimap_caption.set(describe_area(bounds))
         if self._locator is not None:
             self._locator.show(bounds)
 
@@ -1525,7 +1521,7 @@ class MainWindow:
             return
         self._set_aoi(*bbox)
         self._location_preset_var.set("")
-        self._minimap_caption.set(minimap.describe(bbox))
+        self._minimap_caption.set(describe_area(bbox))
         if self._locator is not None:
             self._locator.show(bbox)
         self._status.set_message(f"Frame set from “{getattr(place, 'name', '')}”")
@@ -1591,7 +1587,7 @@ class MainWindow:
         self._set_aoi(*bounds)
         # Hand-chosen, so it is no longer one of the saved places.
         self._location_preset_var.set("")
-        self._minimap_caption.set(minimap.describe(bounds))
+        self._minimap_caption.set(describe_area(bounds))
 
     def _refresh_minimap(self) -> None:
         """Point the locator at whatever the coordinates now say.
@@ -1609,7 +1605,7 @@ class MainWindow:
             # Mid-edit coordinates are not an error; the locator just waits.
             return
         locator.show(bounds)
-        self._minimap_caption.set(minimap.describe(bounds))
+        self._minimap_caption.set(describe_area(bounds))
 
     def _set_aoi(self, min_lon: float, min_lat: float, max_lon: float, max_lat: float) -> None:
         self._aoi_vars["min_lon"].set(f"{min_lon:.5f}")
@@ -1705,9 +1701,6 @@ class MainWindow:
         self._sync_layer_visibility_to_scene()
         self.renderer.set_scene(scene)
         self.renderer.set_viewport(ViewportState())
-        self._scroll_x = 0.5
-        self._scroll_y = 0.5
-        self._sync_scrollbars()
         self._status.set_message("Rendering preview...")
         self._status.set_cache(cache_state)
         geometry_count = sum(len(layer.geometries) for layer in scene.layers)
@@ -1947,49 +1940,6 @@ class MainWindow:
 
     def _arm_area_selection(self) -> None:
         self._map.arm_area_selection()
-
-    def _on_hscroll(self, *args: str) -> None:
-        if self._current_scene is None:
-            return
-        next_value = self._next_scroll_value(self._scroll_x, args)
-        dx = (next_value - self._scroll_x) * self._scroll_span_pixels
-        self._scroll_x = next_value
-        self.renderer.pan(dx, 0.0)
-        self._sync_scrollbars()
-        self._schedule_redraw()
-
-    def _on_vscroll(self, *args: str) -> None:
-        if self._current_scene is None:
-            return
-        next_value = self._next_scroll_value(self._scroll_y, args)
-        dy = (next_value - self._scroll_y) * self._scroll_span_pixels
-        self._scroll_y = next_value
-        self.renderer.pan(0.0, dy)
-        self._sync_scrollbars()
-        self._schedule_redraw()
-
-    def _next_scroll_value(self, current: float, args: tuple[str, ...]) -> float:
-        if not args:
-            return current
-        mode = args[0]
-        if mode == "moveto" and len(args) > 1:
-            return max(0.0, min(1.0, float(args[1])))
-        if mode == "scroll" and len(args) > 1:
-            units = int(args[1])
-            return max(0.0, min(1.0, current + units * self._scroll_step))
-        return current
-
-    def _sync_scrollbars(self) -> None:
-        thumb = 0.12
-        x1 = max(0.0, min(1.0 - thumb, self._scroll_x - thumb * 0.5))
-        y1 = max(0.0, min(1.0 - thumb, self._scroll_y - thumb * 0.5))
-        self._h_scroll.set(x1, x1 + thumb)
-        self._v_scroll.set(y1, y1 + thumb)
-
-    def _update_scroll_state(self, dx: float, dy: float) -> None:
-        self._scroll_x = max(0.0, min(1.0, self._scroll_x + (dx / self._scroll_span_pixels)))
-        self._scroll_y = max(0.0, min(1.0, self._scroll_y + (dy / self._scroll_span_pixels)))
-        self._sync_scrollbars()
 
     def _set_busy(self, label: str) -> None:
         self._busy_counter += 1

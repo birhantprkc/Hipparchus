@@ -24,7 +24,7 @@ from tkinter import ttk
 from typing import Callable
 
 from hipparchus.core.settings_store import UserSettings, storage_locations
-from hipparchus.ui import theme, tooltip
+from hipparchus.ui import theme
 from hipparchus.ui.icons import IconButton
 
 WIDTH = 460
@@ -284,7 +284,3 @@ def reveal(path) -> None:
 def _shorten(path: str, keep: int = 34) -> str:
     """Enough of a path to recognise, from the end that identifies it."""
     return path if len(path) <= keep else "…" + path[-keep:]
-
-
-def attach_help(window: SettingsWindow) -> None:  # pragma: no cover - convenience
-    tooltip.attach(window._window, "Preferences — shared with the macOS app")
