@@ -47,6 +47,38 @@ class GeometryTests(unittest.TestCase):
         }
         self.assertTrue(needed <= set(icon_names()))
 
+    def test_the_icons_the_rebuilt_interface_needs_all_exist(self) -> None:
+        """One glyph per verb the Mac app spells with an SF Symbol. Drawn here
+        because Tk has no symbol font to borrow."""
+        needed = {
+            "map",          # open the Locator
+            "globe",        # back to the whole world
+            "pin",          # the place that was chosen
+            "folder",       # show the plugins folder, show where things are kept
+            "trash",        # delete a saved style
+            "save",         # save this style
+            "clipboard",    # paste coordinates
+            "export",       # the export menu
+            "gear",         # settings
+            "warning",      # nothing ticked; a plugin that did not load
+            "tick-circle",  # a source that finished
+            "dot-circle",   # a source still waiting
+        }
+        self.assertTrue(needed <= set(icon_names()))
+
+    def test_the_two_status_glyphs_are_told_apart_by_shape_not_only_colour(self) -> None:
+        """Done is green and waiting is grey, but colour alone is not a
+        distinction everyone can see."""
+        self.assertNotEqual(ICONS["tick-circle"], ICONS["dot-circle"])
+
+    def test_save_and_export_point_opposite_ways(self) -> None:
+        """One arrow into the tray, one out of it. Two identical arrows would
+        make Export SVG and Save this style the same button."""
+        save_head = ICONS["save"][1]
+        export_head = ICONS["export"][1]
+        self.assertGreater(save_head[1][1], save_head[0][1])
+        self.assertLess(export_head[1][1], export_head[0][1])
+
     def test_decorated_icons_reference_real_icons(self) -> None:
         for name in list(CIRCLES) + list(ARCS):
             with self.subTest(icon=name):
