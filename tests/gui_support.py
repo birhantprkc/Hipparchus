@@ -8,13 +8,19 @@ things in particular are unacceptable in a suite someone runs while working:
 * **Taking the keyboard.** ``focus_force`` pulls focus out of the editor or the
   terminal they are typing in. Keystrokes go to the test.
 
-So: a window that must be mapped for geometry or events to work is mapped
-**off-screen**, and anything that needs real keyboard focus is **opt-in** and
-skipped by default.
+So every one of them is **opt-in and skipped by default**.
 
-Run the focus-dependent tests deliberately, when nothing else is going on:
+**Turning them on puts real windows on the real screen.** An earlier version of
+this file claimed they were mapped off-screen and therefore harmless. That is
+false on macOS: the window server pulls a window at a negative coordinate back
+onto the display, so it appears anyway — in the top-left corner, in front of
+whatever is there. The positioning below reduces flashing. It does not prevent
+windows, and nothing here can.
 
-    HIPPARCHUS_GUI_TESTS=1 pytest
+So: do not run these while somebody is working, and **never run them on another
+person's machine without asking first**.
+
+    HIPPARCHUS_GUI_TESTS=1 pytest      # opens windows, deliberately
 """
 
 from __future__ import annotations
@@ -23,7 +29,8 @@ import os
 import tkinter as tk
 import unittest
 
-#: Far enough off any desktop that nothing is drawn where it can be seen.
+#: As far out of the way as the platform allows — which on macOS is not far.
+#: The window server overrides this and pulls the window back onto the display.
 OFFSCREEN = (-4000, -4000)
 
 GUI_FLAG = "HIPPARCHUS_GUI_TESTS"
@@ -54,10 +61,11 @@ require_focus_tests = require_gui
 
 
 def new_root(width: int = 900, height: int = 700) -> tk.Tk:
-    """A root with real geometry that is never visible.
+    """A root with real geometry, placed as far out of the way as allowed.
 
     Mapped, because an unmapped widget reports a size of one pixel and routes
-    no events — but mapped somewhere nobody has a monitor.
+    no events. Not invisible: macOS clamps a window at a negative coordinate
+    back onto the display.
     """
     root = tk.Tk()
     root.withdraw()
@@ -66,7 +74,12 @@ def new_root(width: int = 900, height: int = 700) -> tk.Tk:
 
 
 def show_offscreen(root: tk.Tk) -> None:
-    """Map the window where it cannot be seen, and let geometry settle."""
+    """Map the window as far out of the way as the platform allows.
+
+    Not a guarantee of invisibility — macOS pulls it back onto the display.
+    It is the difference between a window in the corner and a window in the
+    middle, and nothing more.
+    """
     root.geometry(f"+{OFFSCREEN[0]}+{OFFSCREEN[1]}")
     root.deiconify()
     root.update()

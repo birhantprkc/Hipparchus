@@ -13,15 +13,19 @@ working. Nothing in it is worth interrupting them for.
 first.** It skips unless asked:
 
 ```bash
-HIPPARCHUS_GUI_TESTS=1 pytest      # windows, deliberately
 pytest                             # silent; the default
+HIPPARCHUS_GUI_TESTS=1 pytest      # opens real windows, deliberately
 ```
 
-Where a window is genuinely needed for geometry or events, map it off-screen
-with `gui_support.show_offscreen` — an unmapped widget reports a size of one
-pixel and routes no events, but nothing should appear where it can be seen.
+**Turning the flag on puts windows on the screen, and there is no way around it
+on macOS.** `gui_support.show_offscreen` moves a window to a negative
+coordinate, which the window server overrides by pulling it back onto the
+display. It reduces flashing; it does not prevent windows.
 
-**Do not run the GUI suite, or launch the application, without asking first.**
+**Never run the GUI suite, and never launch the application, without asking
+first — and never offer that command to the user as a harmless way to check
+something.** It is not harmless. If the interface needs looking at, say so and
+let them choose the moment.
 
 ## Where the rules live
 

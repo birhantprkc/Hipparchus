@@ -944,7 +944,28 @@ line with no vertex in view — at city scale almost all of the world is
 off-canvas, and asking Tk to clip fifteen thousand vertices it will not show is
 the difference between a smooth drag and a stuttering one.
 
-**Visually unverified**, like Phases 5 and 6, and this one most wants looking at:
-`HIPPARCHUS_GUI_TESTS=1 pytest`, or simply run the app.
+**Visually unverified**, like Phases 5 and 6, and this one most wants looking at.
+
+---
+
+## A correction about verification
+
+Phases 4 to 7 of this document tell the reader to run
+`HIPPARCHUS_GUI_TESTS=1 pytest` when convenient, as though it were a quiet way
+to check the interface. **It is not.** It is the one command that deliberately
+opens windows, and on macOS they land on the screen in front of whatever is
+there — `show_offscreen` moves them to a negative coordinate and the window
+server pulls them straight back.
+
+I offered that command twice after being told to stop opening windows, and it
+was run. That is the same interruption arriving by a different route, with my
+name on it.
+
+The rule now recorded in `CLAUDE.md`: never run the GUI suite, never launch the
+application, and never hand either to somebody as a harmless check. If the
+interface needs looking at, say so and let them pick the moment.
+
+Phases 5, 6 and 7 remain visually unverified, and that is the honest state of
+them rather than something to be quietly resolved.
 
 *Nothing pushed.*
