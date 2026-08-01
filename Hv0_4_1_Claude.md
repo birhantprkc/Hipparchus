@@ -1018,6 +1018,52 @@ ordinary outcome, not something worth stopping the application for. A geocoder
 that will not answer says so the same way. Searching still waits for Return; it
 does not ask a shared service running on donated hardware on every keystroke.
 
+### Phase 10 — Settings, and emptying the rail ✅
+
+**785 passing, 80 skipped.** `main_window.py` **2 480 → 2 265 lines.**
+
+| File | What | Tests |
+|---|---|---|
+| `core/settings_store.py` | Preferences as a clamped value, shared with the macOS app | `test_settings_store.py` — 21 |
+| `ui/settings_window.py` | The ⌘, window: cache, shared services, appearance, where things are kept | — |
+
+**A file the application reads and the person using it cannot reach is a setting
+in name only.** `settings.json` has existed for a while with no way to see or
+change it without a text editor. ⌘, opens it now, in the Mac app's own format,
+so the two share the file.
+
+**No Apply button.** A change takes effect as it is made and is written then. A
+preferences window with a commit step invites the state where what you see and
+what the application is using are different things — which is precisely what the
+old rail had.
+
+**Values are clamped rather than trusted**, on the way in from the file as well
+as from a box: a typed zero for the cache ceiling means "keep nothing", and zero
+requests a second stalls every fetch and reads as a hang. The file is meant to be
+editable by hand; that does not make it trusted.
+
+**Overpass's own two knobs moved onto the Overpass row**, where the rest of a
+source's settings live. The endpoint is a list of known mirrors rather than a box
+to mistype into — a typo there fails minutes later, from a network call.
+
+**What left the rail**, and where it went:
+
+| was | now |
+|---|---|
+| Label Settings (face, size) | Settings → Appearance |
+| Renderer (device scale) | Settings → Appearance |
+| Provider (endpoint, timeout, rate) | endpoint and timeout on the OpenStreetMap row; rate in Settings |
+| Apply Settings | gone — changes apply as made |
+| Cache path | Settings → Where things are kept |
+| Diagnostics | behind a disclosure at the foot of the rail |
+| Export Composition | reworked as **Page**, with the title fields appearing only when the title block is on |
+| Presets / New Name / Add | gone in Phase 6 |
+| `SOURCE_LIBRARY_PRESETS` (C5), map-model dropdown (C6) | **deleted** — the vocabulary the source stack replaced, whose last readers went with the rail |
+
+**Also removed:** a third place a chosen file was written to. Three places had to
+agree — the stack, the manager, and a set of path variables Apply Settings wrote
+from — and nothing has read the third since the button went.
+
 ---
 
 ## A correction about verification

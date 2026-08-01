@@ -13,8 +13,8 @@ does not appear in the menu at all. A menu item that does nothing teaches
 distrust, and a greyed one with no stated reason is barely better.
 
 Verbs are added here as the phase that implements them lands. What is missing
-from this table — paste coordinates, settings, PDF and PNG export — is missing
-because it does not exist yet, not because it was forgotten.
+from this table — paste coordinates, PDF and PNG export — is missing because it
+does not exist yet, not because it was forgotten.
 """
 
 from __future__ import annotations
@@ -61,6 +61,7 @@ VERBS: tuple[Verb, ...] = (
     Verb("rotate_right", "Turn Clockwise", "View", "Cmd+]"),
     Verb("reset_rotation", "North Up", "View"),
     Verb("toggle_theme", "Dark / Light", "View", separator_before=True),
+    Verb("settings", "Settings…", "View", "Cmd+,", separator_before=True),
 )
 
 _BY_KEY: dict[str, Verb] = {verb.key: verb for verb in VERBS}

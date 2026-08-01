@@ -24,6 +24,7 @@ from hipparchus.ui import minimap
 from hipparchus.ui import actions, icons, menubar, shortcuts, theme, tooltip
 from hipparchus.ui.icons import IconButton
 from hipparchus.ui.search_field import SearchField
+from hipparchus.ui.settings_window import SettingsWindow
 from hipparchus.ui.locator_window import LocatorWindow
 from hipparchus.ui.map_canvas import MapCanvas
 from hipparchus.ui.world_map import WorldMap
@@ -49,6 +50,7 @@ from hipparchus.application.viewport import shaped_to_window
 from hipparchus.application.preset_store import PresetStore
 from hipparchus.application.style_catalogue import Catalogue, seeded_name, validate_name
 from hipparchus.core.config import AppConfig
+from hipparchus.core.settings_store import SettingsStore, UserSettings
 from hipparchus.data_sources.provider import BBoxQuery
 from hipparchus.export.profiles import MapComposition, SVGExportProfile
 from hipparchus.export.service import SVGExporter
@@ -80,98 +82,9 @@ SAMPLE_SOURCE_PATHS: dict[str, str] = {
 }
 
 
-@dataclass(slots=True, frozen=True)
-class SourceLibraryPreset:
-    """Friendly source preset layered over model/path/AOI settings."""
-
-    label: str
-    model_id: str
-    paths: dict[str, str] = field(default_factory=dict)
-    aoi: tuple[float, float, float, float] | None = None
-    quality_label: str | None = None
-    note: str = ""
-
-
-SOURCE_LIBRARY_PRESETS: tuple[SourceLibraryPreset, ...] = (
-    SourceLibraryPreset(
-        label="OSM Live",
-        model_id="osm_live",
-        note="Online Overpass source. Use any AOI.",
-    ),
-    SourceLibraryPreset(
-        label="Florence PMTiles",
-        model_id="vector_tiles",
-        paths={"vector_tiles": "datasets/pmtiles/firenze.pmtiles"},
-        aoi=(11.20, 43.73, 11.33, 43.82),
-        quality_label="High Preview",
-        note="Offline PMTiles vector sample.",
-    ),
-    SourceLibraryPreset(
-        label="Natural Earth World",
-        model_id="natural_earth_atlas",
-        paths={"natural_earth": "datasets/natural_earth"},
-        aoi=(-180.0, -85.0, 180.0, 85.0),
-        quality_label="High Preview",
-        note="Offline Natural Earth atlas-scale source.",
-    ),
-    SourceLibraryPreset(
-        label="Athens DEM",
-        model_id="terrain_relief",
-        paths={"terrain_dem": "datasets/dem/athens_z11_1158_790.tif"},
-        aoi=(23.5547, 37.8575, 23.7305, 37.9962),
-        quality_label="High Preview",
-        note="Offline GeoTIFF DEM contour source.",
-    ),
-    SourceLibraryPreset(
-        label="Athens Overture",
-        model_id="overture",
-        paths={"overture": "datasets/overture/demo_overture_places_buildings.parquet"},
-        aoi=(23.70, 37.96, 23.76, 38.01),
-        quality_label="High Preview",
-        note="Offline GeoParquet buildings/places fixture.",
-    ),
-    SourceLibraryPreset(
-        label="Simulated Terrain",
-        model_id="simulated_terrain",
-        aoi=(23.5547, 37.8575, 23.7305, 37.9962),
-        quality_label="High Preview",
-        note="Generated relief - synthetic, needs no data file. Any AOI works.",
-    ),
-    SourceLibraryPreset(
-        label="Real Terrain",
-        model_id="terrain_online",
-        aoi=(23.57, 37.81, 23.89, 38.13),
-        quality_label="High Preview",
-        note="Real measured elevation for any area, from public terrain tiles.",
-    ),
-    SourceLibraryPreset(
-        label="Terrain Atlas",
-        model_id="terrain_atlas",
-        aoi=(23.70, 37.95, 23.80, 38.02),
-        quality_label="High Preview",
-        note="Real streets, names and elevation together. Keep the AOI small.",
-    ),
-    SourceLibraryPreset(
-        label="Relief Sheet",
-        model_id="relief_sheet",
-        aoi=(23.5547, 37.8575, 23.7305, 37.9962),
-        quality_label="High Preview",
-        note="Dense synthetic relief. Pair with the Relief Sheet preset. Slower to fetch.",
-    ),
-    SourceLibraryPreset(
-        label="Installed Samples",
-        model_id="hybrid_atlas",
-        paths=SAMPLE_SOURCE_PATHS,
-        aoi=(23.5547, 37.8575, 23.7305, 37.9962),
-        quality_label="High Preview",
-        note="Loads every installed local sample path.",
-    ),
-    SourceLibraryPreset(
-        label="Custom",
-        model_id="osm_live",
-        note="Use the model dropdown and path fields manually.",
-    ),
-)
+# `SourceLibraryPreset` and its eleven bundles are gone: they were the
+# vocabulary the composing source stack replaced, and the last code that
+# reached them went with the settings rail.
 
 PAPER_PRESETS: dict[str, tuple[int, int]] = {
     "Canvas": (0, 0),
@@ -225,13 +138,12 @@ class MainWindow:
         self._debug_log_file = self.config.cache_dir / "hipparchus_debug.log"
 
         self._layer_visibility_vars: dict[str, tk.BooleanVar] = {}
+        self._settings_store = SettingsStore(self.config.settings_file)
+        self._settings = self._settings_store.load()
         self._preset_store = PresetStore(self.config.presets_file)
         self._custom_presets = self._load_custom_presets()
         self._preset_options = sorted({*preset_names(), *self._custom_presets.keys()})
-        self._provider_status_var = tk.StringVar(value="")
         self._quality_var = tk.StringVar(value="Fast Preview")
-        self._source_library_var = tk.StringVar(value=SOURCE_LIBRARY_PRESETS[0].label)
-        self._source_library_note_var = tk.StringVar(value=SOURCE_LIBRARY_PRESETS[0].note)
         self._paper_preset_var = tk.StringVar(value="Canvas")
         self._paper_orientation_var = tk.StringVar(value="Landscape")
         self._map_title_var = tk.StringVar(value="")
@@ -247,8 +159,6 @@ class MainWindow:
         self._map_model_label_to_id = {str(model["label"]): str(model["id"]) for model in self._map_models}
         self._map_model_id_to_label = {str(model["id"]): str(model["label"]) for model in self._map_models}
         self._map_models_by_id = {str(model["id"]): tuple(model["providers"]) for model in self._map_models}
-        active_model = self.controller.data_source_manager.get_active_map_model()
-        self._map_model_var = tk.StringVar(value=self._map_model_id_to_label.get(active_model, "OSM Live"))
         # A map is built from sources, and sources stack. This replaces the
         # model dropdown, the source library and the relief toggle, which were
         # three vocabularies for one idea.
@@ -274,23 +184,9 @@ class MainWindow:
         )
         self._composition_var = tk.StringVar(value="OpenStreetMap")
         self._location_preset_var = tk.StringVar(value="London Center")
-        # Get Overpass settings from data source manager
-        overpass_settings = self.controller.data_source_manager.get_overpass_settings()
-        self._provider_endpoint_var = tk.StringVar(value=overpass_settings["endpoint"])
-        self._provider_rps_var = tk.DoubleVar(value=overpass_settings["requests_per_second"])
-        self._provider_timeout_var = tk.DoubleVar(value=overpass_settings["timeout_seconds"])
-        optional_paths = self.controller.data_source_manager.get_optional_source_paths()
-        self._optional_source_vars = {
-            "local_osm_pbf": tk.StringVar(value=optional_paths.get("local_osm_pbf", "")),
-            "vector_tiles": tk.StringVar(value=optional_paths.get("vector_tiles", "")),
-            "natural_earth": tk.StringVar(value=optional_paths.get("natural_earth", "")),
-            "overture": tk.StringVar(value=optional_paths.get("overture", "")),
-            "terrain_dem": tk.StringVar(value=optional_paths.get("terrain_dem", "")),
-        }
         device_scale = self._auto_device_scale()
         if hasattr(self.renderer, "device_scale"):
             setattr(self.renderer, "device_scale", device_scale)
-        self._device_scale_var = tk.DoubleVar(value=float(device_scale))
 
         self._aoi_vars = {
             "min_lon": tk.StringVar(value="-0.15"),
@@ -308,13 +204,13 @@ class MainWindow:
         self._menubar = None
         self._render_tip = None
         self._locator_window = None
+        self._settings_window = None
         self._history = SessionHistory(Session())
 
         self._build_window()
         self._build_layout()
         self._apply_theme()
         self._refresh_minimap()
-        self._sync_label_font_to_renderer()
         self._build_menus()
         self._restore_session()
         self._watch_for_changes()
@@ -501,7 +397,6 @@ class MainWindow:
         self._build_left_sidebar(left)
         self._build_center_canvas(center)
         self._build_right_sidebar(right)
-        self._provider_status_var.set(self._format_provider_status())
 
 
     def _build_left_sidebar(self, parent: ttk.Frame) -> None:
@@ -790,6 +685,7 @@ class MainWindow:
             ("rotate_right", lambda: self._rotate_view(15)),
             ("reset_rotation", self._reset_rotation),
             ("toggle_theme", self._toggle_theme),
+            ("settings", self._open_settings),
         ):
             self._actions.register(key, handler)
 
@@ -962,7 +858,8 @@ class MainWindow:
         self._build_saved_styles(parent)
 
         ttk.Separator(parent, orient="horizontal").pack(fill="x", pady=12)
-        self._build_settings_tab(parent)
+        self._build_page_panel(parent)
+        self._build_diagnostics(parent)
 
     def _build_saved_styles(self, parent: ttk.Frame) -> None:
         """Keeping a tuned style, and letting go of one.
@@ -1332,115 +1229,158 @@ class MainWindow:
             self._status.set_message(f"Could not load presets: {exc}")
             return {}
 
-    def _build_settings_tab(self, parent: ttk.Frame) -> None:
-        # Label Settings Section
-        ttk.Label(parent, text="Label Settings", font=theme.font("heading")).pack(anchor="w", pady=(0, 6))
+    def _build_page_panel(self, parent: ttk.Frame) -> None:
+        """Page composition for the SVG export: paper, margins, furniture.
 
-        # Font family
-        row = ttk.Frame(parent)
-        row.pack(fill="x", pady=2)
-        ttk.Label(row, text="Font Family", width=13).pack(side="left")
-        self._label_font_var = tk.StringVar(value="Arial")
-        font_combo = ttk.Combobox(row, textvariable=self._label_font_var, values=["Arial", "Helvetica", "Times", "Courier", "Verdana"], width=15)
-        font_combo.pack(side="left")
-
-        # Font size
-        row = ttk.Frame(parent)
-        row.pack(fill="x", pady=2)
-        ttk.Label(row, text="Font Size", width=13).pack(side="left")
-        self._label_size_var = tk.IntVar(value=12)
-        ttk.Spinbox(row, from_=8, to=24, textvariable=self._label_size_var, width=10).pack(side="left")
-
-        # Label visibility lives in the left sidebar's "Labels" group, which
-        # toggles the places, shops, and amenities layers for real. A second set
-        # of "Show Labels" checkboxes used to sit here wired to nothing, which
-        # left two identically labelled Place Names controls in one window.
-
-        ttk.Separator(parent, orient="horizontal").pack(fill="x", pady=10)
-        ttk.Label(parent, text="Renderer", font=theme.font("heading")).pack(anchor="w", pady=(0, 6))
+        All of it off by default and asked for per export rather than
+        remembered as map state — the map is the product, and nothing here
+        changes it, which is why none of it lands in the session or in undo.
+        """
+        section_heading(parent, "Page", "SVG export")
 
         row = ttk.Frame(parent)
         row.pack(fill="x", pady=2)
-        ttk.Label(row, text="Device Scale", width=13).pack(side="left")
-        ttk.Entry(row, textvariable=self._device_scale_var, width=10).pack(side="left")
-
-        ttk.Separator(parent, orient="horizontal").pack(fill="x", pady=10)
-        ttk.Label(parent, text="Provider", font=theme.font("heading")).pack(anchor="w", pady=(0, 6))
-        ttk.Label(parent, text="Online-only mode using Overpass API", font=theme.font("caption")).pack(anchor="w", pady=(0, 4))
+        ttk.Label(row, text="Paper", width=11, font=theme.font("caption")).pack(side="left")
+        ttk.OptionMenu(
+            row, self._paper_preset_var, self._paper_preset_var.get(), *PAPER_PRESETS
+        ).pack(side="left", fill="x", expand=True)
 
         row = ttk.Frame(parent)
         row.pack(fill="x", pady=2)
-        ttk.Label(row, text="Endpoint", width=13).pack(side="left")
-        ttk.Entry(row, textvariable=self._provider_endpoint_var).pack(side="left", fill="x", expand=True)
+        ttk.Label(row, text="Orientation", width=11, font=theme.font("caption")).pack(side="left")
+        ttk.OptionMenu(
+            row, self._paper_orientation_var, self._paper_orientation_var.get(),
+            "Landscape", "Portrait",
+        ).pack(side="left", fill="x", expand=True)
 
-        row = ttk.Frame(parent)
-        row.pack(fill="x", pady=2)
-        ttk.Label(row, text="Req/sec", width=13).pack(side="left")
-        ttk.Entry(row, textvariable=self._provider_rps_var, width=10).pack(side="left")
+        ttk.Checkbutton(
+            parent, text="Title block", variable=self._include_title_var,
+            command=self._refresh_title_fields,
+        ).pack(anchor="w", pady=1)
 
-        row = ttk.Frame(parent)
-        row.pack(fill="x", pady=2)
-        ttk.Label(row, text="Timeout (s)", width=13).pack(side="left")
-        ttk.Entry(row, textvariable=self._provider_timeout_var, width=10).pack(side="left")
+        # The title fields appear with the title block, because two empty boxes
+        # for a block that is switched off are two questions nobody asked.
+        self._title_fields = ttk.Frame(parent)
+        for label, var in (("Title", self._map_title_var), ("Subtitle", self._map_subtitle_var)):
+            row = ttk.Frame(self._title_fields)
+            row.pack(fill="x", pady=1)
+            ttk.Label(row, text=label, width=11, font=theme.font("caption")).pack(side="left")
+            ttk.Entry(row, textvariable=var).pack(side="left", fill="x", expand=True)
+        self._refresh_title_fields()
 
-        ttk.Button(parent, text="Apply Settings", command=self._apply_runtime_settings).pack(fill="x", pady=(8, 0))
+        for text, var, why in (
+            ("Scale bar", self._include_scale_bar_var,
+             "A bar of known ground length, labelled in the projection's own units."),
+            ("North arrow", self._include_north_arrow_var, ""),
+            ("Legend", self._include_legend_var,
+             "The first ten visible layers, named as the layer panel names them."),
+            ("Background", self._include_background_var,
+             "Off exports a transparent SVG for compositing. Dark presets need it on."),
+        ):
+            check = ttk.Checkbutton(parent, text=text, variable=var)
+            check.pack(anchor="w", pady=1)
+            if why:
+                tooltip.attach(check, why)
 
+    def _refresh_title_fields(self) -> None:
+        if bool(self._include_title_var.get()):
+            self._title_fields.pack(fill="x", pady=(2, 0))
+        else:
+            self._title_fields.pack_forget()
+
+    def _build_diagnostics(self, parent: ttk.Frame) -> None:
+        """Put away, behind a disclosure.
+
+        Genuinely useful and genuinely not part of making a map, so it stops
+        occupying the rail between the styles and the export.
+        """
+        self._diagnostics_shown = tk.BooleanVar(value=False)
+        ttk.Button(parent, text="Diagnostics", command=self._toggle_diagnostics).pack(
+            fill="x", pady=(10, 0)
+        )
+        self._diagnostics = ttk.Frame(parent)
+        ttk.Checkbutton(
+            self._diagnostics, text="Enable diagnostics logging",
+            variable=self._debug_enabled_var,
+        ).pack(anchor="w", pady=(4, 2))
         ttk.Label(
-            parent,
-            text="Sources and their files are chosen in the Sources list above.",
-            font=theme.font("caption"),
-            wraplength=280,
-        ).pack(anchor="w", pady=(6, 6))
-        ttk.Label(parent, text="Apply Settings after changing source paths.", font=theme.font("caption"), wraplength=280).pack(anchor="w", pady=(4, 0))
-        ttk.Label(parent, textvariable=self._provider_status_var, justify="left", wraplength=280).pack(anchor="w", pady=(4, 0))
+            self._diagnostics, text=f"Log: {self._debug_log_file}",
+            font=theme.font("caption2"), wraplength=250, justify="left",
+        ).pack(anchor="w")
+        row = ttk.Frame(self._diagnostics)
+        row.pack(fill="x", pady=(4, 0))
+        ttk.Button(row, text="Copy", command=self._copy_diagnostics).pack(
+            side="left", fill="x", expand=True, padx=(0, 3)
+        )
+        ttk.Button(row, text="Save…", command=self._save_diagnostics).pack(
+            side="left", fill="x", expand=True, padx=(3, 0)
+        )
+        ttk.Label(
+            self._diagnostics, textvariable=self._perf_summary_var, justify="left",
+            wraplength=250, font=theme.font("caption2"),
+        ).pack(anchor="w", pady=(4, 0))
 
-        ttk.Separator(parent, orient="horizontal").pack(fill="x", pady=10)
-        ttk.Label(parent, text="Export Composition", font=theme.font("heading")).pack(anchor="w", pady=(0, 6))
+    def _toggle_diagnostics(self) -> None:
+        if self._diagnostics_shown.get():
+            self._diagnostics.pack_forget()
+        else:
+            self._diagnostics.pack(fill="x")
+        self._diagnostics_shown.set(not self._diagnostics_shown.get())
 
-        row = ttk.Frame(parent)
-        row.pack(fill="x", pady=2)
-        ttk.Label(row, text="Paper", width=13).pack(side="left")
-        ttk.OptionMenu(row, self._paper_preset_var, self._paper_preset_var.get(), *PAPER_PRESETS.keys()).pack(side="left", fill="x", expand=True)
+    def _open_settings(self) -> None:
+        """Preferences, at ⌘, where they belong."""
+        if self._settings_window is None:
+            self._settings_window = SettingsWindow(
+                self._root,
+                config=self.config,
+                settings=lambda: self._settings,
+                on_change=self._apply_settings,
+                on_clear_cache=self._clear_cache,
+                cache_summary=lambda: self._status.cache,
+            )
+        self._settings_window.show()
 
-        row = ttk.Frame(parent)
-        row.pack(fill="x", pady=2)
-        ttk.Label(row, text="Orientation", width=13).pack(side="left")
-        ttk.OptionMenu(row, self._paper_orientation_var, self._paper_orientation_var.get(), "Landscape", "Portrait").pack(side="left", fill="x", expand=True)
+    def _apply_settings(self, settings: UserSettings) -> None:
+        """Adopt a preference the moment it changes, and write it down.
 
-        row = ttk.Frame(parent)
-        row.pack(fill="x", pady=2)
-        ttk.Label(row, text="Title", width=13).pack(side="left")
-        ttk.Entry(row, textvariable=self._map_title_var).pack(side="left", fill="x", expand=True)
+        No Apply button: a preferences window with a commit step invites the
+        state where what you see and what the application is using are
+        different things.
+        """
+        previous, self._settings = self._settings, settings
+        try:
+            self._settings_store.save(settings)
+        except OSError as exc:  # noqa: BLE001
+            self._logger.warning("could not save settings: %s", exc)
 
-        row = ttk.Frame(parent)
-        row.pack(fill="x", pady=2)
-        ttk.Label(row, text="Subtitle", width=13).pack(side="left")
-        ttk.Entry(row, textvariable=self._map_subtitle_var).pack(side="left", fill="x", expand=True)
+        self.controller.data_source_manager.set_overpass_settings(
+            requests_per_second=settings.provider_rps_limit
+        )
+        if hasattr(self.renderer, "device_scale"):
+            self.renderer.device_scale = settings.device_scale
+        if hasattr(self.renderer, "set_label_font_family"):
+            self.renderer.set_label_font_family(settings.label_font_family)
+        if hasattr(self.renderer, "set_label_font_size"):
+            self.renderer.set_label_font_size(settings.label_font_size)
 
-        ttk.Checkbutton(parent, text="Include title block", variable=self._include_title_var).pack(anchor="w", pady=1)
-        ttk.Checkbutton(parent, text="Include scale bar", variable=self._include_scale_bar_var).pack(anchor="w", pady=1)
-        ttk.Checkbutton(parent, text="Include north arrow", variable=self._include_north_arrow_var).pack(anchor="w", pady=1)
-        ttk.Checkbutton(parent, text="Include simple legend", variable=self._include_legend_var).pack(anchor="w", pady=1)
-        ttk.Checkbutton(parent, text="Include background", variable=self._include_background_var).pack(anchor="w", pady=1)
+        if settings.theme_mode != previous.theme_mode:
+            self._theme_mode = settings.theme_mode
+            self._apply_theme()
+        # The label setters only mark the picture cache dirty, so without this a
+        # font change sits invisible until the next fetch.
+        self._schedule_redraw()
 
-        # Saving a style lives with the styles now, not at the foot of a rail
-        # of unrelated settings, and it asks for the name rather than needing
-        # one typed into a box first.
-
-        ttk.Separator(parent, orient="horizontal").pack(fill="x", pady=10)
-        ttk.Label(parent, text=f"Cache: {self.config.cache_dir}").pack(anchor="w")
-
-        ttk.Separator(parent, orient="horizontal").pack(fill="x", pady=10)
-        ttk.Label(parent, text="Diagnostics", font=theme.font("heading")).pack(anchor="w", pady=(0, 6))
-        ttk.Checkbutton(parent, text="Enable diagnostics logging", variable=self._debug_enabled_var).pack(anchor="w", pady=(0, 4))
-        ttk.Label(parent, text=f"Log: {self._debug_log_file}").pack(anchor="w")
-        diag_actions = ttk.Frame(parent)
-        diag_actions.pack(fill="x", pady=(4, 0))
-        diag_actions.grid_columnconfigure(0, weight=1)
-        diag_actions.grid_columnconfigure(1, weight=1)
-        ttk.Button(diag_actions, text="Copy Diagnostics", command=self._copy_diagnostics).grid(row=0, column=0, sticky="ew", padx=(0, 3))
-        ttk.Button(diag_actions, text="Save Diagnostics", command=self._save_diagnostics).grid(row=0, column=1, sticky="ew", padx=(3, 0))
-        ttk.Label(parent, textvariable=self._perf_summary_var, justify="left", wraplength=280).pack(anchor="w", pady=(4, 0))
+    def _clear_cache(self) -> None:
+        """Empty the cache, and say what that came to."""
+        try:
+            removed = self.controller.data_source_manager.clear_cache()
+        except Exception as exc:  # noqa: BLE001
+            self._status.set_message(f"Could not clear the cache: {exc}", error=True)
+            return
+        self._status.set_cache("empty")
+        self._status.set_message(
+            f"Cache cleared ({removed} entries)" if removed else "Cache cleared"
+        )
 
     def _canvas_surround_color(self) -> str:
         """Colour for the preview canvas outside the rendered image.
@@ -1454,47 +1394,6 @@ class MainWindow:
         if scene is not None:
             return scene.background.to_hex()
         return "#2b2b2b" if self._theme_mode == "dark" else "#f5f5f5"
-
-    def _sync_label_font_to_renderer(self) -> None:
-        """Push the panel's label font onto the renderer at startup.
-
-        The panel opens showing Arial at 12pt while the renderer defaults to
-        its own face at 10pt, so without this the first render disagrees with
-        what the sidebar says until Apply Settings is pressed once.
-        """
-        if hasattr(self.renderer, "set_label_font_family"):
-            self.renderer.set_label_font_family(self._label_font_var.get().strip())
-        if hasattr(self.renderer, "set_label_font_size"):
-            self.renderer.set_label_font_size(max(6, min(24, int(self._label_size_var.get()))))
-
-    def _apply_runtime_settings(self) -> None:
-        endpoint = self._provider_endpoint_var.get().strip()
-        rps = max(0.05, float(self._provider_rps_var.get()))
-        timeout_seconds = max(5.0, float(self._provider_timeout_var.get()))
-        device_scale = max(1.0, min(4.0, float(self._device_scale_var.get())))
-        label_font_size = max(6, min(24, int(self._label_size_var.get())))
-        label_font_family = self._label_font_var.get().strip()
-
-        self.controller.data_source_manager.set_overpass_settings(
-            endpoint=endpoint,
-            timeout_seconds=timeout_seconds,
-            requests_per_second=rps,
-        )
-        self.controller.data_source_manager.set_active_map_model(self._selected_map_model_id())
-        for provider_id, var in self._optional_source_vars.items():
-            self.controller.data_source_manager.set_optional_source_path(provider_id, var.get().strip() or None)
-        self._provider_status_var.set(self._format_provider_status())
-        if hasattr(self.renderer, "device_scale"):
-            setattr(self.renderer, "device_scale", device_scale)
-        if hasattr(self.renderer, "set_label_font_size"):
-            self.renderer.set_label_font_size(label_font_size)
-        if hasattr(self.renderer, "set_label_font_family"):
-            self.renderer.set_label_font_family(label_font_family)
-
-        # The label setters only mark the picture cache dirty, so without a
-        # redraw a font change sat invisible until the next fetch.
-        self._schedule_redraw()
-        self._status.set_message(f"Settings applied - Model: {self._map_model_var.get()}")
 
     def _save_current_as_preset(self) -> None:
         """Ask for a name, seeded with the likely one, and refuse a bad one.
@@ -2160,69 +2059,6 @@ class MainWindow:
             scale = float(getattr(self.renderer, "device_scale", 1.0))
         return max(1.0, min(4.0, scale))
 
-    def _selected_map_model_id(self) -> str:
-        return self._map_model_label_to_id.get(self._map_model_var.get(), "osm_live")
-
-    def _format_provider_status(self) -> str:
-        statuses = self.controller.data_source_manager.get_provider_statuses()
-        lines: list[str] = []
-        for provider_id in ("local_osm_pbf", "vector_tiles", "natural_earth", "overture", "terrain_dem"):
-            status = statuses.get(provider_id)
-            if status is None:
-                continue
-            mark = "ok" if status.available else "missing"
-            detail = f" - {status.detail}" if status.detail else ""
-            lines.append(f"{status.label}: {mark}{detail}")
-        return "\n".join(lines)
-
-    def _apply_source_library_preset(self) -> None:
-        preset = next(
-            (item for item in SOURCE_LIBRARY_PRESETS if item.label == self._source_library_var.get()),
-            SOURCE_LIBRARY_PRESETS[0],
-        )
-        self._source_library_note_var.set(preset.note)
-        if preset.label == "Custom":
-            self._status.set_message("Custom source mode: use model and path fields manually")
-            return
-
-        model_label = self._map_model_id_to_label.get(preset.model_id)
-        if model_label is not None:
-            self._map_model_var.set(model_label)
-
-        for provider_id, var in self._optional_source_vars.items():
-            var.set("")
-        root = self._repo_root()
-        missing: list[str] = []
-        for provider_id, relative_path in preset.paths.items():
-            candidate = root / relative_path
-            if candidate.exists():
-                self._optional_source_vars[provider_id].set(str(candidate))
-            else:
-                missing.append(relative_path)
-
-        if preset.aoi is not None:
-            self._set_aoi(*preset.aoi)
-        if preset.quality_label is not None:
-            self._quality_var.set(preset.quality_label)
-
-        self._apply_runtime_settings()
-        if missing:
-            messagebox.showwarning(
-                "Source preset",
-                "Some sample sources were not found:\n" + "\n".join(missing),
-            )
-        else:
-            self._status.set_message(f"Source preset applied: {preset.label}")
-
-    def _apply_and_fetch_source_library_preset(self) -> None:
-        self._apply_source_library_preset()
-        if self._source_library_var.get() != "Custom":
-            self._on_fetch_clicked()
-
-    def _use_installed_sample_sources(self) -> None:
-        self._source_library_var.set("Installed Samples")
-        self._apply_source_library_preset()
-
     def _repo_root(self) -> Path:
         return Path(__file__).resolve().parents[3]
 
@@ -2245,13 +2081,12 @@ class MainWindow:
             selected = filedialog.askopenfilename(title="Choose map source", filetypes=filetypes)
         if not selected:
             return
-        # Three places need to agree: the stack decides whether the source can
-        # be ticked, the manager does the reading, and the old path field is
-        # still what Apply Settings writes from.
+        # Two places need to agree: the stack decides whether the source can be
+        # ticked, and the manager does the reading. There used to be a third —
+        # a set of path variables that Apply Settings wrote from — and nothing
+        # reads them now that the button is gone.
         self.source_stack.set_path(provider_id, selected)
         self.controller.data_source_manager.set_optional_source_path(provider_id, selected)
-        if provider_id in self._optional_source_vars:
-            self._optional_source_vars[provider_id].set(selected)
         if self._sources_panel is not None:
             self._sources_panel.rebuild()
         self._status.set_message(f"{provider_id}: {selected}")
