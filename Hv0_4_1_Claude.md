@@ -1185,4 +1185,48 @@ interface needs looking at, say so and let them pick the moment.
 Phases 5, 6 and 7 remain visually unverified, and that is the honest state of
 them rather than something to be quietly resolved.
 
+### Since the phases: paste, the mark, and the docs
+
+- **Paste Coordinates (⇧⌘V)** — the last verb the macOS Map menu had that this
+  one lacked. Reads a bounding box in this app's own order, two corners, a
+  point, or a Google or Apple Maps link. It refuses prose, which took a rule I
+  did not have at first: *a coordinate is written with a decimal point*. Without
+  it, "meet me at 5 on the 23rd, 2 miles, 40 minutes" scraped four integers,
+  read them as two corners, and put the frame in the Sahara. 24 tests.
+- **The maker's mark on the About window**, from the same vector file the macOS
+  app ships — same graphics, same blue. The lockup is drawn on a canvas now: a
+  Tk label paints its own background, so the title, subtitle and version were
+  sitting in opaque boxes over the map, which is what the first run of the
+  window showed. The scrim that keeps white legible is baked into the picture,
+  because a Tk canvas cannot composite a translucent layer over an image.
+- **`FILE_STRUCTURE.md`, `MANUAL.md` and `README.md`** brought up to date. They
+  still told the reader to click Apply Settings and to pick sources from a
+  Source Library, both removed, and listed five `ui/` modules where there are
+  sixteen.
+
+## Still to be made
+
+Ranked by what it costs to leave.
+
+1. **Nothing has been looked at.** Phases 5–13 have never been seen in a running
+   window. The About window is the one exception, and it needed two fixes on
+   first sight. `documents/NextSessionPrompt.md` sets up the session that
+   changes this.
+2. **"This will take a while" before an expensive fetch** (B13.2) — still
+   degrades quality silently and mentions it afterwards.
+3. **Resizable and collapsible columns** (B1.2, B1.3) — still fixed at
+   360 / flex / 300; the `ttk.PanedWindow` swap from D2 never happened.
+4. **Window size** (B1.5) — opens 1600×1080, minimum 1400×980. The Mac is
+   1100×800, minimum 960×620.
+5. **Toolbar polish** (B2.4, B2.5, B2.7) — no area readout, no Cancel beside
+   Render map, and Export is a bare SVG button with PDF and PNG only in the menu.
+6. **Layers panel** (B6b.3, B6b.5, B6b.6) — `All`/`None` in the header, the
+   labels-versus-features tooltip, and hiding the group heading when there is
+   one group.
+7. **SVG export does not reveal the file.** PDF and PNG do. Mine, and
+   inconsistent.
+8. **No application icon** (B14.7).
+9. **`featured_names()`** survives in `style_previews.py` with no caller but its
+   own default and its own tests. The "featured six" idea died in Phase 6.
+
 *Nothing pushed.*
