@@ -1,6 +1,6 @@
 # Hipparchus
 
-**Version 0.3.2**
+**Version 0.4.1**
 
 **Hipparchus is an online desktop vector cartography app for creating clean, editable maps from OpenStreetMap data and exporting them as Illustrator-friendly SVG files.**
 
@@ -441,7 +441,7 @@ $env:HIPPARCHUS_VECTOR_TILES = "datasets\pmtiles\firenze.pmtiles"
 .\run_hprs.ps1
 ```
 
-Inside the app, the right sidebar also includes a `Source Library` selector with one-click presets for OSM Live, installed samples, Florence PMTiles, Natural Earth World, Athens DEM, and Athens Overture.
+Sources are ticked individually in the Sources list and stack rather than replace; the one-click `Source Library` presets that predated it were removed in 0.4.1, along with the map-model dropdown they shared a purpose with.
 
 ## Running Checks
 

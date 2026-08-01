@@ -1,6 +1,6 @@
 # Hipparchus File Structure
 
-**Version 0.3.2**
+**Version 0.4.1**
 
 This document describes the repository layout of Hipparchus, an online desktop
 vector cartography application. It complements the "Project Layout" section of
@@ -42,19 +42,33 @@ hipparchus/
 
 ```text
 src/hipparchus/
-├── __init__.py               Package root; exposes __version__ = "0.3.2"
+├── __init__.py               Package root; exposes __version__
 ├── __main__.py               `python -m hipparchus` entry point
 ├── main.py                   Application launcher / main() entry
 │
-├── application/              Orchestration between UI, data, and rendering
+├── application/              The rules. Everything decidable without a widget
+│   ├── about.py              What the app is and what it owes, as data
 │   ├── controller.py         Central controller wiring requests to services
+│   ├── coordinate_import.py  Clipboard text to an area, refusing prose
+│   ├── geocoding.py          Place names to frames, clamped to map-sized
 │   ├── layer_inventory.py    What a rendered map contains, for the layer panel
+│   ├── locator.py            What a click chooses; the draw-area mode
+│   ├── places.py             The saved places, with ⌘1…⌘9 derived from them
 │   ├── preset_store.py       Persistent custom preset storage
 │   ├── presets.py            Built-in cartographic presets
+│   ├── provenance.py         One word for what a whole map is made of
 │   ├── quality.py            Quality / preview / export profile modes
+│   ├── readiness.py          Why Render map will not work, before the click
 │   ├── scene_builder.py      Clips, simplifies, classifies, and derives geometry
+│   ├── session.py            Every choice the window holds, as one value
+│   ├── session_edit.py       What the Edit menu calls a change
+│   ├── session_history.py    Undo, with the rule that a fetch is never redone
 │   ├── source_stack.py       Composable map sources; resolves them into a fetch
-│   └── style_previews.py     Preset thumbnails for the style picker
+│   ├── style_catalogue.py    Which styles exist, and what may be done to them
+│   ├── style_previews.py     Preset thumbnails for the style picker
+│   ├── viewport.py           What is on screen, and what shape to ask for
+│   ├── world_outline.py      The Natural Earth coastline the locator draws
+│   └── world_view.py         Where the locator is looking, and how closely
 │
 ├── cache/                    Disk cache for Overpass responses
 │   ├── housekeeping.py       Cache pruning and maintenance
@@ -65,8 +79,7 @@ src/hipparchus/
 │   ├── fetch_progress.py     Per-source progress and cancellation
 │   ├── application.py        Application object and lifecycle
 │   ├── config.py             Configuration and environment variables
-│   ├── project_state.py      In-memory project / session state
-│   └── settings_store.py     Persistent settings storage
+│   └── settings_store.py     Preferences, clamped; shared with the macOS app
 │
 ├── data_sources/            Map data acquisition and conversion
 │   ├── data_source_manager.py  Selects and configures active sources
@@ -113,18 +126,40 @@ src/hipparchus/
 │   └── skia_renderer.py      Skia-backed renderer
 │
 └── ui/                       Desktop interface
-    ├── main_window.py        Tkinter main window
-    ├── minimap.py            Locator showing where the current area is
-    └── panels.py             Sources / Layers / Style sidebar panels
+    ├── about_window.py       The splash, and the attribution it carries
+    ├── actions.py            The verb table both the menu and the buttons read
+    ├── icons.py              Vector icons drawn on small canvases
+    ├── locator_window.py     The floating Locator, with room to aim in
+    ├── main_window.py        Tkinter main window — wiring, not rules
+    ├── map_canvas.py         The map: pan, zoom, turn, marquee, controls
+    ├── menubar.py            The menu bar, built from the verb table
+    ├── panels.py             Sources / Layers / Style sidebar panels
+    ├── search_field.py       Type a place, choose from the frames offered
+    ├── settings_window.py    Preferences, at ⌘,
+    ├── shortcuts.py          Accelerators, per platform
+    ├── status_bar.py         Per-source progress, provenance, cache
+    ├── theme.py              Colour, contrast and type, decided once
+    ├── tooltip.py            Tooltips, and where they are allowed to appear
+    ├── world_map.py          The interactive world, drawn from Natural Earth
+    └── assets/               The maker's mark and the About key art
 ```
 
 ## Tests (`tests/`)
 
-20 pytest modules covering models, projection, smoothing, simplification,
-scene building, rendering state, export/quality profiles, SVG export, caching,
-presets, project state, configuration, geometry tools/adapter, the optional
-local-source providers and their bbox pre-filter, and the Overpass provider,
-query, and GeoJSON conversion paths.
+62 pytest modules. The map half covers projection, smoothing,
+simplification, scene building, rendering state, export and quality profiles,
+SVG, PDF and PNG export, caching, presets, the optional local-source providers
+and their bbox pre-filter, and the Overpass provider, query and GeoJSON paths.
+
+The interface half covers the rules the window obeys rather than the widgets
+themselves: the session and its undo history, what the Edit menu calls a
+change, why Render map will not work, the accelerator map, colour contrast and
+the type scale, the locator's arithmetic, the coordinate parser, the geocoder's
+clamping, and the attribution the About window is obliged to carry.
+
+**Tests that build Tk widgets are skipped by default.** They open real windows
+on the machine running the suite. `HIPPARCHUS_GUI_TESTS=1 pytest` runs them
+deliberately; see `CLAUDE.md`.
 
 ```text
 tests/
@@ -142,7 +177,6 @@ tests/
 ├── test_gibs_provider.py
 ├── test_illumination.py
 ├── test_layer_inventory.py
-├── test_minimap.py
 ├── test_source_stack.py
 ├── test_style_previews.py
 ├── test_map_models.py
@@ -154,7 +188,6 @@ tests/
 ├── test_overpass_query.py
 ├── test_package_imports.py
 ├── test_preset_store.py
-├── test_project_state.py
 ├── test_projection.py
 ├── test_quality_profiles.py
 ├── test_rendering_state.py
