@@ -19,12 +19,13 @@ from tkinter import filedialog, messagebox, ttk
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
+from hipparchus.application import places
 from hipparchus.application.controller import ApplicationController
 from hipparchus.core.fetch_progress import CancellationToken, FetchReporter
 from hipparchus.application.source_stack import SourceStack
 from hipparchus.application.style_previews import featured_names
 from hipparchus.ui import minimap
-from hipparchus.ui import icons, shortcuts
+from hipparchus.ui import icons, shortcuts, theme
 from hipparchus.ui.icons import IconButton
 from hipparchus.ui.panels import LayersPanel, SourcesPanel, StylePicker, section_heading
 from hipparchus.application.presets import (
@@ -44,27 +45,9 @@ from hipparchus.plugins.interfaces import LoadedPlugin
 from hipparchus.rendering.engine import Renderer
 from hipparchus.rendering.models import RenderScene, ViewportState
 
-LOCATION_PRESETS: dict[str, tuple[float, float, float, float]] = {
-    "London Center": (-0.15, 51.48, -0.02, 51.56),
-    "Athens Center": (23.68, 37.94, 23.80, 38.03),
-    "New York Midtown": (-74.02, 40.72, -73.94, 40.79),
-    "Paris Core": (2.26, 48.83, 2.38, 48.89),
-    "Tokyo Central": (139.68, 35.65, 139.79, 35.73),
-    "Kyoto Center": (135.73, 34.98, 135.79, 35.03),
-    "San Francisco Downtown": (-122.44, 37.76, -122.39, 37.80),
-    "Venice Historic": (12.31, 45.42, 12.36, 45.45),
-    # Places chosen because they show what the new sources can do: a drowned
-    # caldera, a coastal shelf, a fault zone, a delta at sea level, a monsoon
-    # coast, a highland capital, and an estuary city.
-    "Santorini Caldera": (25.32, 36.33, 25.50, 36.48),
-    "Paphos Coast": (32.36, 34.72, 32.50, 34.83),
-    "San Francisco Bay": (-122.53, 37.70, -122.35, 37.84),
-    "Miami Beach": (-80.32, 25.70, -80.11, 25.86),
-    "Goa Coast": (73.74, 15.38, 74.00, 15.60),
-    "Addis Ababa": (38.65, 8.90, 38.88, 9.10),
-    "Shanghai Bund": (121.35, 31.15, 121.60, 31.33),
-    "Sydney Harbour": (151.14, -33.90, 151.30, -33.80),
-}
+# The saved places live in `application/places.py`, where the bounding
+# boxes are checked and where the ⌘1…⌘9 run is derived from the same list
+# the sidebar shows — two literals could not drift apart if they are one.
 
 LEFT_SIDEBAR_WIDTH = 360
 RIGHT_SIDEBAR_WIDTH = 300
@@ -187,40 +170,9 @@ PAPER_PRESETS: dict[str, tuple[int, int]] = {
     "Poster": (5400, 7200),
 }
 
-THEME_PALETTES: dict[str, dict[str, str]] = {
-    "light": {
-        "bg": "#f2f2f2",
-        "panel": "#f7f7f7",
-        "panel_alt": "#ffffff",
-        "text": "#151515",
-        "muted": "#555555",
-        "border": "#d0d0d0",
-        "button": "#ffffff",
-        "button_active": "#e7eef8",
-        "field": "#ffffff",
-        "field_text": "#151515",
-        "select": "#d7e8ff",
-        "select_text": "#111111",
-        "canvas_bg": "#f5f5f5",
-        "canvas_border": "#d0d0d0",
-    },
-    "dark": {
-        "bg": "#17191f",
-        "panel": "#20232b",
-        "panel_alt": "#252936",
-        "text": "#f2f5f8",
-        "muted": "#b7beca",
-        "border": "#3d4350",
-        "button": "#2f3543",
-        "button_active": "#3c465a",
-        "field": "#11141b",
-        "field_text": "#f8fafc",
-        "select": "#44648f",
-        "select_text": "#ffffff",
-        "canvas_bg": "#f3f3f1",
-        "canvas_border": "#636b78",
-    },
-}
+# The palette, the accent and the type scale live in `ui/theme.py`, where they
+# can be checked: that body text clears a contrast floor on its own ground, and
+# that the accent drawn on the map is chosen against the map.
 
 
 @dataclass
@@ -460,7 +412,7 @@ class MainWindow:
         top.grid_columnconfigure(0, weight=1)
         top.grid_columnconfigure(1, weight=0)
 
-        ttk.Label(top, text="Hipparchus", font=("SF Pro Text", 15, "bold")).grid(row=0, column=0, sticky="w")
+        ttk.Label(top, text="Hipparchus", font=theme.font("title")).grid(row=0, column=0, sticky="w")
         ttk.Button(top, text="Dark/Light", command=self._toggle_theme).grid(row=0, column=1, sticky="e")
 
         # Controls using pack for reliable layout
@@ -493,7 +445,7 @@ class MainWindow:
         self._quality_menu = ttk.OptionMenu(controls, self._quality_var, quality_labels[0], *quality_labels)
         self._quality_menu.pack(side="left", padx=(0, 8))
 
-        ttk.Label(controls, textvariable=self._composition_var, font=("SF Pro Text", 10)).pack(side="left", padx=(4, 8))
+        ttk.Label(controls, textvariable=self._composition_var, font=theme.font("label")).pack(side="left", padx=(4, 8))
 
         # Right side - Export
         ttk.Button(controls, text="Export SVG", command=self._on_export_clicked).pack(side="right")
@@ -522,7 +474,7 @@ class MainWindow:
         right.grid(row=0, column=1, sticky="e")
         self._progress = ttk.Progressbar(right, mode="indeterminate", length=120)
         self._progress.pack(side="left", padx=(0, 8))
-        ttk.Label(right, textvariable=self._progress_label_var, font=("SF Pro Text", 10)).pack(side="left", padx=(0, 8))
+        ttk.Label(right, textvariable=self._progress_label_var, font=theme.font("label")).pack(side="left", padx=(0, 8))
         self._cancel_button = ttk.Button(right, text="Cancel", width=8, command=self._on_cancel_fetch)
         self._cancel_button.pack(side="left", padx=(0, 8))
         self._cancel_button.state(["disabled"])
@@ -532,11 +484,11 @@ class MainWindow:
         # FRAME: where you are, and how big the frame is. The eight nudge
         # buttons that used to describe an area without ever showing it are
         # replaced by the locator plus Draw area on the map itself.
-        ttk.Label(parent, text="FRAME", font=("SF Pro Text", 10, "bold")).pack(anchor="w", pady=(0, 6))
+        ttk.Label(parent, text="FRAME", font=theme.font("section")).pack(anchor="w", pady=(0, 6))
         self._minimap = tk.Canvas(parent, width=200, height=104, highlightthickness=1, bd=0)
         self._minimap.pack(fill="x", pady=(0, 2))
         self._minimap_caption = tk.StringVar(value="")
-        ttk.Label(parent, textvariable=self._minimap_caption, font=("SF Pro Text", 9)).pack(anchor="w", pady=(0, 8))
+        ttk.Label(parent, textvariable=self._minimap_caption, font=theme.font("caption")).pack(anchor="w", pady=(0, 8))
 
         readout = ttk.Frame(parent)
         readout.pack(fill="x")
@@ -544,11 +496,11 @@ class MainWindow:
         for row, (label, key) in enumerate(
             (("North", "max_lat"), ("South", "min_lat"), ("West", "min_lon"), ("East", "max_lon"))
         ):
-            ttk.Label(readout, text=label, font=("SF Pro Text", 10)).grid(row=row, column=0, sticky="w", pady=1)
+            ttk.Label(readout, text=label, font=theme.font("label")).grid(row=row, column=0, sticky="w", pady=1)
             ttk.Label(
                 readout,
                 textvariable=self._aoi_vars[key],
-                font=("SF Pro Text", 10),
+                font=theme.font("label"),
                 anchor="e",
             ).grid(row=row, column=1, sticky="e", pady=1)
 
@@ -561,22 +513,22 @@ class MainWindow:
         for row, (label, key) in enumerate(
             (("North", "max_lat"), ("South", "min_lat"), ("West", "min_lon"), ("East", "max_lon"))
         ):
-            ttk.Label(self._coord_editor, text=label, width=6, font=("SF Pro Text", 9)).grid(row=row, column=0, sticky="w", pady=2)
+            ttk.Label(self._coord_editor, text=label, width=6, font=theme.font("caption")).grid(row=row, column=0, sticky="w", pady=2)
             ttk.Entry(self._coord_editor, textvariable=self._aoi_vars[key], width=12).grid(row=row, column=1, sticky="ew", pady=2)
         self._coord_editor.grid_columnconfigure(1, weight=1)
 
         ttk.Separator(parent, orient="horizontal").pack(fill="x", pady=12)
-        ttk.Label(parent, text="SAVED PLACES", font=("SF Pro Text", 10, "bold")).pack(anchor="w", pady=(0, 6))
+        ttk.Label(parent, text="SAVED PLACES", font=theme.font("section")).pack(anchor="w", pady=(0, 6))
         self._places_body = ttk.Frame(parent)
         self._places_body.pack(fill="x")
         self._rebuild_saved_places()
 
         ttk.Separator(parent, orient="horizontal").pack(fill="x", pady=12)
-        ttk.Label(parent, text="VIEW", font=("SF Pro Text", 10, "bold")).pack(anchor="w", pady=(0, 6))
+        ttk.Label(parent, text="VIEW", font=theme.font("section")).pack(anchor="w", pady=(0, 6))
         rotation_frame = ttk.Frame(parent)
         rotation_frame.pack(fill="x", pady=(0, 8))
         rotation_frame.grid_columnconfigure(1, weight=1)
-        ttk.Label(rotation_frame, text="Rotation", font=("SF Pro Text", 10)).grid(row=0, column=0, sticky="w", padx=(0, 4))
+        ttk.Label(rotation_frame, text="Rotation", font=theme.font("label")).grid(row=0, column=0, sticky="w", padx=(0, 4))
         self._rotation_var = tk.DoubleVar(value=0.0)
         ttk.Scale(
             rotation_frame,
@@ -626,7 +578,8 @@ class MainWindow:
         for child in self._places_body.winfo_children():
             child.destroy()
         current = self._location_preset_var.get()
-        for name, bounds in LOCATION_PRESETS.items():
+        for place in places.PLACES:
+            name, bounds = place.name, place.bbox
             row = ttk.Frame(self._places_body)
             row.pack(fill="x", pady=1)
             marker = "•  " if name == current else "    "
@@ -636,7 +589,7 @@ class MainWindow:
                 command=lambda n=name: self._use_saved_place(n),
             ).pack(side="left", fill="x", expand=True)
             span = abs(bounds[2] - bounds[0])
-            ttk.Label(row, text=f"{span:.2f}°", font=("SF Pro Text", 9)).pack(side="right", padx=(4, 0))
+            ttk.Label(row, text=f"{span:.2f}°", font=theme.font("caption")).pack(side="right", padx=(4, 0))
 
     def _use_saved_place(self, name: str) -> None:
         self._location_preset_var.set(name)
@@ -645,7 +598,7 @@ class MainWindow:
 
 
     def _build_center_canvas(self, parent: ttk.Frame) -> None:
-        ttk.Label(parent, text="Map Preview", font=("SF Pro Text", 12, "bold")).grid(row=0, column=0, sticky="w", pady=(0, 8))
+        ttk.Label(parent, text="Map Preview", font=theme.font("heading")).grid(row=0, column=0, sticky="w", pady=(0, 8))
         canvas_wrap = ttk.Frame(parent)
         canvas_wrap.grid(row=1, column=0, sticky="nsew")
         canvas_wrap.grid_rowconfigure(0, weight=1)
@@ -668,7 +621,7 @@ class MainWindow:
             280,
             text="Fetch an area to render artistic map structures",
             fill="#555555",
-            font=("SF Pro Text", 13),
+            font=theme.font("lead"),
             justify="center",
             tags=("placeholder",),
         )
@@ -730,7 +683,7 @@ class MainWindow:
 
         row = ttk.Frame(parent)
         row.pack(fill="x", pady=(6, 0))
-        ttk.Label(row, text="All styles", font=("SF Pro Text", 9)).pack(side="left")
+        ttk.Label(row, text="All styles", font=theme.font("caption")).pack(side="left")
         self._preset_menu = ttk.OptionMenu(row, self._preset_var, self._preset_var.get(), *self._preset_options)
         self._preset_menu.pack(side="left", fill="x", expand=True, padx=(6, 0))
 
@@ -888,7 +841,7 @@ class MainWindow:
 
     def _build_settings_tab(self, parent: ttk.Frame) -> None:
         # Label Settings Section
-        ttk.Label(parent, text="Label Settings", font=("SF Pro Text", 11, "bold")).pack(anchor="w", pady=(0, 6))
+        ttk.Label(parent, text="Label Settings", font=theme.font("heading")).pack(anchor="w", pady=(0, 6))
 
         # Font family
         row = ttk.Frame(parent)
@@ -911,7 +864,7 @@ class MainWindow:
         # left two identically labelled Place Names controls in one window.
 
         ttk.Separator(parent, orient="horizontal").pack(fill="x", pady=10)
-        ttk.Label(parent, text="Renderer", font=("SF Pro Text", 11, "bold")).pack(anchor="w", pady=(0, 6))
+        ttk.Label(parent, text="Renderer", font=theme.font("heading")).pack(anchor="w", pady=(0, 6))
 
         row = ttk.Frame(parent)
         row.pack(fill="x", pady=2)
@@ -919,8 +872,8 @@ class MainWindow:
         ttk.Entry(row, textvariable=self._device_scale_var, width=10).pack(side="left")
 
         ttk.Separator(parent, orient="horizontal").pack(fill="x", pady=10)
-        ttk.Label(parent, text="Provider", font=("SF Pro Text", 11, "bold")).pack(anchor="w", pady=(0, 6))
-        ttk.Label(parent, text="Online-only mode using Overpass API", font=("SF Pro Text", 9)).pack(anchor="w", pady=(0, 4))
+        ttk.Label(parent, text="Provider", font=theme.font("heading")).pack(anchor="w", pady=(0, 6))
+        ttk.Label(parent, text="Online-only mode using Overpass API", font=theme.font("caption")).pack(anchor="w", pady=(0, 4))
 
         row = ttk.Frame(parent)
         row.pack(fill="x", pady=2)
@@ -942,14 +895,14 @@ class MainWindow:
         ttk.Label(
             parent,
             text="Sources and their files are chosen in the Sources list above.",
-            font=("SF Pro Text", 9),
+            font=theme.font("caption"),
             wraplength=280,
         ).pack(anchor="w", pady=(6, 6))
-        ttk.Label(parent, text="Apply Settings after changing source paths.", font=("SF Pro Text", 9), wraplength=280).pack(anchor="w", pady=(4, 0))
+        ttk.Label(parent, text="Apply Settings after changing source paths.", font=theme.font("caption"), wraplength=280).pack(anchor="w", pady=(4, 0))
         ttk.Label(parent, textvariable=self._provider_status_var, justify="left", wraplength=280).pack(anchor="w", pady=(4, 0))
 
         ttk.Separator(parent, orient="horizontal").pack(fill="x", pady=10)
-        ttk.Label(parent, text="Export Composition", font=("SF Pro Text", 11, "bold")).pack(anchor="w", pady=(0, 6))
+        ttk.Label(parent, text="Export Composition", font=theme.font("heading")).pack(anchor="w", pady=(0, 6))
 
         row = ttk.Frame(parent)
         row.pack(fill="x", pady=2)
@@ -978,7 +931,7 @@ class MainWindow:
         ttk.Checkbutton(parent, text="Include background", variable=self._include_background_var).pack(anchor="w", pady=1)
 
         ttk.Separator(parent, orient="horizontal").pack(fill="x", pady=10)
-        ttk.Label(parent, text="Presets", font=("SF Pro Text", 11, "bold")).pack(anchor="w", pady=(0, 6))
+        ttk.Label(parent, text="Presets", font=theme.font("heading")).pack(anchor="w", pady=(0, 6))
 
         row = ttk.Frame(parent)
         row.pack(fill="x", pady=2)
@@ -990,7 +943,7 @@ class MainWindow:
         ttk.Label(parent, text=f"Cache: {self.config.cache_dir}").pack(anchor="w")
 
         ttk.Separator(parent, orient="horizontal").pack(fill="x", pady=10)
-        ttk.Label(parent, text="Diagnostics", font=("SF Pro Text", 11, "bold")).pack(anchor="w", pady=(0, 6))
+        ttk.Label(parent, text="Diagnostics", font=theme.font("heading")).pack(anchor="w", pady=(0, 6))
         ttk.Checkbutton(parent, text="Enable diagnostics logging", variable=self._debug_enabled_var).pack(anchor="w", pady=(0, 4))
         ttk.Label(parent, text=f"Log: {self._debug_log_file}").pack(anchor="w")
         diag_actions = ttk.Frame(parent)
@@ -1129,10 +1082,10 @@ class MainWindow:
         return (min_lon, min_lat, max_lon, max_lat)
 
     def _apply_location_preset(self) -> None:
-        preset = LOCATION_PRESETS.get(self._location_preset_var.get())
-        if preset is None:
+        place = places.by_name(self._location_preset_var.get())
+        if place is None:
             return
-        min_lon, min_lat, max_lon, max_lat = preset
+        min_lon, min_lat, max_lon, max_lat = place.bbox
         self._aoi_vars["min_lon"].set(f"{min_lon:.5f}")
         self._aoi_vars["min_lat"].set(f"{min_lat:.5f}")
         self._aoi_vars["max_lon"].set(f"{max_lon:.5f}")
@@ -1143,14 +1096,14 @@ class MainWindow:
         """Preselect a start area and/or auto-fetch on launch (screenshot workflow)."""
         area = self.config.start_area
         if area:
-            if area in LOCATION_PRESETS:
+            if places.by_name(area) is not None:
                 self._location_preset_var.set(area)
                 self._apply_location_preset()
             else:
                 self._logger.warning(
                     "HIPPARCHUS_START_AREA '%s' is not a known area preset; ignoring. Known: %s",
                     area,
-                    ", ".join(LOCATION_PRESETS.keys()),
+                    ", ".join(places.names()),
                 )
         if self.config.fetch_on_start:
             self._on_fetch_clicked()
@@ -1195,32 +1148,32 @@ class MainWindow:
             # Mid-edit coordinates are not an error; the locator just waits.
             return
 
-        palette = THEME_PALETTES[self._theme_mode]
+        palette = theme.palette(self._theme_mode)
         width = int(canvas.cget("width"))
         height = int(canvas.cget("height"))
         layout = minimap.geometry(bounds, width, height)
 
         canvas.delete("all")
-        canvas.configure(bg=palette["panel_alt"], highlightbackground=palette["border"])
+        canvas.configure(bg=palette.panel_alt, highlightbackground=palette.border)
         for x in layout.meridians:
-            canvas.create_line(x, 0, x, height, fill=palette["border"])
+            canvas.create_line(x, 0, x, height, fill=palette.border)
         for y in layout.parallels:
-            canvas.create_line(0, y, width, y, fill=palette["border"])
+            canvas.create_line(0, y, width, y, fill=palette.border)
         # Equator and prime meridian carry the orientation a coastline would.
-        canvas.create_line(0, layout.equator, width, layout.equator, fill=palette["muted"])
-        canvas.create_line(layout.prime_meridian, 0, layout.prime_meridian, height, fill=palette["muted"])
+        canvas.create_line(0, layout.equator, width, layout.equator, fill=palette.muted)
+        canvas.create_line(layout.prime_meridian, 0, layout.prime_meridian, height, fill=palette.muted)
         for text, lx, ly in minimap.hemisphere_labels(width, height):
-            canvas.create_text(lx, ly, text=text, fill=palette["muted"], font=("SF Pro Text", 8))
+            canvas.create_text(lx, ly, text=text, fill=palette.muted, font=theme.font("caption2"))
 
-        canvas.create_rectangle(*layout.box, outline=palette["select_text"], width=2)
+        canvas.create_rectangle(*layout.box, outline=palette.select_text, width=2)
         if layout.marker is not None:
             mx, my = layout.marker
-            canvas.create_oval(mx - 6, my - 6, mx + 6, my + 6, outline=palette["select_text"], width=2)
+            canvas.create_oval(mx - 6, my - 6, mx + 6, my + 6, outline=palette.select_text, width=2)
             # A crosshair reads at a glance where a small ring alone does not.
             for dx, dy in ((-11, 0), (7, 0)):
-                canvas.create_line(mx + dx, my, mx + dx + 4, my, fill=palette["select_text"], width=2)
+                canvas.create_line(mx + dx, my, mx + dx + 4, my, fill=palette.select_text, width=2)
             for dy in (-11, 7):
-                canvas.create_line(mx, my + dy, mx, my + dy + 4, fill=palette["select_text"], width=2)
+                canvas.create_line(mx, my + dy, mx, my + dy + 4, fill=palette.select_text, width=2)
         self._minimap_caption.set(minimap.describe(bounds))
 
     def _set_aoi(self, min_lon: float, min_lat: float, max_lon: float, max_lat: float) -> None:
@@ -1484,7 +1437,7 @@ class MainWindow:
                 height // 2,
                 text="Renderer fallback active (Skia unavailable)\nScene generated successfully",
                 fill="#555555",
-                font=("SF Pro Text", 13),
+                font=theme.font("lead"),
                 justify="center",
             )
             self._status_var.set("Renderer fallback active")
@@ -1617,7 +1570,11 @@ class MainWindow:
             self._canvas.delete(self._select_rect)
         self._select_rect = self._canvas.create_rectangle(
             event.x, event.y, event.x, event.y,
-            outline=THEME_PALETTES[self._theme_mode]["select_text"],
+            # The app's own turquoise, chosen against the ground it is drawn
+            # on rather than against the panels: the canvas shows the scene's
+            # background, which is one of sixteen presets and has nothing to do
+            # with whether the window is in dark mode.
+            outline=theme.accent_for(self._canvas_surround_color()),
             width=2,
             dash=(4, 3),
         )
@@ -1945,11 +1902,11 @@ class MainWindow:
 
     def _restyle_icons(self) -> None:
         """Keep the drawn icons in step with the current appearance."""
-        palette = THEME_PALETTES.get(self._theme_mode, THEME_PALETTES["light"])
+        palette = theme.palette(self._theme_mode)
         icons.restyle_all(
-            colour=palette["text"],
-            background=palette["panel_alt"],
-            hover=palette["button_active"],
+            colour=palette.text,
+            background=palette.panel_alt,
+            hover=palette.button_active,
         )
         self._refresh_minimap()
 
@@ -1959,6 +1916,10 @@ class MainWindow:
         self._root.title(f"{self.config.app_name} ({self._theme_mode} mode)")
 
     def _apply_theme(self) -> None:
+        # Said once, here, so everything drawn later — a swatch border, a
+        # tooltip's ground, an icon — reads the same appearance rather than
+        # each keeping its own copy of which one is in force.
+        theme.set_mode(self._theme_mode)
         style = ttk.Style(master=self._root)
         self._setup_platform_theme(style)
         self._restyle_icons()
@@ -1966,124 +1927,124 @@ class MainWindow:
             self._apply_macos_aqua_appearance()
             return
 
-        palette = THEME_PALETTES.get(self._theme_mode, THEME_PALETTES["light"])
+        palette = theme.palette(self._theme_mode)
         self._root.tk_setPalette(
-            background=palette["bg"],
-            foreground=palette["text"],
-            activeBackground=palette["button_active"],
-            activeForeground=palette["text"],
-            highlightBackground=palette["border"],
-            highlightColor=palette["select"],
-            selectBackground=palette["select"],
-            selectForeground=palette["select_text"],
+            background=palette.bg,
+            foreground=palette.text,
+            activeBackground=palette.button_active,
+            activeForeground=palette.text,
+            highlightBackground=palette.border,
+            highlightColor=palette.select,
+            selectBackground=palette.select,
+            selectForeground=palette.select_text,
         )
-        self._root.option_add("*Menu.background", palette["panel_alt"])
-        self._root.option_add("*Menu.foreground", palette["text"])
-        self._root.option_add("*Menu.activeBackground", palette["button_active"])
-        self._root.option_add("*Menu.activeForeground", palette["text"])
-        self._root.option_add("*Menu.selectColor", palette["select"])
+        self._root.option_add("*Menu.background", palette.panel_alt)
+        self._root.option_add("*Menu.foreground", palette.text)
+        self._root.option_add("*Menu.activeBackground", palette.button_active)
+        self._root.option_add("*Menu.activeForeground", palette.text)
+        self._root.option_add("*Menu.selectColor", palette.select)
 
-        style.configure(".", background=palette["bg"], foreground=palette["text"])
-        style.configure("TFrame", background=palette["bg"])
-        style.configure("TLabel", background=palette["bg"], foreground=palette["text"])
+        style.configure(".", background=palette.bg, foreground=palette.text)
+        style.configure("TFrame", background=palette.bg)
+        style.configure("TLabel", background=palette.bg, foreground=palette.text)
         style.configure(
             "TButton",
-            background=palette["button"],
-            foreground=palette["text"],
-            bordercolor=palette["border"],
-            lightcolor=palette["button_active"],
-            darkcolor=palette["border"],
-            focuscolor=palette["select"],
+            background=palette.button,
+            foreground=palette.text,
+            bordercolor=palette.border,
+            lightcolor=palette.button_active,
+            darkcolor=palette.border,
+            focuscolor=palette.select,
             padding=5,
         )
         style.configure(
             "TMenubutton",
-            background=palette["button"],
-            foreground=palette["text"],
-            bordercolor=palette["border"],
-            arrowcolor=palette["text"],
-            focuscolor=palette["select"],
+            background=palette.button,
+            foreground=palette.text,
+            bordercolor=palette.border,
+            arrowcolor=palette.text,
+            focuscolor=palette.select,
             padding=4,
         )
-        style.configure("TCheckbutton", background=palette["bg"], foreground=palette["text"])
+        style.configure("TCheckbutton", background=palette.bg, foreground=palette.text)
         style.configure(
             "TEntry",
-            fieldbackground=palette["field"],
-            foreground=palette["field_text"],
-            insertcolor=palette["field_text"],
-            bordercolor=palette["border"],
-            lightcolor=palette["button_active"],
-            darkcolor=palette["border"],
+            fieldbackground=palette.field,
+            foreground=palette.field_text,
+            insertcolor=palette.field_text,
+            bordercolor=palette.border,
+            lightcolor=palette.button_active,
+            darkcolor=palette.border,
         )
         style.configure(
             "TCombobox",
-            fieldbackground=palette["field"],
-            foreground=palette["field_text"],
-            background=palette["button"],
-            bordercolor=palette["border"],
-            arrowcolor=palette["text"],
+            fieldbackground=palette.field,
+            foreground=palette.field_text,
+            background=palette.button,
+            bordercolor=palette.border,
+            arrowcolor=palette.text,
         )
         style.configure(
             "TSpinbox",
-            fieldbackground=palette["field"],
-            foreground=palette["field_text"],
-            background=palette["button"],
-            bordercolor=palette["border"],
-            arrowcolor=palette["text"],
+            fieldbackground=palette.field,
+            foreground=palette.field_text,
+            background=palette.button,
+            bordercolor=palette.border,
+            arrowcolor=palette.text,
         )
-        style.configure("Horizontal.TScale", background=palette["bg"], troughcolor=palette["panel_alt"], sliderrelief="flat")
-        style.configure("TSeparator", background=palette["border"])
-        style.configure("Vertical.TScrollbar", background=palette["button"], troughcolor=palette["panel"], arrowcolor=palette["text"])
-        style.configure("Horizontal.TScrollbar", background=palette["button"], troughcolor=palette["panel"], arrowcolor=palette["text"])
+        style.configure("Horizontal.TScale", background=palette.bg, troughcolor=palette.panel_alt, sliderrelief="flat")
+        style.configure("TSeparator", background=palette.border)
+        style.configure("Vertical.TScrollbar", background=palette.button, troughcolor=palette.panel, arrowcolor=palette.text)
+        style.configure("Horizontal.TScrollbar", background=palette.button, troughcolor=palette.panel, arrowcolor=palette.text)
         style.map(
             "TButton",
             background=[
-                ("disabled", palette["panel_alt"]),
-                ("active", palette["button_active"]),
-                ("pressed", palette["select"]),
+                ("disabled", palette.panel_alt),
+                ("active", palette.button_active),
+                ("pressed", palette.select),
             ],
-            foreground=[("disabled", palette["muted"]), ("active", palette["text"])],
+            foreground=[("disabled", palette.muted), ("active", palette.text)],
         )
         style.map(
             "TMenubutton",
             background=[
-                ("disabled", palette["panel_alt"]),
-                ("active", palette["button_active"]),
-                ("pressed", palette["select"]),
+                ("disabled", palette.panel_alt),
+                ("active", palette.button_active),
+                ("pressed", palette.select),
             ],
-            foreground=[("disabled", palette["muted"]), ("active", palette["text"])],
-            arrowcolor=[("disabled", palette["muted"]), ("active", palette["text"])],
+            foreground=[("disabled", palette.muted), ("active", palette.text)],
+            arrowcolor=[("disabled", palette.muted), ("active", palette.text)],
         )
         style.map(
             "TCheckbutton",
-            background=[("active", palette["bg"])],
-            foreground=[("disabled", palette["muted"]), ("active", palette["text"])],
-            indicatorcolor=[("selected", palette["select"]), ("!selected", palette["panel_alt"])],
+            background=[("active", palette.bg)],
+            foreground=[("disabled", palette.muted), ("active", palette.text)],
+            indicatorcolor=[("selected", palette.select), ("!selected", palette.panel_alt)],
         )
         style.map(
             "TEntry",
-            fieldbackground=[("disabled", palette["panel_alt"]), ("readonly", palette["panel_alt"])],
-            foreground=[("disabled", palette["muted"]), ("readonly", palette["text"])],
+            fieldbackground=[("disabled", palette.panel_alt), ("readonly", palette.panel_alt)],
+            foreground=[("disabled", palette.muted), ("readonly", palette.text)],
         )
         style.map(
             "TCombobox",
-            fieldbackground=[("readonly", palette["field"]), ("disabled", palette["panel_alt"])],
-            foreground=[("readonly", palette["field_text"]), ("disabled", palette["muted"])],
-            selectbackground=[("readonly", palette["select"])],
-            selectforeground=[("readonly", palette["select_text"])],
+            fieldbackground=[("readonly", palette.field), ("disabled", palette.panel_alt)],
+            foreground=[("readonly", palette.field_text), ("disabled", palette.muted)],
+            selectbackground=[("readonly", palette.select)],
+            selectforeground=[("readonly", palette.select_text)],
         )
         style.map(
             "TSpinbox",
-            fieldbackground=[("disabled", palette["panel_alt"])],
-            foreground=[("disabled", palette["muted"])],
+            fieldbackground=[("disabled", palette.panel_alt)],
+            foreground=[("disabled", palette.muted)],
         )
 
         for canvas_name in ("_left_sidebar_canvas", "_right_sidebar_canvas"):
             if hasattr(self, canvas_name):
                 canvas = getattr(self, canvas_name)
-                canvas.configure(background=palette["bg"])
+                canvas.configure(background=palette.bg)
         if hasattr(self, "_canvas"):
-            self._canvas.configure(background=palette["canvas_bg"], highlightbackground=palette["canvas_border"])
+            self._canvas.configure(background=palette.canvas_bg, highlightbackground=palette.canvas_border)
 
     def _apply_macos_aqua_appearance(self) -> None:
         """Switch native macOS Aqua appearance without overriding ttk colors."""

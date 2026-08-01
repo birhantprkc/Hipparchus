@@ -19,18 +19,15 @@ from hipparchus.application.layer_inventory import LayerEntry, grouped, summaris
 from hipparchus.application.source_stack import SourceDefinition, SourceStack
 from hipparchus.application.style_previews import Swatch, ring_geometry, swatch_for
 from hipparchus.rendering.models import RGBAColor, RenderScene
+from hipparchus.ui import theme
 from hipparchus.ui.icons import IconButton
 
 
 # Provenance is shown on every source, in the source's own row, because what a
-# map is made of should not require opening a dialogue to discover.
-PROVENANCE_COLORS: dict[str, tuple[str, str]] = {
-    "live": ("#2f6f4f", "#e3f2e9"),
-    "measured": ("#2f6f4f", "#e3f2e9"),
-    "synthetic": ("#8a6212", "#faf1e0"),
-    "uncalibrated": ("#8a6212", "#faf1e0"),
-    "approximate": ("#8a6212", "#faf1e0"),
-}
+# map is made of should not require opening a dialogue to discover. The colours
+# are in `ui/theme.py`, one per kind — they used to be three shared between
+# five, so `measured` and `live`, which is the distinction the badge exists to
+# make, were the same green.
 
 SWATCH_W, SWATCH_H = 62, 46
 
@@ -39,9 +36,9 @@ def section_heading(parent: tk.Widget, text: str, hint: str = "") -> ttk.Frame:
     """A small-caps heading with an optional right-aligned hint."""
     row = ttk.Frame(parent)
     row.pack(fill="x", pady=(12, 6))
-    ttk.Label(row, text=text.upper(), font=("SF Pro Text", 10, "bold")).pack(side="left")
+    ttk.Label(row, text=text.upper(), font=theme.font("section")).pack(side="left")
     if hint:
-        ttk.Label(row, text=hint, font=("SF Pro Text", 9)).pack(side="right")
+        ttk.Label(row, text=hint, font=theme.font("caption")).pack(side="right")
     return row
 
 
@@ -129,15 +126,16 @@ class SourcesPanel:
 
         text = ttk.Frame(header)
         text.pack(side="left", fill="x", expand=True, padx=(4, 0))
-        ttk.Label(text, text=definition.label, font=("SF Pro Text", 11, "bold")).pack(anchor="w")
+        ttk.Label(text, text=definition.label, font=theme.font("heading")).pack(anchor="w")
         subtitle = definition.subtitle if available else f"{definition.subtitle} — needs a file"
-        ttk.Label(text, text=subtitle, font=("SF Pro Text", 9)).pack(anchor="w")
+        ttk.Label(text, text=subtitle, font=theme.font("caption")).pack(anchor="w")
 
-        fg, bg = PROVENANCE_COLORS.get(definition.provenance, ("#5a5a5a", "#eeeeee"))
+        tint = theme.provenance_tint(definition.provenance)
+        fg, bg = tint.foreground, tint.background
         tag = tk.Label(
             header,
             text=definition.provenance,
-            font=("SF Pro Text", 9),
+            font=theme.font("caption"),
             fg=fg,
             bg=bg,
             padx=6,
@@ -173,7 +171,7 @@ class SourcesPanel:
             row = ttk.Frame(body)
             row.pack(fill="x", pady=2)
             path = self.stack.path(definition.source_id)
-            ttk.Label(row, text=path or "No file chosen", font=("SF Pro Text", 9)).pack(side="left")
+            ttk.Label(row, text=path or "No file chosen", font=theme.font("caption")).pack(side="left")
             ttk.Button(
                 row,
                 text="Choose…",
@@ -184,12 +182,12 @@ class SourcesPanel:
         for setting in self.stack.settings_for(definition.source_id):
             row = ttk.Frame(body)
             row.pack(fill="x", pady=2)
-            ttk.Label(row, text=setting.label, width=10, font=("SF Pro Text", 9)).pack(side="left")
+            ttk.Label(row, text=setting.label, width=10, font=theme.font("caption")).pack(side="left")
             entry_var = tk.StringVar(value=str(setting.display().split(" ")[0]))
             entry = ttk.Entry(row, textvariable=entry_var, width=8)
             entry.pack(side="left")
             if setting.suffix:
-                ttk.Label(row, text=setting.suffix, font=("SF Pro Text", 9)).pack(side="left", padx=(4, 0))
+                ttk.Label(row, text=setting.suffix, font=theme.font("caption")).pack(side="left", padx=(4, 0))
 
             def commit(_event=None, sid=definition.source_id, key=setting.key, holder=entry_var) -> None:
                 raw = holder.get().strip()
@@ -206,7 +204,7 @@ class SourcesPanel:
             ttk.Label(
                 body,
                 text="Interval 0 chooses a readable step from the relief in view.",
-                font=("SF Pro Text", 9),
+                font=theme.font("caption"),
                 wraplength=250,
             ).pack(anchor="w", pady=(4, 0))
 
@@ -241,7 +239,7 @@ class LayersPanel:
         self._empty = ttk.Label(
             self._body,
             text="Fetch an area to see what it contains.",
-            font=("SF Pro Text", 9),
+            font=theme.font("caption"),
             wraplength=260,
         )
         self._empty.pack(anchor="w", pady=4)
@@ -269,7 +267,7 @@ class LayersPanel:
             ttk.Label(
                 self._body,
                 text="Fetch an area to see what it contains.",
-                font=("SF Pro Text", 9),
+                font=theme.font("caption"),
                 wraplength=260,
             ).pack(anchor="w", pady=4)
             return "Nothing to draw"
@@ -278,7 +276,7 @@ class LayersPanel:
             entry.layer_id for group, rows in grouped(scene) for entry in rows if not entry.has_data
         }
         for group, rows in grouped(scene):
-            ttk.Label(self._body, text=group, font=("SF Pro Text", 9, "bold")).pack(anchor="w", pady=(8, 2))
+            ttk.Label(self._body, text=group, font=theme.font("group")).pack(anchor="w", pady=(8, 2))
             for entry in rows:
                 self._layer_row(entry)
         return summarise(scene)
@@ -303,7 +301,7 @@ class LayersPanel:
         # say the fetch found nothing, not to offer a switch that does nothing.
         if not entry.has_data:
             check.state(["disabled"])
-        ttk.Label(row, text=entry.count_text(), font=("SF Pro Text", 9)).pack(side="right")
+        ttk.Label(row, text=entry.count_text(), font=theme.font("caption")).pack(side="right")
 
 
 class StylePicker:
@@ -336,13 +334,13 @@ class StylePicker:
                 width=SWATCH_W,
                 height=SWATCH_H,
                 highlightthickness=2,
-                highlightbackground="#d0cfca",
+                highlightbackground=theme.current().border,
                 bd=0,
             )
             canvas.pack()
             canvas.bind("<Button-1>", lambda _e, n=name: self.select(n))
             self._canvases[name] = canvas
-            label = ttk.Label(cell, text=_short_name(name), font=("SF Pro Text", 9))
+            label = ttk.Label(cell, text=_short_name(name), font=theme.font("caption"))
             label.pack()
             label.bind("<Button-1>", lambda _e, n=name: self.select(n))
             draw_swatch(canvas, swatch_for(name), SWATCH_W, SWATCH_H)
@@ -359,7 +357,13 @@ class StylePicker:
 
     def _mark_selection(self) -> None:
         for name, canvas in self._canvases.items():
-            canvas.configure(highlightbackground="#2e6bb8" if name == self._selected else "#d0cfca")
+            canvas.configure(
+                highlightbackground=(
+                    theme.current().accent
+                    if name == self._selected
+                    else theme.current().border
+                )
+            )
 
 
 def draw_swatch(canvas: tk.Canvas, swatch: Swatch, width: int, height: int) -> None:
