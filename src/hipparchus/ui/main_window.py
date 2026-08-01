@@ -22,6 +22,7 @@ from hipparchus.core.fetch_progress import CancellationToken, FetchReporter
 from hipparchus.application.source_stack import SourceStack
 from hipparchus.ui import minimap
 from hipparchus.ui import actions, icons, menubar, shortcuts, theme, tooltip
+from hipparchus.ui.about_window import AboutWindow
 from hipparchus.ui.icons import IconButton
 from hipparchus.ui.search_field import SearchField
 from hipparchus.ui.settings_window import SettingsWindow
@@ -205,6 +206,7 @@ class MainWindow:
         self._render_tip = None
         self._locator_window = None
         self._settings_window = None
+        self._about = None
         self._history = SessionHistory(Session())
 
         self._build_window()
@@ -217,6 +219,7 @@ class MainWindow:
         self._refresh_render_button()
         # Closing the window is the last chance to remember what it was doing.
         self._root.protocol("WM_DELETE_WINDOW", self._on_close)
+        self._root.after(120, self._show_about_at_launch)
         self._queue_job = self._root.after(50, self._drain_callback_queue)
         if self.config.start_area or self.config.fetch_on_start:
             self._root.after(300, self._maybe_fetch_on_start)
@@ -686,6 +689,7 @@ class MainWindow:
             ("reset_rotation", self._reset_rotation),
             ("toggle_theme", self._toggle_theme),
             ("settings", self._open_settings),
+            ("about", self._open_about),
         ):
             self._actions.register(key, handler)
 
@@ -1326,6 +1330,25 @@ class MainWindow:
         else:
             self._diagnostics.pack(fill="x")
         self._diagnostics_shown.set(not self._diagnostics_shown.get())
+
+    def _open_about(self) -> None:
+        """What this is, and what it owes. Reachable whenever it is wanted."""
+        self._about_window().show()
+
+    def _about_window(self) -> AboutWindow:
+        if self._about is None:
+            self._about = AboutWindow(
+                self._root,
+                show_on_launch=lambda: self._settings.show_about_on_launch,
+                set_show_on_launch=lambda wanted: self._apply_settings(
+                    self._settings.with_changes(show_about_on_launch=wanted)
+                ),
+            )
+        return self._about
+
+    def _show_about_at_launch(self) -> None:
+        """The splash, once, before anything else asks for attention."""
+        self._about_window().show_on_launch_if_wanted()
 
     def _open_settings(self) -> None:
         """Preferences, at ⌘, where they belong."""

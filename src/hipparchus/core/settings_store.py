@@ -50,6 +50,9 @@ class UserSettings:
     label_font_family: str = "Arial"
     label_font_size: int = 12
     device_scale: float = 2.0
+    #: Absent means yes: the first launch is exactly when the attribution
+    #: and the credits are worth reading.
+    show_about_on_launch: bool = True
 
     def with_changes(self, **changes: Any) -> "UserSettings":
         """A new set of settings, clamped. Never mutates this one."""
@@ -76,6 +79,7 @@ def clamp(settings: UserSettings) -> UserSettings:
         device_scale=max(
             MIN_DEVICE_SCALE, min(MAX_DEVICE_SCALE, float(settings.device_scale))
         ),
+        show_about_on_launch=bool(settings.show_about_on_launch),
     )
 
 
@@ -121,6 +125,9 @@ class SettingsStore:
                     _number(data.get("label_font_size"), defaults.label_font_size)
                 ),
                 device_scale=_number(data.get("device_scale"), defaults.device_scale),
+                show_about_on_launch=bool(
+                    data.get("show_about_on_launch", defaults.show_about_on_launch)
+                ),
             )
         )
 

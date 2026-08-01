@@ -1064,6 +1064,38 @@ to mistype into — a typo there fails minutes later, from a network call.
 agree — the stack, the manager, and a set of path variables Apply Settings wrote
 from — and nothing has read the third since the button went.
 
+### Phase 11 — About, and the attribution it carries ✅
+
+**802 passing, 80 skipped.**
+
+| File | What | Tests |
+|---|---|---|
+| `application/about.py` | The text, the version, and the key art — as data | `test_about.py` — 14 |
+| `ui/about_window.py` | The splash: key art, the words, the licences one disclosure away | — |
+
+**The attribution is the reason this exists.** OpenStreetMap data is ODbL and a
+map drawn from it has to say so somewhere a person can find. That is an
+obligation, not a credit — so the text is data with tests rather than a string
+typed into a widget, where it could go missing in a refactor and nobody would
+notice until somebody asked where their licence notice went.
+
+The tests that matter check that the licence is *named* (not just "©
+OpenStreetMap contributors"), that every source in the stack has been considered,
+and — the useful one — that **a source added without deciding what it must credit
+fails a test rather than shipping unattributed**. Natural Earth is credited for
+the same reason: the locator draws it, it is not a fetched source, and nothing
+else would have caught it.
+
+**The key art is the application's own output** — Santorini's caldera in
+Hypsometric Relief, cropped from the gallery render already in this repository.
+Not a decoration somebody drew: the only honest thing to put on the front of a
+program is what the program makes. It is absent-means-absent, so a checkout
+without the asset gets a splash without a picture rather than a broken-image box.
+
+Shown once at launch, with a **Show at launch** checkbox on the splash itself and
+the preference in the shared `settings.json`; reachable afterwards from the View
+menu. Close and Continue mean the same thing.
+
 ---
 
 ## A correction about verification

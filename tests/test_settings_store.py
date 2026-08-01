@@ -173,3 +173,26 @@ class StorageLocationTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SplashPreferenceTests(unittest.TestCase):
+    """Whether the splash appears at launch is a preference about a window,
+    not about how maps are made — but it still has to survive a restart."""
+
+    def test_it_is_shown_by_default(self) -> None:
+        """Absent means yes: the first launch is exactly when the attribution
+        and the credits are worth reading."""
+        self.assertTrue(UserSettings().show_about_on_launch)
+
+    def test_turning_it_off_survives_a_restart(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "settings.json"
+            store = SettingsStore(path)
+            store.save(UserSettings().with_changes(show_about_on_launch=False))
+            self.assertFalse(store.load().show_about_on_launch)
+
+    def test_an_older_file_without_the_field_still_shows_it(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "settings.json"
+            path.write_text(json.dumps({"theme_mode": "dark"}), encoding="utf-8")
+            self.assertTrue(SettingsStore(path).load().show_about_on_launch)

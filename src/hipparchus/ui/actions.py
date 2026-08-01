@@ -62,6 +62,7 @@ VERBS: tuple[Verb, ...] = (
     Verb("reset_rotation", "North Up", "View"),
     Verb("toggle_theme", "Dark / Light", "View", separator_before=True),
     Verb("settings", "Settings…", "View", "Cmd+,", separator_before=True),
+    Verb("about", "About Hipparchus", "View"),
 )
 
 _BY_KEY: dict[str, Verb] = {verb.key: verb for verb in VERBS}
