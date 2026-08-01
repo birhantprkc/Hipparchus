@@ -21,6 +21,7 @@ class AppConfig:
     settings_file: Path
     presets_file: Path
     session_file: Path
+    makers_mark: str
     project_dir: Path
     default_width: int
     default_height: int
@@ -50,6 +51,10 @@ class ConfigLoader:
         # What the app was doing last time. Beside the settings and the
         # presets, in the same readable format, for the same reason.
         session_file = Path(os.getenv("HIPPARCHUS_SESSION_FILE", str(home / ".hipparchus" / "session.json")))
+        # Whose app this is, in the corner of the status bar. A GIF or PNG,
+        # since Tk reads neither PDF nor SVG. Absent means absent: no
+        # placeholder, no broken-image box in the corner of every window.
+        makers_mark = os.getenv("HIPPARCHUS_MAKERS_MARK", "").strip()
 
         default_width = int(os.getenv("HIPPARCHUS_WINDOW_WIDTH", "1600"))
         default_height = int(os.getenv("HIPPARCHUS_WINDOW_HEIGHT", "1080"))
@@ -77,6 +82,7 @@ class ConfigLoader:
             settings_file=settings_file,
             presets_file=presets_file,
             session_file=session_file,
+            makers_mark=makers_mark,
             project_dir=project_dir,
             default_width=default_width,
             default_height=default_height,

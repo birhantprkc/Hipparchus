@@ -747,4 +747,58 @@ manager, which it may not have with other test roots about. `focus_force` makes
 it deterministic. A test that fails one time in five is worse than no test,
 because it teaches people to re-run rather than to look.
 
+### Phase 4 — the status bar ✅
+
+683 tests → **728 passing**.
+
+| File | What | Tests |
+|---|---|---|
+| `application/provenance.py` | One word for what a whole map is made of — the weakest claim any of its sources makes | `test_provenance.py` — 12 |
+| `ui/status_bar.py` | One row per source, the provenance badge, the cache state, Cancel, and a selectable message | `test_status_bar.py` — 21 |
+| `tests/test_main_window.py` | The whole window, built once | 8 |
+
+**Delivered:** a row per source with its own glyph and timing — waiting, running,
+done with what it brought, failed with why, cancelled — named the way the
+sidebar names them. A provenance capsule for the map as a whole. An error
+message in red that can be selected and copied, because the half of a status
+line you cannot copy is usually the half with the error in it. Cancel appears
+only while there is something to cancel.
+
+**The provenance rule:** a map is only as trustworthy as its least trustworthy
+layer. Verified live — OpenStreetMap plus Elevation reads `live`; add the
+simulated terrain and it becomes `synthetic`. An unranked kind, one a plugin
+invented, counts as the weakest, so a new source cannot quietly promote a map.
+
+**A thread-safety fix, not just display work.** The reporter is written from the
+fetch thread and was about to be read by the window. `FetchReporter.snapshot()`
+copies the whole record under the lock and the window walks that; a test runs a
+reader against a writer to hold it.
+
+**The bug that made me write `test_main_window.py`.** Moving the status bar broke
+the launch — a panel wired a callback into a bar that did not exist yet — and
+**719 tests passed anyway**, because every one of them built a single piece
+against stand-ins and nothing built the real window. It now does, once per file:
+building the application repeatedly in one process takes the interpreter down
+without a traceback.
+
+**Also fixed:** the window title no longer gains "(light mode)" when the theme is
+toggled. Which mode you are in is visible in every pixel; saying it again in the
+title bar is furniture, and it made the window's name change under anything that
+reads it — including my own test.
+
+**Not delivered: the maker's mark.** The status bar supports one and skips it
+cleanly when absent — no placeholder, no broken-image box. The asset is not in
+this repository; the Mac app carries it as a PDF, which Tk cannot read. Point
+`HIPPARCHUS_MAKERS_MARK` at a PNG or GIF and it appears. **This needs your
+decision:** whether to convert the Mac's `TVDLogo.pdf` into this repo as a
+raster asset, or leave the corner empty.
+
+**A flake, chased down properly.** Two test files were failing about one run in
+six: `focus_force` *asks* for keyboard focus but does not guarantee arrival by
+the next line, so a synthetic key press landed nowhere. Both helpers now wait
+until focus is observable. Chasing it also turned up a real latent bug in
+`menubar.py` — the binding registry was keyed by `id(root)`, and CPython reuses
+the address of a destroyed object, so a stale key could come to name a different
+window entirely. It is keyed by the Tk path now.
+
 *Nothing pushed.*

@@ -19,7 +19,7 @@ from tkinter import filedialog, messagebox, ttk
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
-from hipparchus.application import places, session_edit
+from hipparchus.application import places, provenance, session_edit
 from hipparchus.application.controller import ApplicationController
 from hipparchus.core.fetch_progress import CancellationToken, FetchReporter
 from hipparchus.application.source_stack import SourceStack
@@ -28,6 +28,7 @@ from hipparchus.ui import minimap
 from hipparchus.ui import actions, icons, menubar, shortcuts, theme, tooltip
 from hipparchus.ui.icons import IconButton
 from hipparchus.ui.map_canvas import MapCanvas
+from hipparchus.ui.status_bar import StatusBar
 from hipparchus.ui.panels import LayersPanel, SourcesPanel, StylePicker, section_heading
 from hipparchus.application.presets import (
     ArtisticPreset,
@@ -223,9 +224,6 @@ class MainWindow:
         self._preset_store = PresetStore(self.config.presets_file)
         self._custom_presets = self._load_custom_presets()
         self._preset_options = sorted({*preset_names(), *self._custom_presets.keys()})
-        self._status_var = tk.StringVar(value="Ready")
-        self._cache_status_var = tk.StringVar(value="Cache: n/a")
-        self._progress_label_var = tk.StringVar(value="Idle")
         self._provider_status_var = tk.StringVar(value="")
         self._quality_var = tk.StringVar(value="Fast Preview")
         self._source_library_var = tk.StringVar(value=SOURCE_LIBRARY_PRESETS[0].label)
@@ -476,24 +474,19 @@ class MainWindow:
         right_outer, self._right_sidebar_canvas, right = self._create_scrollable_frame(root, RIGHT_SIDEBAR_WIDTH)
         right_outer.grid(row=1, column=2, sticky="ns")
 
+        # One row per source rather than one line for the lot: a fetch can take
+        # five minutes while a single line says "Idle", and a failure that looks
+        # like a wait is a five-minute lie.
+        self._status = StatusBar(
+            root, on_cancel=self._on_cancel_fetch, mark_path=self.config.makers_mark
+        )
+        self._status.grid(row=2, column=0, columnspan=3, sticky="ew")
+
         self._build_left_sidebar(left)
         self._build_center_canvas(center)
         self._build_right_sidebar(right)
         self._provider_status_var.set(self._format_provider_status())
 
-        statusbar = ttk.Frame(root, padding=(12, 6, 12, 8))
-        statusbar.grid(row=2, column=0, columnspan=3, sticky="ew")
-        statusbar.grid_columnconfigure(0, weight=1)
-        ttk.Label(statusbar, textvariable=self._status_var).grid(row=0, column=0, sticky="w")
-        right = ttk.Frame(statusbar)
-        right.grid(row=0, column=1, sticky="e")
-        self._progress = ttk.Progressbar(right, mode="indeterminate", length=120)
-        self._progress.pack(side="left", padx=(0, 8))
-        ttk.Label(right, textvariable=self._progress_label_var, font=theme.font("label")).pack(side="left", padx=(0, 8))
-        self._cancel_button = ttk.Button(right, text="Cancel", width=8, command=self._on_cancel_fetch)
-        self._cancel_button.pack(side="left", padx=(0, 8))
-        self._cancel_button.state(["disabled"])
-        ttk.Label(right, textvariable=self._cache_status_var).pack(side="left")
 
     def _build_left_sidebar(self, parent: ttk.Frame) -> None:
         # FRAME: where you are, and how big the frame is. The eight nudge
@@ -660,7 +653,7 @@ class MainWindow:
         elif snapshot.scene_token is not None:
             # Honest rather than silent: undo never re-fetches, so a map that
             # has been let go stays gone until Render map draws it again.
-            self._status_var.set("That map is no longer held — press Render map to draw it again.")
+            self._status.set_message("That map is no longer held — press Render map to draw it again.")
         self._refresh_undo_menu()
 
     def _apply_session(self, session: Session) -> None:
@@ -821,7 +814,7 @@ class MainWindow:
             background=self._canvas_surround_color,
             on_redraw=self._schedule_redraw,
             on_area_drawn=self._on_area_drawn,
-            on_status=self._status_var.set,
+            on_status=self._status.set_message,
         )
         self._map.grid(row=1, column=0, sticky="nsew")
         self._canvas = self._map.widget
@@ -839,7 +832,7 @@ class MainWindow:
     def _on_area_drawn(self, bounds: tuple[float, float, float, float]) -> None:
         """A box drawn on the map becomes the area to fetch."""
         self._set_aoi(*bounds)
-        self._status_var.set("Area set from the map — Render map to fetch it")
+        self._status.set_message("Area set from the map — Render map to fetch it")
 
     def _build_right_sidebar(self, parent: ttk.Frame) -> None:
         section_heading(parent, "Sources", "they stack")
@@ -894,7 +887,7 @@ class MainWindow:
             # from the stack rather than trusting the click.
             self._sources_panel.rebuild()
         self._composition_var.set(self.source_stack.summary())
-        self._status_var.set(f"Sources: {self.source_stack.summary()}")
+        self._status.set_message(f"Sources: {self.source_stack.summary()}")
         self._record()
 
     def _on_source_setting_changed(self, source_id: str, key: str, value: object) -> None:
@@ -902,7 +895,7 @@ class MainWindow:
         self.controller.data_source_manager.apply_source_settings(
             source_id, self.source_stack.provider_overrides(source_id)
         )
-        self._status_var.set(f"{source_id}: {key} = {value}")
+        self._status.set_message(f"{source_id}: {key} = {value}")
         self._record()
 
     def _on_layer_visibility_changed(self, layer_id: str, visible: bool) -> None:
@@ -1001,9 +994,9 @@ class MainWindow:
                 preset_profile,
                 max_on_screen_features_per_layer=min(preset_profile.max_on_screen_features_per_layer, 1500),
             )
-            self._status_var.set("Large area detected: applying preview sampling")
+            self._status.set_message("Large area detected: applying preview sampling")
         else:
-            self._status_var.set("Fetching map data...")
+            self._status.set_message("Fetching map data...")
         preset_profile = self._cartographic_geometry_profile(preset_profile)
         self._set_busy("Fetching map data...")
         self._fetch_started_at = time.perf_counter()
@@ -1022,8 +1015,7 @@ class MainWindow:
         # the next.
         self._fetch_cancel = CancellationToken()
         self._fetch_reporter = FetchReporter(on_change=self._queue_progress)
-        if hasattr(self, "_cancel_button"):
-            self._cancel_button.state(["!disabled"])
+
 
         plan = self.source_stack.plan()
         if plan is None:
@@ -1068,7 +1060,7 @@ class MainWindow:
         try:
             return self._preset_store.load()
         except Exception as exc:  # noqa: BLE001
-            self._status_var.set(f"Could not load presets: {exc}")
+            self._status.set_message(f"Could not load presets: {exc}")
             return {}
 
     def _build_settings_tab(self, parent: ttk.Frame) -> None:
@@ -1238,7 +1230,7 @@ class MainWindow:
         # The label setters only mark the picture cache dirty, so without a
         # redraw a font change sat invisible until the next fetch.
         self._schedule_redraw()
-        self._status_var.set(f"Settings applied - Model: {self._map_model_var.get()}")
+        self._status.set_message(f"Settings applied - Model: {self._map_model_var.get()}")
 
     def _save_current_as_preset(self) -> None:
         name = self._new_preset_name_var.get().strip()
@@ -1262,7 +1254,7 @@ class MainWindow:
             self._refresh_preset_menu()
         self._preset_var.set(name)
         self._new_preset_name_var.set("")
-        self._status_var.set(f"Preset saved: {name}")
+        self._status.set_message(f"Preset saved: {name}")
 
     def _refresh_preset_menu(self) -> None:
         menu = self._preset_menu["menu"]
@@ -1434,14 +1426,13 @@ class MainWindow:
         if self._fetch_cancel is None:
             return
         self._fetch_cancel.cancel()
-        self._status_var.set("Fetch cancelled")
+        self._status.set_message("Fetch cancelled")
         self._set_idle("Idle")
-        if hasattr(self, "_cancel_button"):
-            self._cancel_button.state(["disabled"])
+
 
     def _queue_progress(self, reporter: FetchReporter) -> None:
         """Called from the fetch thread; hand it to the UI thread to display."""
-        self._pending_queue.put(("progress", reporter.summary()))
+        self._pending_queue.put(("progress", reporter.snapshot()))
 
     def _queue_scene(self, scene: RenderScene, cache_state: str) -> None:
         self._pending_queue.put(("scene", (scene, cache_state)))
@@ -1461,7 +1452,7 @@ class MainWindow:
                 elif kind == "image":
                     self._apply_canvas_png(payload)
                 elif kind == "progress":
-                    self._progress_label_var.set(str(payload))
+                    self._status.show_progress(payload)
                 elif kind == "error":
                     error_msg = str(payload)
                     if "No match" in error_msg:
@@ -1472,7 +1463,7 @@ class MainWindow:
                         messagebox.showerror("Data Not Available", error_msg)
                     else:
                         messagebox.showerror("Error", error_msg)
-                    self._status_var.set(f"Error: {error_msg[:80]}")
+                    self._status.set_message(f"Error: {error_msg[:80]}")
                     self._set_idle("Error")
         except queue.Empty:
             pass
@@ -1486,6 +1477,7 @@ class MainWindow:
 
     def _apply_scene(self, scene: RenderScene, cache_state: str) -> None:
         self._current_scene = scene
+        self._status.set_provenance(provenance.for_sources(self.source_stack.enabled_ids()))
         if cache_state != "undo" and not self._restoring:
             # Undo of a fetch must never cost another fetch, so the map itself
             # is kept with the entry rather than the recipe for making it.
@@ -1503,8 +1495,8 @@ class MainWindow:
         self._scroll_x = 0.5
         self._scroll_y = 0.5
         self._sync_scrollbars()
-        self._status_var.set("Rendering preview...")
-        self._cache_status_var.set(f"Cache: {cache_state}")
+        self._status.set_message("Rendering preview...")
+        self._status.set_cache(cache_state)
         geometry_count = sum(len(layer.geometries) for layer in scene.layers)
         bounds_text = self._scene_bounds_text(scene)
         if self._fetch_started_at is not None:
@@ -1574,7 +1566,7 @@ class MainWindow:
             return
         self._root.clipboard_clear()
         self._root.clipboard_append(text)
-        self._status_var.set("Diagnostics copied")
+        self._status.set_message("Diagnostics copied")
 
     def _save_diagnostics(self) -> None:
         text = self._perf_summary_var.get().strip()
@@ -1589,7 +1581,7 @@ class MainWindow:
         if not target:
             return
         Path(target).write_text(text + "\n", encoding="utf-8")
-        self._status_var.set("Diagnostics saved")
+        self._status.set_message("Diagnostics saved")
 
     def _apply_location_aoi(self, payload: object) -> None:
         if not isinstance(payload, tuple) or len(payload) != 4:
@@ -1597,7 +1589,7 @@ class MainWindow:
             return
         min_lon, min_lat, max_lon, max_lat = payload
         self._set_aoi(float(min_lon), float(min_lat), float(max_lon), float(max_lat))
-        self._status_var.set("Coordinates updated from location")
+        self._status.set_message("Coordinates updated from location")
         self._set_idle("Location ready")
 
     def _sync_layer_visibility_to_scene(self) -> None:
@@ -1626,7 +1618,7 @@ class MainWindow:
         self._render_inflight = True
         self._render_request_id += 1
         request_id = self._render_request_id
-        self._status_var.set("Rendering preview...")
+        self._status.set_message("Rendering preview...")
         self._set_busy("Rendering preview...")
 
         def _worker() -> None:
@@ -1677,7 +1669,7 @@ class MainWindow:
                 font=theme.font("lead"),
                 justify="center",
             )
-            self._status_var.set("Renderer fallback active")
+            self._status.set_message("Renderer fallback active")
             self._finish_render("Renderer fallback")
             return
 
@@ -1685,7 +1677,7 @@ class MainWindow:
         self._canvas.delete("all")
         self._canvas.create_image(0, 0, anchor="nw", image=self._canvas_image)
         self._canvas.configure(scrollregion=(0, 0, width, height))
-        self._status_var.set(f"Rendered · {getattr(self, '_layer_summary', '')}".rstrip(" ·"))
+        self._status.set_message(f"Rendered · {getattr(self, '_layer_summary', '')}".rstrip(" ·"))
         png_bytes = len(png)
         if isinstance(render_ms, (int, float)):
             drawn_paths = getattr(self.renderer, "_last_drawn_paths", -1)
@@ -1705,8 +1697,7 @@ class MainWindow:
 
     def _finish_render(self, label: str) -> None:
         """Common end of a render: stop the spinner and disarm Cancel."""
-        if hasattr(self, "_cancel_button"):
-            self._cancel_button.state(["disabled"])
+
         self._set_idle(label)
 
     def _photo_image_from_png(self, png_bytes: bytes) -> tk.PhotoImage:
@@ -1799,14 +1790,15 @@ class MainWindow:
     def _set_busy(self, label: str) -> None:
         self._busy_counter += 1
         if self._busy_counter == 1:
-            self._progress.start(10)
-        self._progress_label_var.set(label)
+            self._status.set_busy(True)
+        self._status.set_message(label)
 
     def _set_idle(self, label: str) -> None:
+        """One job finishing does not make the app idle: the counter is what
+        stops a lookup completing mid-fetch from stopping the spinner."""
         self._busy_counter = max(0, self._busy_counter - 1)
         if self._busy_counter == 0:
-            self._progress.stop()
-            self._progress_label_var.set(label)
+            self._status.set_busy(False)
 
     def _scene_bounds_text(self, scene: RenderScene) -> str:
         minx: float | None = None
@@ -1855,7 +1847,7 @@ class MainWindow:
             height=export_height,
         )
         diagnostics = exporter.export_with_profile(Path(target), profile=profile)
-        self._status_var.set(f"Exported {diagnostics.total_paths} paths")
+        self._status.set_message(f"Exported {diagnostics.total_paths} paths")
 
     def _export_composition(self) -> MapComposition:
         return MapComposition(
@@ -1910,7 +1902,7 @@ class MainWindow:
         )
         self._source_library_note_var.set(preset.note)
         if preset.label == "Custom":
-            self._status_var.set("Custom source mode: use model and path fields manually")
+            self._status.set_message("Custom source mode: use model and path fields manually")
             return
 
         model_label = self._map_model_id_to_label.get(preset.model_id)
@@ -1940,7 +1932,7 @@ class MainWindow:
                 "Some sample sources were not found:\n" + "\n".join(missing),
             )
         else:
-            self._status_var.set(f"Source preset applied: {preset.label}")
+            self._status.set_message(f"Source preset applied: {preset.label}")
 
     def _apply_and_fetch_source_library_preset(self) -> None:
         self._apply_source_library_preset()
@@ -1982,7 +1974,7 @@ class MainWindow:
             self._optional_source_vars[provider_id].set(selected)
         if self._sources_panel is not None:
             self._sources_panel.rebuild()
-        self._status_var.set(f"{provider_id}: {selected}")
+        self._status.set_message(f"{provider_id}: {selected}")
         self._record()
 
     def _restyle_icons(self) -> None:
@@ -1996,9 +1988,12 @@ class MainWindow:
         self._refresh_minimap()
 
     def _toggle_theme(self) -> None:
+        # The title does not carry the appearance. Which mode you are in is
+        # visible in every pixel of the window; saying it again in the title bar
+        # is furniture, and it made the window's name change under anything
+        # that reads it.
         self._theme_mode = "dark" if self._theme_mode == "light" else "light"
         self._apply_theme()
-        self._root.title(f"{self.config.app_name} ({self._theme_mode} mode)")
 
     def _apply_theme(self) -> None:
         # Said once, here, so everything drawn later — a swatch border, a

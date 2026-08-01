@@ -124,6 +124,12 @@ ICONS: dict[str, list[Polyline]] = {
     "tick-circle": [
         [(0.34, 0.51), (0.45, 0.62), (0.66, 0.39)],
     ],
+    # A source still being fetched. An open ring with a lead reads as motion
+    # where a ring of dots reads as a queue — and the two must not look alike,
+    # because "waiting" and "working" are the question a slow fetch raises.
+    "spinner": [
+        [(0.70, 0.30), (0.78, 0.22), (0.74, 0.34)],
+    ],
     # A ring of dashes: a source that has not started yet. Told apart from
     # `tick-circle` by shape as well as by colour, because colour alone is not
     # a distinction everyone can see.
@@ -152,6 +158,7 @@ CIRCLES: dict[str, tuple[float, float, float]] = {
 
 # Arcs, as (cx, cy, r, start_degrees, extent_degrees).
 ARCS: dict[str, tuple[float, float, float, float, float]] = {
+    "spinner": (0.5, 0.5, 0.28, 45.0, 260.0),
     "rotate-left": (0.5, 0.52, 0.22, 40.0, 280.0),
     "rotate-right": (0.5, 0.52, 0.22, 260.0, -280.0),
 }

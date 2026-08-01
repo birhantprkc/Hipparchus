@@ -15,6 +15,22 @@ from hipparchus.ui import menubar
 from hipparchus.ui.shortcuts import sequences_for
 
 
+def _settle_focus(root: tk.Tk, attempts: int = 50) -> bool:
+    """Wait until the window really has keyboard focus.
+
+    `focus_force` asks; it does not guarantee arrival by the next line. With
+    other test roots about and the process not frontmost, a synthetic key can
+    land nowhere — which made these tests fail about one run in six. Waiting for
+    the focus to be observable makes the press deterministic.
+    """
+    for _ in range(attempts):
+        root.focus_force()
+        root.update()
+        if root.focus_displayof() is not None:
+            return True
+    return False
+
+
 class MenuBarTestCase(unittest.TestCase):
     def setUp(self) -> None:
         try:
@@ -29,6 +45,18 @@ class MenuBarTestCase(unittest.TestCase):
 
     def tearDown(self) -> None:
         self.root.destroy()
+
+    def send(self, sequence: str) -> None:
+        """Press a key at the window, deterministically.
+
+        `deiconify` alone does not give the window keyboard focus — with other
+        test roots about and the process not frontmost it may have none, and the
+        key lands nowhere. That made these tests fail about one run in ten,
+        which is worse than not having them.
+        """
+        _settle_focus(self.root)
+        self.root.event_generate(sequence, when="now")
+        self.root.update()
 
     def labels(self, menu: tk.Menu) -> list[str]:
         return [label for _, label in self.entries(menu)]
@@ -123,8 +151,7 @@ class AcceleratorTests(MenuBarTestCase):
                 continue
             self.calls.clear()
             for sequence in sequences_for(verb.accelerator):
-                self.root.event_generate(sequence)
-            self.root.update()
+                self.send(sequence)
             with self.subTest(verb=verb.key):
                 self.assertIn(verb.key, self.calls)
 
@@ -138,9 +165,7 @@ class AcceleratorTests(MenuBarTestCase):
     def test_pressing_the_key_runs_the_verb(self) -> None:
         menubar.build(self.root, self.actions)
         self.root.deiconify()
-        self.root.update()
-        self.root.event_generate(sequences_for("Cmd+.")[0])
-        self.root.update()
+        self.send(sequences_for("Cmd+.")[0])
         self.assertIn("cancel_fetch", self.calls)
 
 
@@ -194,8 +219,7 @@ class SavedPlacesTests(MenuBarTestCase):
             # rightly count two.
             for sequence in sequences_for(spec):
                 chosen.clear()
-                self.root.event_generate(sequence)
-                self.root.update()
+                self.send(sequence)
                 with self.subTest(spec=spec, sequence=sequence):
                     self.assertEqual(chosen, [places.PLACES[position].name])
 
@@ -205,9 +229,7 @@ class SavedPlacesTests(MenuBarTestCase):
         chosen: list[str] = []
         menubar.build(self.root, self.actions, on_place=chosen.append)
         self.root.deiconify()
-        self.root.update()
-        self.root.event_generate(sequences_for("Cmd+3")[0])
-        self.root.update()
+        self.send(sequences_for("Cmd+3")[0])
         self.assertEqual(chosen, [places.PLACES[2].name])
 
 
@@ -222,9 +244,7 @@ class RebuildTests(MenuBarTestCase):
         menubar.build(self.root, self.actions)
         menubar.build(self.root, self.actions)
         self.root.deiconify()
-        self.root.update()
-        self.root.event_generate(sequences_for("Cmd+.")[0])
-        self.root.update()
+        self.send(sequences_for("Cmd+.")[0])
         self.assertEqual(self.calls.count("cancel_fetch"), 1)
 
 

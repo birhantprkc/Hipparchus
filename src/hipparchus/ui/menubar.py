@@ -156,7 +156,10 @@ def set_label(bar: tk.Menu, key: str, label: str, *, enabled: bool = True) -> No
 
 
 #: Every sequence this module has bound, so a rebuild can take them back.
-_BOUND: dict[int, list[str]] = {}
+#: Keyed by the window's Tk path rather than by `id()`: CPython reuses the
+#: address of a destroyed object, so an `id` key can come to name a different
+#: window than the one that registered it.
+_BOUND: dict[str, list[str]] = {}
 
 
 def _bind(root: tk.Tk, spec: str, handler: "callable", system: str) -> None:
@@ -169,11 +172,11 @@ def _bind(root: tk.Tk, spec: str, handler: "callable", system: str) -> None:
     """
     for sequence in shortcuts.sequences_for(spec, system):
         root.bind_all(sequence, lambda _event, run=handler: (run(), "break")[1])
-        _BOUND.setdefault(id(root), []).append(sequence)
+        _BOUND.setdefault(str(root), []).append(sequence)
 
 
 def _unbind_all(root: tk.Tk) -> None:
-    for sequence in _BOUND.pop(id(root), []):
+    for sequence in _BOUND.pop(str(root), []):
         try:
             root.unbind_all(sequence)
         except tk.TclError:

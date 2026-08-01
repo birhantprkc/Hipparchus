@@ -220,8 +220,11 @@ class KeyboardTests(CanvasTestCase):
         # about and the process not frontmost. That made this a one-in-many
         # failure, which is worse than no test at all because it teaches people
         # to re-run rather than to look.
-        self.canvas.widget.focus_force()
-        self.root.update()
+        for _ in range(50):
+            self.canvas.widget.focus_force()
+            self.root.update()
+            if self.root.focus_displayof() is not None:
+                break
         self.canvas.widget.event_generate(key, when="now", **kwargs)
         self.root.update()
 
