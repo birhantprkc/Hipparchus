@@ -658,4 +658,50 @@ dead. Shown the way a person would see it, ⌘↵ renders once (no double bindin
 ⌘2 moves the frame to Athens, ⌘F lands the cursor in the search box and ⌘0
 fits. Worth writing down: the first reading of that is "Phase 1 does not work".
 
+### Phase 2 — the session and undo ✅
+
+567 tests → **638 passing**.
+
+| File | What | Tests |
+|---|---|---|
+| `application/session.py` | Every choice the window holds, as one value: area, place, ticked sources, paths, per-source settings, preset, quality, hidden layers | `test_session.py` — 20 |
+| `application/session_edit.py` | What to call the change between two sessions — "Enable OpenStreetMap", "Change Interval", "Change Area" | `test_session_edit.py` — 21 |
+| `application/session_history.py` | The undo stack, with both rules | `test_session_history.py` — 26 |
+
+**The two rules, both held by tests:**
+
+- **A run of edits that was one intention is one undo.** Typing four
+  coordinates is one act of framing; verified live, four edits give an undo
+  depth of one and a single ⌘Z restores the original.
+- **Undo of a fetch restores the previous scene rather than re-fetching it.**
+  Scenes live in a bounded store keyed by token, the newest is never the one
+  evicted, and an entry whose scene has been let go still restores its choices —
+  the status bar says so and Render map draws it again. Nothing ever re-fetches
+  silently.
+
+**Also delivered:** an Edit menu that names what it will take back ("Undo Change
+Preset", "Undo Enable Elevation"), greyed when there is nothing to take;
+⌘Z / ⇧⌘Z; save-on-close and restore-on-launch through
+`~/.hipparchus/session.json`, readable and diffable, decoded field-by-field so
+an older file costs only the field it lacks. A restored session is the
+beginning of the history, not something ⌘Z can undo into.
+
+**Two things fixed on the way.** Quitting printed a Tcl error — the callback
+pump reschedules itself every 60 ms and the interpreter was destroyed with a
+tick pending, so the app looked broken at the exact moment of closing. And
+`quality_label_for` had no inverse: the session stores a key and the dropdown
+shows a label, so without it a restored window would display a quality it was
+not using.
+
+**A note on my own verification.** My first live undo walk appeared to show the
+preset change going unrecorded. It was the check that was wrong — the default
+preset already *is* "Urban Structure", so I had set it to its own value, and
+refusing to record a no-op is the correct behaviour. Worth writing down because
+the failure looked exactly like a broken trace.
+
+**Follow-up noted, not done.** `core/project_state.py` now overlaps `Session`
+almost entirely and is dead code — nothing in the app reads or writes it. It
+should go when `Session` grows the "saved project" half, rather than leaving two
+serialisation formats to rot apart.
+
 *Nothing pushed.*

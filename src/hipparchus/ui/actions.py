@@ -27,7 +27,7 @@ from hipparchus.application import places
 
 # macOS reserves Window and Help; these two are ours. The application menu is
 # built by Tk itself.
-MENUS: tuple[str, ...] = ("Map", "View")
+MENUS: tuple[str, ...] = ("Edit", "Map", "View")
 
 
 @dataclass(frozen=True, slots=True)
@@ -44,6 +44,11 @@ class Verb:
 
 
 VERBS: tuple[Verb, ...] = (
+    # The two whose labels change as you work: the Edit menu says what it will
+    # take back — "Undo Change Preset", "Undo Fetch Map" — because a menu that
+    # only ever says "Undo" tells you nothing.
+    Verb("undo", "Undo", "Edit", "Cmd+Z"),
+    Verb("redo", "Redo", "Edit", "Cmd+Shift+Z"),
     Verb("render_map", "Render Map", "Map", "Cmd+Return"),
     Verb("cancel_fetch", "Cancel Fetch", "Map", "Cmd+."),
     Verb("search_place", "Search for a Place", "Map", "Cmd+F", separator_before=True),

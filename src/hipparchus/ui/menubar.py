@@ -45,6 +45,7 @@ def build(
     _unbind_all(root)
 
     bar = tk.Menu(root)
+    placed: dict[str, tuple[tk.Menu, int]] = {}
 
     for name in verbs.MENUS:
         items = verbs.menu_items(name, actions)
@@ -62,6 +63,7 @@ def build(
                 accelerator=shortcuts.label_for(verb.accelerator, system) if verb.accelerator else "",
                 command=lambda key=verb.key: actions.invoke(key),
             )
+            placed[verb.key] = (menu, menu.index("end"))
             if verb.accelerator:
                 _bind(root, verb.accelerator, lambda key=verb.key: actions.invoke(key), system)
             if wants_places and verb.key == PLACES_AFTER:
@@ -74,6 +76,7 @@ def build(
         bar.add_cascade(label=name, menu=menu)
 
     root.configure(menu=bar)
+    _PLACED[str(bar)] = placed
     return bar
 
 
@@ -130,6 +133,26 @@ def _add_places(
 
     menu.add_separator()
     menu.add_cascade(label=PLACES_LABEL, menu=submenu_)
+
+
+#: Where each verb landed, so its label can be changed later. Keyed by the
+#: bar's own Tk path, which a rebuild replaces rather than leaves stale.
+_PLACED: dict[str, dict[str, tuple[tk.Menu, int]]] = {}
+
+
+def set_label(bar: tk.Menu, key: str, label: str, *, enabled: bool = True) -> None:
+    """Rename a menu item, and grey it when there is nothing behind it.
+
+    Undo and Redo are the two whose names depend on what you have just done.
+    Greying rather than hiding, because unlike a verb that is not built yet
+    these two exist — they simply have nothing to take back this moment, and
+    that is worth saying rather than hiding.
+    """
+    found = _PLACED.get(str(bar), {}).get(key)
+    if found is None:
+        return
+    menu, index = found
+    menu.entryconfigure(index, label=label, state="normal" if enabled else "disabled")
 
 
 #: Every sequence this module has bound, so a rebuild can take them back.
