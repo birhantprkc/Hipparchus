@@ -47,6 +47,7 @@ class HipparchusApp:
         window = MainWindow(
             config=config,
             loaded_plugins=plugin_loader.loaded_plugins,
+            plugin_load_errors=plugin_loader.load_errors,
             controller=controller,
             renderer=renderer,
             default_preset=default_preset(DEFAULT_PRESET_NAME),

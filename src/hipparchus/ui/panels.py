@@ -18,6 +18,7 @@ from typing import Any, Callable
 
 from hipparchus.application.layer_inventory import LayerEntry, grouped, summarise
 from hipparchus.application.source_stack import SourceDefinition, SourceStack
+from hipparchus.application.style_catalogue import grid_columns
 from hipparchus.application.style_previews import Swatch, ring_geometry, swatch_for
 from hipparchus.rendering.models import RGBAColor, RenderScene
 from hipparchus.ui import theme
@@ -397,7 +398,14 @@ class LayersPanel:
 
 
 class StylePicker:
-    """Preset thumbnails drawn from the presets themselves."""
+    """Preset thumbnails drawn from the presets themselves.
+
+    **A grid that wraps, not a strip that scrolls, and every style in it.** The
+    panel's claim is *see it, don't read it*, and showing six of sixteen with
+    the rest behind a dropdown means reading names for ten of them. The columns
+    follow the rail's width, because the rail is resizable and the right number
+    is whatever fits.
+    """
 
     def __init__(
         self,
@@ -405,22 +413,53 @@ class StylePicker:
         names: tuple[str, ...],
         *,
         on_select: Callable[[str], None],
-        columns: int = 3,
+        columns: int | None = None,
     ) -> None:
         self.parent = parent
         self.names = names
         self.on_select = on_select
+        #: None means "as many as fit"; a number pins it, for tests.
         self.columns = columns
         self._canvases: dict[str, tk.Canvas] = {}
         self._selected: str = names[0] if names else ""
+        self._laid_out_for = 0
         self._grid = ttk.Frame(parent)
         self._grid.pack(fill="x")
         self._build()
+        if columns is None:
+            self._grid.bind("<Configure>", self._reflow)
 
-    def _build(self) -> None:
+    def _column_count(self, width: int | None = None) -> int:
+        if self.columns is not None:
+            return self.columns
+        available = width if width is not None else self._grid.winfo_width()
+        # Before the rail has a width, four: the number the sixteen fall into
+        # as a square block.
+        if available <= 1:
+            return 4
+        return grid_columns(available, cell=SWATCH_W + 8)
+
+    def _reflow(self, event: "tk.Event") -> None:
+        """Re-lay the grid when the rail is resized, and not otherwise.
+
+        A `<Configure>` arrives for every pixel of a drag; rebuilding sixteen
+        canvases each time would make resizing the window crawl.
+        """
+        columns = grid_columns(event.width, cell=SWATCH_W + 8)
+        if columns == self._laid_out_for:
+            return
+        self._build(columns)
+
+    def _build(self, columns: int | None = None) -> None:
+        for child in self._grid.winfo_children():
+            child.destroy()
+        self._canvases.clear()
+
+        count = columns if columns is not None else self._column_count()
+        self._laid_out_for = count
         for index, name in enumerate(self.names):
             cell = ttk.Frame(self._grid)
-            cell.grid(row=index // self.columns, column=index % self.columns, padx=3, pady=3, sticky="w")
+            cell.grid(row=index // count, column=index % count, padx=3, pady=3, sticky="w")
             canvas = tk.Canvas(
                 cell,
                 width=SWATCH_W,

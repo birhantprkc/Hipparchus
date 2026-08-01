@@ -859,4 +859,42 @@ Converted from the Mac app's `TVDLogo.pdf` to `src/hipparchus/ui/assets/makers-m
 at 40px and reduced by an exact factor of two, because Tk scales by whole numbers
 only and anything else lands between pixels. It ships with the package.
 
+### Phase 6 — Style ✅
+
+**682 passing, 80 skipped.**
+
+| File | What | Tests |
+|---|---|---|
+| `application/style_catalogue.py` | Which styles exist and where each came from; what a save may be called; what may be deleted; how many swatches fit | `test_style_catalogue.py` — 18 |
+
+**Delivered:**
+
+- **All sixteen swatches**, in a grid that reflows with the rail rather than a
+  curated six with the other ten behind a dropdown. The panel's own maxim is
+  *see it, don't read it*, and it was contradicting itself directly beneath the
+  words. Reflow is throttled — a `<Configure>` arrives for every pixel of a
+  drag, and rebuilding sixteen canvases each time would make resizing crawl.
+- **The All-styles dropdown is grouped**: built-in, then plugin, then your own,
+  separated — "which of these can I delete?" is a question the list should
+  answer without being asked.
+- **Save this style…** asks for the name, seeded with the likely one: a
+  variation on the built-in being looked at, or your own style's own name,
+  since that is how one gets tuned. A name that shadows a built-in is refused,
+  because the built-ins are code and a saved style with the same name would
+  make one unreachable.
+- **Delete appears only for a style of your own**, and asks first. Deleting
+  rewrites `presets.json`; there is no undo for a file, and the only copy of a
+  style someone spent an evening tuning can go on one stray click.
+- **The plugins disclosure** shows what loaded and what failed, with a button
+  to the folder that creates it the first time so there is something to open.
+  The loader has recorded failures since it was written and **the window had
+  never once shown one** — a plugin that failed silently was indistinguishable
+  from one never installed.
+
+**Also:** the old "Presets / New Name / Add Current To Presets" block at the
+foot of the settings rail is gone. Saving a style lives with the styles now.
+
+**Still visually unverified**, like Phase 5 — lint-clean, logic tested, not
+looked at in a window. `HIPPARCHUS_GUI_TESTS=1 pytest` when convenient.
+
 *Nothing pushed.*

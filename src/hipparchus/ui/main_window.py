@@ -15,7 +15,7 @@ import tempfile
 import threading
 import time
 import tkinter as tk
-from tkinter import filedialog, messagebox, ttk
+from tkinter import filedialog, messagebox, simpledialog, ttk
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
@@ -23,7 +23,6 @@ from hipparchus.application import places, provenance, session_edit
 from hipparchus.application.controller import ApplicationController
 from hipparchus.core.fetch_progress import CancellationToken, FetchReporter
 from hipparchus.application.source_stack import SourceStack
-from hipparchus.application.style_previews import featured_names
 from hipparchus.ui import minimap
 from hipparchus.ui import actions, icons, menubar, shortcuts, theme, tooltip
 from hipparchus.ui.icons import IconButton
@@ -48,6 +47,7 @@ from hipparchus.application.session import Area, Session
 from hipparchus.application.session_history import SessionHistory
 from hipparchus.application.viewport import shaped_to_window
 from hipparchus.application.preset_store import PresetStore
+from hipparchus.application.style_catalogue import Catalogue, seeded_name, validate_name
 from hipparchus.core.config import AppConfig
 from hipparchus.data_sources.provider import BBoxQuery
 from hipparchus.export.profiles import MapComposition, SVGExportProfile
@@ -195,6 +195,9 @@ class MainWindow:
     controller: ApplicationController
     renderer: Renderer
     default_preset: ArtisticPreset = field(default_factory=default_preset)
+    #: What the plugin loader could not load, and why. Recorded since the
+    #: loader was written and never once shown.
+    plugin_load_errors: list[str] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         self._root = tk.Tk()
@@ -272,7 +275,6 @@ class MainWindow:
         self._composition_var = tk.StringVar(value="OpenStreetMap")
         self._location_preset_var = tk.StringVar(value="London Center")
         self._location_query_var = tk.StringVar(value="")
-        self._new_preset_name_var = tk.StringVar(value="")
         # Get Overpass settings from data source manager
         overpass_settings = self.controller.data_source_manager.get_overpass_settings()
         self._provider_endpoint_var = tk.StringVar(value=overpass_settings["endpoint"])
@@ -859,7 +861,11 @@ class MainWindow:
         self._layer_visibility_vars = self._layers_panel.visibility_vars()
 
         section_heading(parent, "Style", "see it, don't read it")
-        self._style_picker = StylePicker(parent, featured_names(), on_select=self._on_style_selected)
+        # All sixteen. With nothing to scroll there is no reason to decide for
+        # someone which looks they are allowed to see.
+        self._style_picker = StylePicker(
+            parent, tuple(preset_names()), on_select=self._on_style_selected
+        )
         self._style_picker.set_selected(self._preset_var.get())
 
         # Still here, because a name is the faster way in when you already know
@@ -885,8 +891,153 @@ class MainWindow:
             "work to spend getting there.",
         )
 
+        self._build_saved_styles(parent)
+
         ttk.Separator(parent, orient="horizontal").pack(fill="x", pady=12)
         self._build_settings_tab(parent)
+
+    def _build_saved_styles(self, parent: ttk.Frame) -> None:
+        """Keeping a tuned style, and letting go of one.
+
+        The sixteen built-ins are code and cannot be edited. Everything the eye
+        is actually for — nudging a colour, turning the illumination up — was
+        lost at the next launch, which made the tuning pointless.
+        """
+        row = ttk.Frame(parent)
+        row.pack(fill="x", pady=(6, 0))
+        IconButton(
+            row, "save", command=self._save_current_as_preset, size=20,
+            tooltip="Keep the current style, with its derivation sizes, under a name of your own.",
+        ).pack(side="left", padx=(0, 4))
+        ttk.Button(row, text="Save this style…", command=self._save_current_as_preset).pack(
+            side="left", fill="x", expand=True
+        )
+
+        self._delete_row = ttk.Frame(parent)
+        IconButton(
+            self._delete_row, "trash", command=self._delete_current_preset, size=20,
+            tooltip="Remove this saved style from presets.json.",
+        ).pack(side="left", padx=(0, 4))
+        self._delete_button = ttk.Button(
+            self._delete_row, text="Delete", command=self._delete_current_preset
+        )
+        self._delete_button.pack(side="left", fill="x", expand=True)
+        self._refresh_delete_button()
+
+        self._build_plugin_summary(parent)
+
+    def _catalogue(self) -> Catalogue:
+        """Which styles exist, and where each came from."""
+        return Catalogue(
+            builtin=tuple(preset_names()),
+            plugin=(),
+            custom=tuple(sorted(self._custom_presets)),
+        )
+
+    def _refresh_delete_button(self) -> None:
+        """Offered only for a style of your own — a delete that cannot work is
+        worse than no delete at all."""
+        name = self._preset_var.get()
+        if self._catalogue().can_delete(name):
+            self._delete_button.configure(text=f"Delete “{name}”")
+            self._delete_row.pack(fill="x", pady=(4, 0))
+        else:
+            self._delete_row.pack_forget()
+
+    def _delete_current_preset(self) -> None:
+        """Asked before, not regretted after.
+
+        Deleting a saved style rewrites `presets.json`. There is no undo for a
+        file, and the only copy of a style someone spent an evening tuning can
+        go on one stray click.
+        """
+        name = self._preset_var.get()
+        if not self._catalogue().can_delete(name):
+            return
+        if not messagebox.askyesno(
+            "Delete this style?",
+            f"Delete “{name}”?\n\nThis removes it from presets.json. It cannot be undone.",
+            icon="warning",
+            default="no",
+        ):
+            return
+
+        self._custom_presets.pop(name, None)
+        try:
+            self._preset_store.save(self._custom_presets)
+        except OSError as exc:
+            messagebox.showerror("Could not delete", f"presets.json could not be written:\n{exc}")
+            return
+
+        self._preset_options = sorted({*preset_names(), *self._custom_presets})
+        self._refresh_preset_menu()
+        self._preset_var.set(self.default_preset.name)
+        self._status.set_message(f"Deleted the style “{name}”")
+
+    def _build_plugin_summary(self, parent: ttk.Frame) -> None:
+        """What loaded, and what did not.
+
+        A plugin that failed silently is indistinguishable from one that was
+        never installed. The loader has recorded both since it was written and
+        the window has never shown either.
+        """
+        loader_errors = self.plugin_load_errors
+        if not self.loaded_plugins and not loader_errors:
+            return
+
+        ttk.Label(
+            parent,
+            text=f"Plugins ({len(self.loaded_plugins)})",
+            font=theme.font("caption"),
+        ).pack(anchor="w", pady=(10, 2))
+
+        for plugin in self.loaded_plugins:
+            row = ttk.Frame(parent)
+            row.pack(fill="x")
+            IconButton(
+                row, "tick-circle", command=lambda: None, size=14,
+                colour=theme.current().success,
+                background=theme.current().bg, hover=theme.current().bg,
+            ).pack(side="left", padx=(0, 4))
+            ttk.Label(row, text=plugin.name, font=theme.font("caption")).pack(side="left")
+
+        for note in loader_errors:
+            row = ttk.Frame(parent)
+            row.pack(fill="x")
+            IconButton(
+                row, "warning", command=lambda: None, size=14,
+                colour=theme.current().warning,
+                background=theme.current().bg, hover=theme.current().bg,
+            ).pack(side="left", padx=(0, 4), anchor="n")
+            ttk.Label(
+                row, text=note, font=theme.font("caption2"), wraplength=210, justify="left"
+            ).pack(side="left", fill="x", expand=True)
+
+        folder = ttk.Frame(parent)
+        folder.pack(fill="x", pady=(4, 0))
+        IconButton(
+            folder, "folder", command=self._reveal_plugin_folder, size=18,
+            tooltip=str(self.config.plugins_dir),
+        ).pack(side="left", padx=(0, 4))
+        ttk.Button(
+            folder, text="Show plugins folder", command=self._reveal_plugin_folder
+        ).pack(side="left", fill="x", expand=True)
+
+    def _reveal_plugin_folder(self) -> None:
+        """Open the folder, creating it the first time so there is one to open."""
+        import subprocess
+
+        path = self.config.plugins_dir
+        try:
+            path.mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            self._status.set_message(f"Could not create {path}: {exc}", error=True)
+            return
+        opener = {"Darwin": "open", "Windows": "explorer"}.get(platform.system(), "xdg-open")
+        try:
+            subprocess.run([opener, str(path)], check=False)  # noqa: S603
+        except OSError as exc:
+            self._status.set_message(f"Could not open {path}: {exc}", error=True)
 
     def _file_reason(self, source_id: str) -> str:
         """Why a chosen file cannot be read, in the source's own row.
@@ -928,6 +1079,7 @@ class MainWindow:
 
     def _on_style_selected(self, name: str) -> None:
         self._preset_var.set(name)
+        self._refresh_delete_button()
 
     def _refresh_render_button(self) -> None:
         """Say why before the click, not after.
@@ -1203,14 +1355,9 @@ class MainWindow:
         ttk.Checkbutton(parent, text="Include simple legend", variable=self._include_legend_var).pack(anchor="w", pady=1)
         ttk.Checkbutton(parent, text="Include background", variable=self._include_background_var).pack(anchor="w", pady=1)
 
-        ttk.Separator(parent, orient="horizontal").pack(fill="x", pady=10)
-        ttk.Label(parent, text="Presets", font=theme.font("heading")).pack(anchor="w", pady=(0, 6))
-
-        row = ttk.Frame(parent)
-        row.pack(fill="x", pady=2)
-        ttk.Label(row, text="New Name", width=13).pack(side="left")
-        ttk.Entry(row, textvariable=self._new_preset_name_var).pack(side="left", fill="x", expand=True)
-        ttk.Button(parent, text="Add Current To Presets", command=self._save_current_as_preset).pack(fill="x", pady=(8, 0))
+        # Saving a style lives with the styles now, not at the foot of a rail
+        # of unrelated settings, and it asks for the name rather than needing
+        # one typed into a box first.
 
         ttk.Separator(parent, orient="horizontal").pack(fill="x", pady=10)
         ttk.Label(parent, text=f"Cache: {self.config.cache_dir}").pack(anchor="w")
@@ -1282,10 +1429,33 @@ class MainWindow:
         self._status.set_message(f"Settings applied - Model: {self._map_model_var.get()}")
 
     def _save_current_as_preset(self) -> None:
-        name = self._new_preset_name_var.get().strip()
-        if not name:
-            messagebox.showinfo("Preset name", "Please enter a preset name.")
+        """Ask for a name, seeded with the likely one, and refuse a bad one.
+
+        The commonest save is a variation on the style being looked at, so the
+        box already contains it; saving over your own keeps its name, because
+        that is how a style gets tuned.
+        """
+        catalogue = self._catalogue()
+        current = self._preset_var.get()
+        suggested = seeded_name(current, is_custom=catalogue.kind_of(current) == "custom")
+
+        name = simpledialog.askstring(
+            "Save this style",
+            "It will appear in All styles, and in the Mac app — the two share this file.",
+            initialvalue=suggested,
+            parent=self._root,
+        )
+        if name is None:
             return
+
+        refusal = validate_name(
+            name, builtin=tuple(preset_names()), existing=tuple(self._custom_presets)
+        )
+        if refusal is not None:
+            messagebox.showinfo("That name will not do", refusal)
+            return
+
+        name = name.strip()
         source = self._resolve_selected_preset()
         self._custom_presets[name] = ArtisticPreset(
             name=name,
@@ -1302,14 +1472,24 @@ class MainWindow:
             self._preset_options.sort()
             self._refresh_preset_menu()
         self._preset_var.set(name)
-        self._new_preset_name_var.set("")
-        self._status.set_message(f"Preset saved: {name}")
+        self._status.set_message(f"Saved the style “{name}”")
 
     def _refresh_preset_menu(self) -> None:
+        """Built-in, then anything plugins brought, then your own — separated,
+        because "which of these can I delete?" is a question the list should
+        answer without being asked."""
+        catalogue = self._catalogue()
         menu = self._preset_menu["menu"]
         menu.delete(0, "end")
-        for name in self._preset_options:
-            menu.add_command(label=name, command=tk._setit(self._preset_var, name))
+        first = True
+        for group in (catalogue.builtin, catalogue.plugin, catalogue.custom):
+            if not group:
+                continue
+            if not first:
+                menu.add_separator()
+            for name in group:
+                menu.add_command(label=name, command=tk._setit(self._preset_var, name))
+            first = False
 
     def _on_location_lookup_clicked(self) -> None:
         query = self._location_query_var.get().strip()
