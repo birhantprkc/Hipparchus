@@ -54,7 +54,9 @@ class ConfigLoader:
         # Whose app this is, in the corner of the status bar. A GIF or PNG,
         # since Tk reads neither PDF nor SVG. Absent means absent: no
         # placeholder, no broken-image box in the corner of every window.
-        makers_mark = os.getenv("HIPPARCHUS_MAKERS_MARK", "").strip()
+        makers_mark = os.getenv("HIPPARCHUS_MAKERS_MARK", "").strip() or str(
+            Path(__file__).resolve().parent.parent / "ui" / "assets" / "makers-mark.png"
+        )
 
         default_width = int(os.getenv("HIPPARCHUS_WINDOW_WIDTH", "1600"))
         default_height = int(os.getenv("HIPPARCHUS_WINDOW_HEIGHT", "1080"))

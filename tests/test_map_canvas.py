@@ -10,6 +10,7 @@ from __future__ import annotations
 import tkinter as tk
 import unittest
 
+from gui_support import require_focus_tests, require_gui, show_offscreen
 from hipparchus.ui import theme
 from hipparchus.ui.map_canvas import TURN_STEP, ZOOM_STEP, MapCanvas
 
@@ -54,14 +55,16 @@ class FakeScene:
 
 class CanvasTestCase(unittest.TestCase):
     def setUp(self) -> None:
+        require_gui()
         try:
             self.root = tk.Tk()
         except tk.TclError as exc:  # pragma: no cover - headless CI
             self.skipTest(f"no display: {exc}")
-        # Withdrawn then shown: a withdrawn Tk window has no geometry and does
-        # not route events, so every gesture below would silently do nothing.
+        # Mapped off-screen: an unmapped window reports a size of one pixel and
+        # routes no events, so the gestures below would silently do nothing —
+        # but nothing should ever appear on the desktop of whoever runs this.
         self.root.withdraw()
-        self.root.geometry("900x700")
+        self.root.geometry("900x700+-4000+-4000")
         self.root.grid_rowconfigure(0, weight=1)
         self.root.grid_columnconfigure(0, weight=1)
         theme.set_mode("light")
@@ -81,8 +84,7 @@ class CanvasTestCase(unittest.TestCase):
             on_status=self.status.append,
         )
         self.canvas.grid(row=0, column=0, sticky="nsew")
-        self.root.deiconify()
-        self.root.update()
+        show_offscreen(self.root)
 
     def _redraw(self) -> None:
         self.redraws += 1
@@ -213,6 +215,12 @@ class PointerTests(CanvasTestCase):
 
 
 class KeyboardTests(CanvasTestCase):
+    def setUp(self) -> None:
+        # Taking the keyboard pulls focus out of whatever the person is typing
+        # in, so these are asked for rather than assumed.
+        require_focus_tests()
+        super().setUp()
+
     def press(self, key: str, **kwargs) -> None:
         # `focus_force`, not `focus_set`: a key event routes to the focused
         # widget, and `focus_set` only takes effect once the *window* has focus

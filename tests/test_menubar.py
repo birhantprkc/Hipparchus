@@ -10,6 +10,7 @@ from __future__ import annotations
 import tkinter as tk
 import unittest
 
+from gui_support import require_focus_tests, require_gui, show_offscreen
 from hipparchus.ui import actions as verbs
 from hipparchus.ui import menubar
 from hipparchus.ui.shortcuts import sequences_for
@@ -31,8 +32,17 @@ def _settle_focus(root: tk.Tk, attempts: int = 50) -> bool:
     return False
 
 
+class FocusTestCase:
+    """Mixin for the tests that need the window to hold the keyboard."""
+
+    def setUp(self) -> None:  # type: ignore[override]
+        require_focus_tests()
+        super().setUp()  # type: ignore[misc]
+
+
 class MenuBarTestCase(unittest.TestCase):
     def setUp(self) -> None:
+        require_gui()
         try:
             self.root = tk.Tk()
         except tk.TclError as exc:  # pragma: no cover - headless CI
@@ -125,7 +135,7 @@ class InvocationTests(MenuBarTestCase):
         self.assertEqual(self.calls, ["zoom_in"])
 
 
-class AcceleratorTests(MenuBarTestCase):
+class AcceleratorTests(FocusTestCase, MenuBarTestCase):
     def test_items_display_their_shortcut(self) -> None:
         bar = menubar.build(self.root, self.actions)
         menu = menubar.submenu(bar, "Map")
@@ -144,8 +154,7 @@ class AcceleratorTests(MenuBarTestCase):
         by pressing the key, because Tk stores bindings under normalised names
         of its own and comparing strings would prove nothing."""
         menubar.build(self.root, self.actions)
-        self.root.deiconify()
-        self.root.update()
+        show_offscreen(self.root)
         for verb in verbs.VERBS:
             if not verb.accelerator:
                 continue
@@ -164,7 +173,7 @@ class AcceleratorTests(MenuBarTestCase):
 
     def test_pressing_the_key_runs_the_verb(self) -> None:
         menubar.build(self.root, self.actions)
-        self.root.deiconify()
+        show_offscreen(self.root)
         self.send(sequences_for("Cmd+.")[0])
         self.assertIn("cancel_fetch", self.calls)
 
@@ -212,7 +221,7 @@ class SavedPlacesTests(MenuBarTestCase):
         for position, spec in enumerate(verbs.place_accelerators()):
             chosen: list[str] = []
             menubar.build(self.root, self.actions, on_place=chosen.append)
-            self.root.deiconify()
+            show_offscreen(self.root)
             self.root.update()
             # One sequence at a time: on macOS both the Command and the
             # Control variant are bound on purpose, and firing both would
@@ -228,12 +237,12 @@ class SavedPlacesTests(MenuBarTestCase):
 
         chosen: list[str] = []
         menubar.build(self.root, self.actions, on_place=chosen.append)
-        self.root.deiconify()
+        show_offscreen(self.root)
         self.send(sequences_for("Cmd+3")[0])
         self.assertEqual(chosen, [places.PLACES[2].name])
 
 
-class RebuildTests(MenuBarTestCase):
+class RebuildTests(FocusTestCase, MenuBarTestCase):
     def test_building_twice_does_not_leave_two_menu_bars(self) -> None:
         menubar.build(self.root, self.actions)
         bar = menubar.build(self.root, self.actions)
@@ -243,7 +252,7 @@ class RebuildTests(MenuBarTestCase):
         """Stale bindings from the first build would double every shortcut."""
         menubar.build(self.root, self.actions)
         menubar.build(self.root, self.actions)
-        self.root.deiconify()
+        show_offscreen(self.root)
         self.send(sequences_for("Cmd+.")[0])
         self.assertEqual(self.calls.count("cancel_fetch"), 1)
 

@@ -39,6 +39,11 @@ package-dir = {"" = "src"}
 [tool.setuptools.packages.find]
 where = ["src"]
 
+# The maker's mark is loaded at runtime, so it has to travel with the package
+# rather than only existing in a checkout.
+[tool.setuptools.package-data]
+"hipparchus.ui" = ["assets/*.png"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]

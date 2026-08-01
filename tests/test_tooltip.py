@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import unittest
 
+from gui_support import require_gui
 from hipparchus.ui import tooltip
 
 SCREEN = (1920, 1080)
@@ -72,6 +73,8 @@ class AttachTests(unittest.TestCase):
     def setUp(self) -> None:
         import tkinter as tk
 
+        # A tooltip is a Toplevel — a real window on a real screen.
+        require_gui()
         try:
             self.root = tk.Tk()
         except tk.TclError as exc:  # pragma: no cover - headless CI

@@ -21,6 +21,8 @@ import tempfile
 import tkinter as tk
 import unittest
 
+from gui_support import require_gui
+
 
 class WindowTests(unittest.TestCase):
     window = None
@@ -30,6 +32,7 @@ class WindowTests(unittest.TestCase):
         # No throwaway `tk.Tk()` to probe for a display first: creating a root,
         # destroying it and then letting the application create another hangs
         # the interpreter on macOS. The bootstrap below is the probe.
+        require_gui()
         cls._folder = tempfile.TemporaryDirectory()
         cls._previous = {
             key: os.environ.get(key)

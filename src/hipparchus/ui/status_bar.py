@@ -255,13 +255,20 @@ class StatusBar:
 
     # -- the maker's mark -----------------------------------------------------
 
+    #: How tall the mark is drawn. Sits with the row rather than over it.
+    MARK_HEIGHT = 20
+
     @staticmethod
     def load_mark(path: str | None) -> tk.PhotoImage | None:
         """The logo, if there is one to show.
 
         Absent means absent — no placeholder, no broken-image box in the corner
-        of every window. The asset is not in this repository yet; the Mac app
-        carries it as a PDF, which Tk cannot read.
+        of every window.
+
+        Tk scales an image by whole numbers only, so the asset is kept at a
+        multiple of the height it is drawn at and reduced by an exact factor.
+        Asking Tk to fit an arbitrary size would land between pixels and show
+        as a smear.
         """
         if not path:
             return None
@@ -269,9 +276,12 @@ class StatusBar:
             location = Path(path)
             if not location.is_file():
                 return None
-            return tk.PhotoImage(file=str(location))
+            image = tk.PhotoImage(file=str(location))
         except (tk.TclError, OSError):
             return None
+
+        factor = max(1, round(image.height() / StatusBar.MARK_HEIGHT))
+        return image if factor == 1 else image.subsample(factor, factor)
 
 
 def _rows_from(progress: Any) -> list[Row]:

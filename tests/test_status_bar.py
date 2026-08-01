@@ -11,6 +11,8 @@ from __future__ import annotations
 import tkinter as tk
 import unittest
 
+from gui_support import require_gui
+
 from hipparchus.core.fetch_progress import FetchReporter
 from hipparchus.ui import theme
 from hipparchus.ui.status_bar import StatusBar, source_label
@@ -29,6 +31,7 @@ class LabelTests(unittest.TestCase):
 
 class StatusBarTestCase(unittest.TestCase):
     def setUp(self) -> None:
+        require_gui()
         try:
             self.root = tk.Tk()
         except tk.TclError as exc:  # pragma: no cover - headless CI
@@ -39,7 +42,7 @@ class StatusBarTestCase(unittest.TestCase):
         self.cancelled = 0
         self.bar = StatusBar(self.root, on_cancel=self._cancel)
         self.bar.grid(row=0, column=0, sticky="ew")
-        self.root.deiconify()
+        # Never shown: nothing here needs a mapped window.
         self.root.update()
 
     def _cancel(self) -> None:
@@ -185,3 +188,34 @@ class MakersMarkTests(StatusBarTestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class MarkScalingTests(StatusBarTestCase):
+    """Tk scales by whole numbers only, so the asset is kept at a multiple of
+    the height it is drawn at."""
+
+    def test_the_shipped_mark_loads_and_lands_on_the_row_height(self) -> None:
+        from hipparchus.core.config import ConfigLoader
+
+        mark = StatusBar.load_mark(ConfigLoader.load().makers_mark)
+        self.assertIsNotNone(mark)
+        assert mark is not None
+        self.assertEqual(mark.height(), StatusBar.MARK_HEIGHT)
+
+    def test_the_master_is_a_whole_multiple_of_the_drawn_height(self) -> None:
+        """Otherwise the reduction lands between pixels and shows as a smear."""
+        from hipparchus.core.config import ConfigLoader
+
+        raw = tk.PhotoImage(file=ConfigLoader.load().makers_mark)
+        self.assertEqual(raw.height() % StatusBar.MARK_HEIGHT, 0)
+
+    def test_an_already_small_mark_is_not_scaled_away(self) -> None:
+        import tempfile
+        from PIL import Image
+
+        with tempfile.TemporaryDirectory() as folder:
+            path = f"{folder}/tiny.png"
+            Image.new("RGBA", (12, 12), (0, 0, 0, 255)).save(path)
+            mark = StatusBar.load_mark(path)
+            assert mark is not None
+            self.assertEqual(mark.height(), 12)
