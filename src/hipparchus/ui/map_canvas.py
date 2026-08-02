@@ -186,8 +186,12 @@ class MapCanvas:
     def visible_area(self) -> tuple[float, float, float, float] | None:
         """The ground on screen right now, in degrees.
 
-        Goes through the renderer's own inverse, so it cannot disagree with what
-        was actually drawn.
+        Goes through the renderer's own inverse *and* its own fit gap, so it
+        cannot disagree with what was actually drawn. Asking `fit_margin` for
+        the gap instead was wrong on the axis the fit does not bind: the map is
+        fitted by the tighter dimension and centred, so the other side has more
+        room than the margin, and reading it back as visible ground walked the
+        area outwards a little on every press.
         """
         scene = self._scene()
         projection = getattr(scene, "projection", None) if scene is not None else None
@@ -195,11 +199,16 @@ class MapCanvas:
             return None
         width = max(1, self.widget.winfo_width())
         height = max(1, self.widget.winfo_height())
+        metrics = self._renderer.fit_metrics(width, height)
+        if metrics is None:
+            return None
+        _scale, offset_x, offset_y, _min_x, _max_y = metrics
         return visible_bounds(
             width=width,
             height=height,
             to_world=lambda x, y: self._renderer.screen_to_world(x, y, width, height),
             unproject=projection.unproject_point,
+            insets=(offset_x, offset_y),
         )
 
     # -- the viewport ---------------------------------------------------------

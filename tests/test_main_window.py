@@ -120,6 +120,49 @@ class WindowTests(unittest.TestCase):
         self.window._toggle_theme()
         self.root.update()
 
+    # -- what a worker thread may touch ---------------------------------------
+
+    def test_the_debug_flag_can_be_read_from_another_thread(self) -> None:
+        """Nothing a worker thread calls may touch Tk.
+
+        The fetch and render threads both call `_debug`, which used to ask a
+        `BooleanVar` whether debug logging was on. Reading a Tk variable calls
+        into the Tcl interpreter, and from any thread but the one that made it
+        that raises "main thread is not in main loop" — which the render worker
+        caught and turned into a modal error dialogue, on top of whatever the
+        person was doing. It blocked until somebody pressed OK.
+        """
+        import threading
+
+        failures: list[BaseException] = []
+
+        def from_a_worker() -> None:
+            try:
+                self.window._debug("a line from %s", "a worker thread")
+            except BaseException as exc:  # noqa: BLE001 - the point is what it raises
+                failures.append(exc)
+
+        worker = threading.Thread(target=from_a_worker)
+        worker.start()
+        worker.join(timeout=5)
+        self.assertFalse(worker.is_alive(), "the worker never finished")
+        self.assertEqual(failures, [], f"_debug raised off the UI thread: {failures}")
+
+    def test_the_menu_still_governs_whether_it_logs(self) -> None:
+        """The plain flag has to follow the variable, or the menu item stops
+        meaning anything."""
+        original = self.window._debug_enabled_var.get()
+        try:
+            self.window._debug_enabled_var.set(False)
+            self.root.update()
+            self.assertFalse(self.window._debug_enabled)
+            self.window._debug_enabled_var.set(True)
+            self.root.update()
+            self.assertTrue(self.window._debug_enabled)
+        finally:
+            self.window._debug_enabled_var.set(original)
+            self.root.update()
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -37,25 +37,33 @@ def visible_bounds(
     height: float,
     to_world: Callable[[float, float], tuple[float, float] | None],
     unproject: Callable[[float, float], tuple[float, float]],
+    insets: tuple[float, float],
 ) -> tuple[float, float, float, float] | None:
     """The ground on screen right now, in degrees.
 
     Two decisions carry this.
 
-    **Inset by the fit margin**, not the raw canvas corners. The map is drawn
-    inside the canvas less a margin, so the corners describe an area about an
-    eighth larger than the one on show. Fetch that, fit it with a margin again,
-    fetch that — and every press of Render map walks the area outwards, which
-    reads as the map slowly zooming out on its own. Insetting makes the round
-    trip a fixed point.
+    **Inset by the gap the renderer actually left**, not by the raw canvas
+    corners and not by a margin of this function's own. The map is drawn inside
+    the canvas less a gap, so the corners describe an area larger than the one
+    on show. Fetch that, fit it again, fetch that — and every press of Render
+    map walks the area outwards, which reads as the map slowly zooming out on
+    its own.
+
+    ``insets`` has to be the renderer's own ``offset_x`` and ``offset_y``, and
+    not ``fit_margin`` on both axes. The canvas fits a map by the tighter of its
+    two dimensions and then centres it, so the gap equals the margin on that
+    axis alone; on the other it is larger. Insetting by the same number on both
+    reads ground on the loose axis that was never drawn — 3.2 % a press on a
+    1180×900 canvas, which compounds to 71 % wider in ten.
 
     **All four corners**, not two opposite ones. With the view turned, the
     corners of the rectangle on screen are not the corners of the ground under
     it, and two of them describe a box that is too small in both directions.
     """
-    margin = fit_margin(width, height)
-    left, top = margin, margin
-    right, bottom = width - margin, height - margin
+    inset_x, inset_y = insets
+    left, top = inset_x, inset_y
+    right, bottom = width - inset_x, height - inset_y
     if right <= left or bottom <= top:
         return None
 

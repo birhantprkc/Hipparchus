@@ -139,6 +139,12 @@ class MainWindow:
         self._busy_counter = 0
         self._fetch_started_at: float | None = None
         self._debug_enabled_var = tk.BooleanVar(value=True)
+        #: The same answer, readable from any thread. Kept in step by a trace
+        #: on the variable, which runs on the UI thread where it is safe.
+        self._debug_enabled = True
+        self._debug_enabled_var.trace_add(
+            "write", lambda *_args: self._follow_debug_setting()
+        )
         self._perf_summary_var = tk.StringVar(value="No diagnostics yet.")
         self._debug_log_file = self.config.cache_dir / "hipparchus_debug.log"
 
@@ -324,8 +330,24 @@ class MainWindow:
             logger.addHandler(file_handler)
         return logger
 
+    def _follow_debug_setting(self) -> None:
+        """Copy the menu's answer somewhere the worker threads may read it."""
+        try:
+            self._debug_enabled = bool(self._debug_enabled_var.get())
+        except tk.TclError:  # pragma: no cover - the window is going away
+            self._debug_enabled = False
+
     def _debug(self, message: str, *args: object) -> None:
-        if not self._debug_enabled_var.get():
+        """Log a line, if debug logging is on.
+
+        Reads a plain bool rather than the Tk variable behind it, because this
+        is called from the fetch and render threads. Asking a `BooleanVar` for
+        its value calls into the Tcl interpreter, and doing that from any thread
+        but the one that made it raises "main thread is not in main loop" —
+        which the render worker then caught and turned into a modal error
+        dialogue, on top of whatever the person was doing.
+        """
+        if not self._debug_enabled:
             return
         self._logger.info(message, *args)
 

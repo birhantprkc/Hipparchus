@@ -43,7 +43,13 @@ class MarginTests(unittest.TestCase):
 
 class VisibleBoundsTests(unittest.TestCase):
     """The screen-to-world call is faked, so the geometry is what is tested
-    rather than the renderer."""
+    rather than the renderer.
+
+    The insets are the renderer's own gap. A square canvas fitting a square map
+    leaves the fit margin on both axes, which is why these use it — a canvas
+    whose shape differs from the map's does not, and that is what
+    `RoundTripStabilityTests` is about.
+    """
 
     def identity_world(self, x: float, y: float) -> tuple[float, float]:
         return (x, y)
@@ -55,7 +61,10 @@ class VisibleBoundsTests(unittest.TestCase):
             seen.append((x, y))
             return (x, y)
 
-        visible_bounds(width=800, height=600, to_world=record, unproject=lambda x, y: (x, y))
+        visible_bounds(
+            width=800, height=600, to_world=record, unproject=lambda x, y: (x, y),
+            insets=(fit_margin(800, 600), fit_margin(800, 600)),
+        )
         self.assertEqual(len(seen), 4)
         self.assertEqual(len(set(seen)), 4)
 
@@ -71,7 +80,8 @@ class VisibleBoundsTests(unittest.TestCase):
             )
 
         bounds = visible_bounds(
-            width=800, height=800, to_world=turned, unproject=lambda x, y: (x, y)
+            width=800, height=800, to_world=turned, unproject=lambda x, y: (x, y),
+            insets=(fit_margin(800, 800), fit_margin(800, 800)),
         )
         assert bounds is not None
         min_lon, min_lat, max_lon, max_lat = bounds
@@ -79,29 +89,46 @@ class VisibleBoundsTests(unittest.TestCase):
         self.assertAlmostEqual((max_lon - min_lon) / (max_lat - min_lat), 1.0, places=6)
         self.assertGreater(max_lon - min_lon, 800 - 2 * fit_margin(800, 800))
 
-    def test_the_area_is_inset_by_the_fit_margin(self) -> None:
-        """The map is drawn inside the canvas less a margin, so taking the raw
-        corners describes an area about an eighth larger than the one on show.
-        Fetch that, fit it with a margin again, fetch that — and every press of
-        Render map walks the area outwards, which reads as the map slowly
-        zooming out on its own."""
+    def test_the_area_is_inset_by_the_gap_it_is_given(self) -> None:
+        """The map is drawn inside the canvas less a gap, so taking the raw
+        corners describes an area larger than the one on show. Fetch that, fit
+        it again, fetch that — and every press of Render map walks the area
+        outwards, which reads as the map slowly zooming out on its own."""
         bounds = visible_bounds(
-            width=800, height=600, to_world=self.identity_world, unproject=lambda x, y: (x, y)
+            width=800, height=600, to_world=self.identity_world,
+            unproject=lambda x, y: (x, y), insets=(30.0, 12.0),
         )
         assert bounds is not None
-        margin = fit_margin(800, 600)
-        self.assertAlmostEqual(bounds[0], margin, places=6)
-        self.assertAlmostEqual(bounds[2], 800 - margin, places=6)
+        self.assertAlmostEqual(bounds[0], 30.0, places=6)
+        self.assertAlmostEqual(bounds[2], 800 - 30.0, places=6)
+        self.assertAlmostEqual(bounds[1], 12.0, places=6)
+        self.assertAlmostEqual(bounds[3], 600 - 12.0, places=6)
+
+    def test_the_two_axes_are_inset_separately(self) -> None:
+        """The whole bug: the canvas fits by the tighter dimension and centres,
+        so the gap is only the fit margin on that axis."""
+        bounds = visible_bounds(
+            width=800, height=600, to_world=self.identity_world,
+            unproject=lambda x, y: (x, y), insets=(70.0, 30.0),
+        )
+        assert bounds is not None
+        self.assertNotAlmostEqual(bounds[0], bounds[1])
 
     def test_a_canvas_too_small_to_draw_in_gives_nothing(self) -> None:
         self.assertIsNone(
-            visible_bounds(width=4, height=4, to_world=self.identity_world, unproject=lambda x, y: (x, y))
+            visible_bounds(
+                width=4, height=4, to_world=self.identity_world,
+                unproject=lambda x, y: (x, y), insets=(16.0, 16.0),
+            )
         )
 
     def test_a_transform_that_cannot_answer_gives_nothing(self) -> None:
         """Before anything has been drawn there is no transform to ask."""
         self.assertIsNone(
-            visible_bounds(width=800, height=600, to_world=lambda x, y: None, unproject=lambda x, y: (x, y))
+            visible_bounds(
+                width=800, height=600, to_world=lambda x, y: None,
+                unproject=lambda x, y: (x, y), insets=(36.0, 36.0),
+            )
         )
 
     def test_the_projection_is_applied(self) -> None:
@@ -111,6 +138,7 @@ class VisibleBoundsTests(unittest.TestCase):
             height=600,
             to_world=lambda x, y: profile.project_point(23.7 + x / 100000, 37.95 + y / 100000),
             unproject=profile.unproject_point,
+            insets=(fit_margin(800, 600), fit_margin(800, 600)),
         )
         assert bounds is not None
         self.assertAlmostEqual(bounds[0], 23.7 + fit_margin(800, 600) / 100000, places=5)
@@ -250,3 +278,77 @@ class AreaToFetchTests(unittest.TestCase):
             area_to_fetch(requested=LONDON, visible=ATHENS, rendered=None),
             LONDON,
         )
+
+
+class RoundTripStabilityTests(unittest.TestCase):
+    """Pressing Render map twice must fetch the same area twice.
+
+    The canvas fits a map by the tighter of its two dimensions and centres it,
+    so the gap it leaves is only equal to the fit margin on *that* axis; on the
+    other it is larger. Insetting by the same number on both reads ground on the
+    loose axis that was never drawn, and every press walks the area outwards —
+    3.2 % a press, which is a map that slowly zooms out on its own.
+    """
+
+    CANVAS = (1180, 900)
+    START = (23.60, 37.90, 23.84, 38.08)
+
+    def _scene(self, bbox):
+        from shapely.geometry import box
+
+        from hipparchus.rendering.models import LayerStyle, RenderLayer, RenderScene
+
+        projection = ProjectionProfile.from_bbox(bbox, mode="web_mercator")
+        return RenderScene(
+            layers=[RenderLayer("water", [projection.project_geometry(box(*bbox))], LayerStyle())],
+            bbox=projection.project_bbox(bbox),
+            source_bbox=bbox,
+            projection=projection,
+        )
+
+    def _press(self, bbox):
+        """One press of Render map, exactly as MapCanvas performs it."""
+        from hipparchus.rendering.skia_renderer import SkiaRenderer
+
+        width, height = self.CANVAS
+        scene = self._scene(bbox)
+        renderer = SkiaRenderer()
+        renderer.set_scene(scene)
+        metrics = renderer.fit_metrics(width, height)
+        assert metrics is not None
+        _scale, offset_x, offset_y, _min_x, _max_y = metrics
+
+        seen = visible_bounds(
+            width=width,
+            height=height,
+            to_world=lambda x, y: renderer.screen_to_world(x, y, width, height),
+            unproject=scene.projection.unproject_point,
+            insets=(offset_x, offset_y),
+        )
+        assert seen is not None
+        return shaped_to_window(seen, width / height)
+
+    def test_the_first_press_shapes_the_area_to_the_window(self) -> None:
+        shaped = self._press(self.START)
+        self.assertAlmostEqual(projected_aspect(shaped), self.CANVAS[0] / self.CANVAS[1], places=6)
+
+    def test_pressing_it_again_changes_nothing(self) -> None:
+        once = self._press(self.START)
+        twice = self._press(once)
+        for first, second in zip(once, twice):
+            self.assertAlmostEqual(first, second, places=6)
+
+    def test_ten_presses_do_not_walk_the_map_outwards(self) -> None:
+        area = self._press(self.START)
+        after = area
+        for _ in range(10):
+            after = self._press(after)
+        widened = (after[2] - after[0]) / (area[2] - area[0])
+        self.assertAlmostEqual(widened, 1.0, places=5)
+
+    def test_what_is_reported_is_what_was_drawn(self) -> None:
+        """The area on screen is the scene's own bounds, not the canvas."""
+        area = self._press(self.START)
+        seen = self._press(area)
+        for edge, reported in zip(area, seen):
+            self.assertAlmostEqual(edge, reported, places=6)
