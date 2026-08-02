@@ -21,6 +21,7 @@ from hipparchus.application.geocoding import (
     around,
     clamped,
     nothing_found_message,
+    search_summary,
     places_from,
 )
 
@@ -154,6 +155,33 @@ class DescriptionTests(unittest.TestCase):
         message = nothing_found_message("  Atlantis ")
         self.assertIn("Atlantis", message)
         self.assertIn("try", message.lower())
+
+
+class SearchSummaryTests(unittest.TestCase):
+    """What the status bar says a search came to.
+
+    It said "1 places found", which is what counting in a format string gets
+    you. Searching for a specific name usually finds exactly one, so the
+    commonest answer was the ungrammatical one.
+    """
+
+    def test_one_result_is_one_place(self) -> None:
+        self.assertEqual(search_summary("Valletta", 1), "1 place found")
+
+    def test_more_than_one_is_places(self) -> None:
+        self.assertEqual(search_summary("Athens", 4), "4 places found")
+
+    def test_none_names_what_was_looked_for(self) -> None:
+        summary = search_summary("  Atlantis ", 0)
+        self.assertIn("Atlantis", summary)
+        self.assertNotIn("0", summary)
+
+    def test_the_query_is_trimmed_the_way_the_popover_trims_it(self) -> None:
+        """Or the bar and the popover quote the same search differently."""
+        self.assertIn(
+            nothing_found_message("  Atlantis ").split("“")[1].split("”")[0],
+            search_summary("  Atlantis ", 0),
+        )
 
 
 if __name__ == "__main__":

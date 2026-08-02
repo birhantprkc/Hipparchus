@@ -80,7 +80,6 @@ class StatusBar:
 
         palette = theme.current()
         self._frame = ttk.Frame(parent, padding=(12, 6, 12, 8))
-        self._frame.grid_columnconfigure(1, weight=1)
 
         # Whose app this is, in the corner — when the asset is there to show,
         # and a way to find out who that is. It had the tooltip already, which
@@ -102,6 +101,14 @@ class StatusBar:
         # The message, in a read-only entry rather than a label, because a
         # status line you can read but not copy is half a status line — and it
         # is usually the half with the error in it.
+        #
+        # `width=1` and the weight below, rather than the default: an Entry with
+        # no width asks for twenty characters and keeps them, so the bar could
+        # show about 142 pixels however wide the window was. "Rendered · 21
+        # layers · 79 608 features" arrived as "Rendered · 21 layers · 79 608",
+        # and an export's result lost the name of the file it had just written.
+        # One character of requested width lets the column give it the slack
+        # instead of the font deciding.
         self._state = status_line.StatusState()
         self._message_var = tk.StringVar(value=status_line.IDLE)
         self.message_widget = tk.Entry(
@@ -109,22 +116,25 @@ class StatusBar:
             textvariable=self._message_var,
             relief="flat",
             state="readonly",
-            readonlybackground=palette.bg,
+            readonlybackground=self.surface(parent, palette),
             fg=palette.text,
             font=theme.font("label"),
             takefocus=1,
             highlightthickness=0,
             bd=0,
+            width=1,
         )
-        self.message_widget.grid(row=0, column=column, sticky="w")
+        self.message_widget.grid(row=0, column=column, sticky="ew")
         self._message_column = column
+        # The line is the only thing here that can be any length, so it takes
+        # the slack. Everything else keeps the width it asks for.
+        self._frame.grid_columnconfigure(column, weight=1)
 
         self._rows_frame = ttk.Frame(self._frame)
         self._rows_frame.grid(row=0, column=column + 1, sticky="w", padx=(10, 0))
 
         trailing = ttk.Frame(self._frame)
         trailing.grid(row=0, column=column + 2, sticky="e")
-        self._frame.grid_columnconfigure(column + 2, weight=1)
 
         self.cancel_button = ttk.Button(
             trailing, text="Cancel", width=8, command=self._on_cancel
@@ -152,6 +162,23 @@ class StatusBar:
         ).pack(side="left", padx=(8, 0))
 
         self._busy = False
+
+    @staticmethod
+    def surface(parent: tk.Widget, palette: theme.Palette) -> str:
+        """What the bar is actually painted, rather than what we asked for.
+
+        The message is an Entry, and an Entry has a background of its own. It
+        was set to `palette.bg`, which on macOS is not what ttk paints a frame:
+        242 against the system's 233. At twenty characters the difference was a
+        small pale rectangle nobody noticed; across the width of the window it
+        reads as an empty text field, and a status line that looks like an input
+        invites typing into it.
+        """
+        try:
+            found = ttk.Style(parent).lookup("TFrame", "background")
+        except tk.TclError:  # pragma: no cover - a theme with no such style
+            found = ""
+        return str(found) or palette.bg
 
     # -- placing --------------------------------------------------------------
 

@@ -9,9 +9,10 @@ wait.
 from __future__ import annotations
 
 import tkinter as tk
+from tkinter import font as tkfont, ttk
 import unittest
 
-from gui_support import require_gui
+from gui_support import require_gui, show_offscreen
 
 from hipparchus.core.fetch_progress import FetchReporter
 from hipparchus.ui import theme
@@ -38,6 +39,9 @@ class StatusBarTestCase(unittest.TestCase):
             self.skipTest(f"no display: {exc}")
         self.root.withdraw()
         self.root.geometry("1000x200")
+        # The bar is gridded across the foot of the window in the application,
+        # so it is gridded across the foot of the window here.
+        self.root.grid_columnconfigure(0, weight=1)
         theme.set_mode("light")
         self.cancelled = 0
         self.bar = StatusBar(self.root, on_cancel=self._cancel)
@@ -123,6 +127,65 @@ class RankingTests(StatusBarTestCase):
         self.assertNotEqual(self.bar.message_colour, theme.current().danger)
         self.bar.end()
         self.assertEqual(self.bar.message_colour, theme.current().danger)
+
+
+class WidthTests(StatusBarTestCase):
+    """That the line can be read to the end.
+
+    `tk.Entry` with no `width` is twenty characters, and the bar put no weight
+    on the column holding it, so the widest thing it could show was about 142
+    pixels. "Rendered · 21 layers · 79 608 features" read "Rendered · 21 layers
+    · 79 608", and an export's own result — the file it wrote — was cut off at
+    the part that says which file. Making a result survive the next redraw is
+    worth nothing if half of it is off the end of the box.
+    """
+
+    def rendered_width(self, text: str) -> int:
+        widget = self.bar.message_widget
+        return tkfont.Font(root=self.root, font=widget.cget("font")).measure(text)
+
+    def test_a_result_as_long_as_a_real_one_fits(self) -> None:
+        text = "Exported valletta-harbour.svg · 21 384 paths"
+        self.bar.set_message(text)
+        show_offscreen(self.root)
+        self.assertGreaterEqual(
+            self.bar.message_widget.winfo_width(),
+            self.rendered_width(text),
+            f"the line is cut off: {text!r}",
+        )
+
+    def test_it_takes_the_slack_rather_than_a_fixed_twenty_characters(self) -> None:
+        """So a wider window gives a longer line, and a failure with a path in
+        it has somewhere to go."""
+        self.bar.set_message("short")
+        show_offscreen(self.root)
+        self.assertGreater(self.bar.message_widget.winfo_width(), 400)
+
+    def test_it_does_not_look_like_a_field_to_type_in(self) -> None:
+        """The message is an Entry, and an Entry has a background of its own.
+        At twenty characters a wrong one was a pale rectangle nobody noticed;
+        across the window it reads as an empty text input."""
+        painted = ttk.Style(self.root).lookup("TFrame", "background")
+        if not painted:  # pragma: no cover - a theme that will not say
+            self.skipTest("ttk will not say what it paints a frame")
+        self.assertEqual(
+            self.root.winfo_rgb(self.bar.message_widget.cget("readonlybackground")),
+            self.root.winfo_rgb(painted),
+        )
+
+    def test_what_is_at_the_far_end_stays_at_the_far_end(self) -> None:
+        """Cancel and the provenance badge are read as a group at the right;
+        the message growing must not push them off or drag them left."""
+        show_offscreen(self.root)
+        right_edge = (
+            self.bar.cancel_button.winfo_rootx() + self.bar.cancel_button.winfo_width()
+        )
+        self.bar.set_message("a considerably longer line than the one before it")
+        self.root.update()
+        self.assertEqual(
+            self.bar.cancel_button.winfo_rootx() + self.bar.cancel_button.winfo_width(),
+            right_edge,
+        )
 
 
 class ProgressRowTests(StatusBarTestCase):

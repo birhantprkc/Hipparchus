@@ -1637,9 +1637,7 @@ class MainWindow:
         self._set_idle("Idle")
         message = None if results else geocoding.nothing_found_message(str(query))
         self._search.show_results(results, message)
-        self._status.set_message(
-            f"{len(results)} places found" if results else f"Nothing found for “{query}”"
-        )
+        self._status.set_message(geocoding.search_summary(str(query), len(results)))
 
     def _search_failed(self, payload: object) -> None:
         """A geocoder that will not answer is news, not a dialogue."""

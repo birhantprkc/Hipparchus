@@ -201,3 +201,15 @@ def nothing_found_message(query: str) -> str:
     stopping the application for.
     """
     return f"Nothing found for “{query.strip()}”. Try a fuller name, or a nearby town."
+
+
+def search_summary(query: str, count: int) -> str:
+    """What the status bar says a search came to.
+
+    It said "1 places found", which is what counting inside a format string
+    gets you. Searching for a specific name usually finds exactly one, so the
+    commonest answer was the ungrammatical one.
+    """
+    if count <= 0:
+        return f"Nothing found for “{query.strip()}”"
+    return f"{count} place{'' if count == 1 else 's'} found"
