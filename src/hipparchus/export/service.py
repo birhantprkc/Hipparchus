@@ -57,15 +57,29 @@ class PDFExporter:
     canvas — so the paths in the file are the paths on screen, at whatever size
     the reader opens it. A PDF made by embedding a bitmap would be a picture of
     a map rather than the map.
+
+    `width` and `height` are the **drawing**, in the pixels the PNG would use,
+    because that is what sets how heavy a stroke reads against the sheet.
+    `page_size` is the **paper**, in points at 72 to the inch. `PageSpec` in
+    `application/page_size.py` produces both from one description in inches, and
+    the window has no business computing either itself.
+
+    Left as one number, this was the bug that made every A4 export a 34.4 x 48.7
+    inch page: pixels at 300 dpi went in and Skia read them as points.
     """
 
     scene: RenderScene | None
     width: int = 2480
     height: int = 3508
+    #: The paper, in points. `None` reads the drawing as points, which is what
+    #: "no paper chosen" means.
+    page_size: tuple[float, float] | None = None
 
     def export(self, destination: Path) -> None:
         renderer = _renderer_for(self.scene)
-        renderer.render_pdf(destination, self.width, self.height)
+        renderer.render_pdf(
+            destination, self.width, self.height, page_size=self.page_size
+        )
 
 
 @dataclass(slots=True)

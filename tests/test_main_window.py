@@ -297,6 +297,37 @@ class ExportTests(SharesTheWindow):
     def test_png(self) -> None:
         self.check_format(".png")
 
+    def test_the_page_gives_the_pdf_points_and_the_png_pixels(self) -> None:
+        """The wiring behind the page model, at the window.
+
+        `PAPER_PRESETS` was a table of pixel sizes and both exporters were
+        handed the same number, so an A4 PDF was a page 34.4 x 48.7 inches —
+        Skia reads `beginPage` in points. The window asks two questions now, and
+        `test_page_size` and `test_raster_export` check the answers; this checks
+        that the window asks them.
+        """
+        self.window._paper_preset_var.set("A4")
+        self.window._paper_orientation_var.set("Portrait")
+        self.window._paper_dpi_var.set("300")
+
+        self.assertEqual(self.window._export_dimensions(), (2480, 3508))
+        width, height = self.window._export_points()
+        self.assertAlmostEqual(width, 595.3, places=1)
+        self.assertAlmostEqual(height, 841.9, places=1)
+
+    def test_the_resolution_moves_the_pixels_and_leaves_the_paper(self) -> None:
+        self.window._paper_preset_var.set("A4")
+        self.window._paper_orientation_var.set("Portrait")
+
+        self.window._paper_dpi_var.set("300")
+        at_300 = (self.window._export_dimensions(), self.window._export_points())
+        self.window._paper_dpi_var.set("72")
+        at_72 = (self.window._export_dimensions(), self.window._export_points())
+
+        self.assertEqual(at_300[0], (2480, 3508))
+        self.assertEqual(at_72[0], (595, 842))
+        self.assertEqual(at_300[1], at_72[1], "the paper is not a resolution")
+
     def test_a_cancelled_save_sheet_writes_nothing_and_says_nothing(self) -> None:
         self.module.filedialog.asksaveasfilename = lambda **_kwargs: ""
         before = self.window._status.message

@@ -22,6 +22,7 @@ from hipparchus.application.locator import describe_area
 from hipparchus.application.controller import ApplicationController
 from hipparchus.application import fetch_cost
 from hipparchus.application.layer_inventory import fetch_layers
+from hipparchus.application.page_size import PageSpec, PaperSize, Resolution
 from hipparchus.application.palette_sheet import recoloured
 from hipparchus.application.palettes import PRESET_OWN, named as palette_named, names as palette_names
 from hipparchus.core.fetch_progress import CancellationToken, FetchReporter
@@ -92,13 +93,12 @@ SAMPLE_SOURCE_PATHS: dict[str, str] = {
 # vocabulary the composing source stack replaced, and the last code that
 # reached them went with the settings rail.
 
-PAPER_PRESETS: dict[str, tuple[int, int]] = {
-    "Canvas": (0, 0),
-    "Square 2048": (2048, 2048),
-    "A4": (2480, 3508),
-    "A3": (3508, 4961),
-    "Poster": (5400, 7200),
-}
+# Paper used to be a table of pixel sizes here — "A4" meant 2480 x 3508, which
+# is A4 at 300 dpi with the 300 left implicit. It gave the PNG the right answer
+# and the PDF a page 34.4 x 48.7 inches, because Skia reads those numbers as
+# points. The sheets are stated in inches now, in `application/page_size.py`,
+# where one description serves all three exporters and the arithmetic can be
+# checked without a window.
 
 # The palette, the accent and the type scale live in `ui/theme.py`, where they
 # can be checked: that body text clears a contrast floor on its own ground, and
@@ -164,6 +164,11 @@ class MainWindow:
         self._quality_var = tk.StringVar(value="Fast Preview")
         self._paper_preset_var = tk.StringVar(value="Canvas")
         self._paper_orientation_var = tk.StringVar(value="Landscape")
+        # A choice from four rather than a field: a field invites 1200 dpi on a
+        # poster, which is 1.2 gigapixels and several minutes of drawing before
+        # it fails. Only reached when a paper other than Canvas is chosen.
+        self._paper_dpi_var = tk.StringVar(value=str(Resolution.DEFAULT))
+        self._page_cost_var = tk.StringVar(value="")
         self._map_title_var = tk.StringVar(value="")
         self._map_subtitle_var = tk.StringVar(value="")
         self._include_title_var = tk.BooleanVar(value=False)
@@ -1372,19 +1377,26 @@ class MainWindow:
             return {}
 
     def _build_page_panel(self, parent: ttk.Frame) -> None:
-        """Page composition for the SVG export: paper, margins, furniture.
+        """The page: paper, orientation, resolution, and the SVG's furniture.
 
-        All of it off by default and asked for per export rather than
-        remembered as map state — the map is the product, and nothing here
+        The paper drives all three exports, not only the SVG. It is stated in
+        inches, so pixels are inches x dpi for the PNG, points are inches x 72
+        for the PDF, and the SVG keeps taking pixels because that is what a
+        viewport is. A sheet asked for at 24 x 36 is the same sheet in every
+        format.
+
+        The furniture below is off by default and asked for per export rather
+        than remembered as map state — the map is the product, and nothing here
         changes it, which is why none of it lands in the session or in undo.
         """
-        section_heading(parent, "Page", "SVG export")
+        section_heading(parent, "Page", "paper, and what rides on it")
 
         row = ttk.Frame(parent)
         row.pack(fill="x", pady=2)
         ttk.Label(row, text="Paper", width=11, font=theme.font("caption")).pack(side="left")
         ttk.OptionMenu(
-            row, self._paper_preset_var, self._paper_preset_var.get(), *PAPER_PRESETS
+            row, self._paper_preset_var, self._paper_preset_var.get(),
+            *PaperSize.names(), command=lambda _: self._refresh_page_cost(),
         ).pack(side="left", fill="x", expand=True)
 
         row = ttk.Frame(parent)
@@ -1392,8 +1404,25 @@ class MainWindow:
         ttk.Label(row, text="Orientation", width=11, font=theme.font("caption")).pack(side="left")
         ttk.OptionMenu(
             row, self._paper_orientation_var, self._paper_orientation_var.get(),
-            "Landscape", "Portrait",
+            *PageSpec.ORIENTATIONS, command=lambda _: self._refresh_page_cost(),
         ).pack(side="left", fill="x", expand=True)
+
+        row = ttk.Frame(parent)
+        row.pack(fill="x", pady=2)
+        ttk.Label(row, text="Resolution", width=11, font=theme.font("caption")).pack(side="left")
+        ttk.OptionMenu(
+            row, self._paper_dpi_var, self._paper_dpi_var.get(),
+            *(str(dpi) for dpi in Resolution.all()),
+            command=lambda _: self._refresh_page_cost(),
+        ).pack(side="left", fill="x", expand=True)
+
+        # What it costs, before it is spent. A PDF ignores this line entirely —
+        # it carries physical size and no pixels — which is why it says so.
+        ttk.Label(
+            parent, textvariable=self._page_cost_var, font=theme.font("caption"),
+            foreground=theme.current().muted, wraplength=260, justify="left",
+        ).pack(anchor="w", pady=(1, 4))
+        self._refresh_page_cost()
 
         ttk.Checkbutton(
             parent, text="Title block", variable=self._include_title_var,
@@ -2159,27 +2188,57 @@ class MainWindow:
         )
 
     def _export_raster(self, exporter, suffix: str, filetypes, label: str) -> None:
-        """One path for both, because they differ only in the file they write."""
+        """One path for both, because they differ only in what a size means.
+
+        The drawing is the same for either — the pixels the page implies. Where
+        they part is the file: a PNG *is* those pixels, and a PDF is a physical
+        page in points carrying the same drawing scaled onto it.
+        """
         if self._current_scene is None:
             self._status.set_message("There is no map to export yet.", error=True)
             return
+
+        spec = self._page_spec()
+        canvas = self._canvas_size()
+        width, height = spec.pixel_size(*canvas)
+        is_pdf = exporter is PDFExporter
+
+        # Refused before the file dialogue rather than after it: asking somebody
+        # to name a file and then declining to write it wastes their time twice.
+        if not is_pdf and spec.exceeds_bitmap_limit(*canvas):
+            megapixels, megabytes = spec.bitmap_cost(*canvas)
+            self._status.set_message(
+                f"{width}×{height} is {megapixels:.0f} megapixels and "
+                f"{megabytes / 1000:.1f} GB. Export SVG or PDF instead, which "
+                f"have no pixels to run out of.",
+                error=True,
+            )
+            return
+
         target = filedialog.asksaveasfilename(
             title=f"Export {label}", defaultextension=suffix, filetypes=filetypes
         )
         if not target:
             return
 
-        width, height = self._export_dimensions()
+        extra = {"page_size": spec.point_size(*canvas)} if is_pdf else {}
         self._set_busy(f"Writing {label}…")
         try:
-            exporter(scene=self._current_scene, width=width, height=height).export(Path(target))
+            exporter(
+                scene=self._current_scene, width=width, height=height, **extra
+            ).export(Path(target))
         except Exception as exc:  # noqa: BLE001
             self._status.set_message(f"{label} export failed: {exc}", error=True)
             return
         finally:
             self._set_idle("Idle")
 
-        self._finish_export(Path(target), f"{width}×{height}")
+        if is_pdf:
+            points = spec.point_size(*canvas)
+            detail = f"{points[0] / 72:.2f}×{points[1] / 72:.2f} in"
+        else:
+            detail = f"{width}×{height}"
+        self._finish_export(Path(target), detail)
 
     def _finish_export(self, target: Path, detail: str) -> None:
         """How every export ends, so no one of them can end differently.
@@ -2203,17 +2262,51 @@ class MainWindow:
             orientation=self._paper_orientation_var.get(),
         )
 
+    def _page_spec(self) -> PageSpec:
+        """The page the controls describe, as one value.
+
+        All the arithmetic lives in `application/page_size.py`, where it can be
+        checked. This reads three widgets and hands them over.
+        """
+        try:
+            dpi = int(float(self._paper_dpi_var.get()))
+        except (TypeError, ValueError):
+            dpi = Resolution.DEFAULT
+        return PageSpec(
+            paper_name=self._paper_preset_var.get(),
+            orientation=self._paper_orientation_var.get(),
+            dpi=dpi,
+        )
+
+    def _canvas_size(self) -> tuple[int, int]:
+        """What Canvas means: the size the window already has."""
+        return (
+            max(1024, self._canvas.winfo_width()),
+            max(1024, self._canvas.winfo_height()),
+        )
+
     def _export_dimensions(self) -> tuple[int, int]:
-        width, height = PAPER_PRESETS.get(self._paper_preset_var.get(), PAPER_PRESETS["Canvas"])
-        if width <= 0 or height <= 0:
-            width = max(1024, self._canvas.winfo_width())
-            height = max(1024, self._canvas.winfo_height())
-        orientation = self._paper_orientation_var.get()
-        if orientation == "Landscape" and height > width:
-            width, height = height, width
-        elif orientation == "Portrait" and width > height:
-            width, height = height, width
-        return (width, height)
+        """Pixels, for the PNG and for the SVG viewport."""
+        return self._page_spec().pixel_size(*self._canvas_size())
+
+    def _export_points(self) -> tuple[float, float]:
+        """Points, for the PDF. A different question from `_export_dimensions`,
+        and answering it with the same number was the bug that made every A4
+        export a page 34.4 x 48.7 inches."""
+        return self._page_spec().point_size(*self._canvas_size())
+
+    def _refresh_page_cost(self) -> None:
+        """What the chosen page costs, under the controls that chose it.
+
+        A bitmap has a size somebody can run out of and a PDF does not, so the
+        line says which of the two it is describing.
+        """
+        spec = self._page_spec()
+        canvas = self._canvas_size()
+        detail = spec.describe(*canvas)
+        if spec.exceeds_bitmap_limit(*canvas):
+            detail += " — too large for PNG; SVG and PDF have no pixels to run out of"
+        self._page_cost_var.set(detail)
 
     def _auto_device_scale(self) -> float:
         try:

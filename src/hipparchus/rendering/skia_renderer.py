@@ -286,23 +286,46 @@ class SkiaRenderer:
             data = image.encodeToData()
             return bytes(data) if data is not None else b""
 
-    def render_pdf(self, destination: Path, width: int, height: int) -> None:
+    def render_pdf(
+        self,
+        destination: Path,
+        width: int,
+        height: int,
+        *,
+        page_size: tuple[float, float] | None = None,
+    ) -> None:
         """The scene as a PDF, drawn rather than photographed.
 
         The same `_draw_scene` the window and the PNG use, onto a document
         canvas — so the paths in the file are the paths on screen, at whatever
         size the reader opens it. A PDF made by embedding a bitmap would be a
         picture of a map; this is the map.
+
+        **Two sizes, and they are not the same thing.** `width` and `height` are
+        the drawing, in the units the PNG uses, because that is what decides how
+        heavy a stroke is relative to the sheet. `page_size` is the physical
+        page in points, 72 to the inch, which is what a printer obeys.
+
+        They used to be one number, and it was the wrong one: the caller passed
+        pixels at 300 dpi and Skia read them as points, so an A4 export was a
+        page 34.4 x 48.7 inches. Drawing straight onto the correct page instead
+        would have fixed the paper and made every line four times heavier, so
+        the drawing keeps its own size and the canvas is scaled onto the paper.
+
+        `page_size` of `None` reads the drawing as points, which is the right
+        answer when no paper has been chosen.
         """
         skia = _import_skia()
         destination.parent.mkdir(parents=True, exist_ok=True)
+        page_width, page_height = page_size or (float(width), float(height))
         with self._lock:
             stream = skia.FILEWStream(str(destination))
             try:
                 document = skia.PDF.MakeDocument(stream)
                 if document is None:  # pragma: no cover - skia without PDF support
                     raise RuntimeError("this build of Skia cannot write PDF")
-                canvas = document.beginPage(float(width), float(height))
+                canvas = document.beginPage(float(page_width), float(page_height))
+                canvas.scale(page_width / max(1, width), page_height / max(1, height))
                 self._draw_scene(canvas, width, height)
                 document.endPage()
                 document.close()
