@@ -1455,7 +1455,11 @@ notice in full. That much had always worked.
   `screencapture -l` now, which takes one window by its id and cannot include
   anything else, whether or not the window is in front.
 
-### Still unverified by eye
+### Still unverified by eye, as things stood then
+
+> Superseded. Screen Recording has since been granted, and everything below was
+> photographed in the session that follows — including the palette dropdown and
+> the splash. Kept because it says what the verification was worth at the time.
 
 `screencapture` on this machine returns the desktop without window contents —
 macOS withholds them without Screen Recording permission — so nothing in this
@@ -1465,31 +1469,218 @@ by drawing it through its own projection and culling code into an image; the
 palettes by rebuilding Cartagena in three of them headlessly. The palette
 dropdown and the splash have still never been seen in a running window.
 
+## The session that read the status bar
+
+**968 → 1005 passing by default, 104 skipped; 1106 passing gated.** Three
+things were asked for: finish the export work, then look at the panels nobody
+had opened, then draw the Locator's frame. Each one cost something that was not
+what it was sent to find.
+
+### The bar held one string, so whatever spoke last won it
+
+Exporting wrote the file, revealed it in the Finder and said so — and a redraw
+armed by the file dialogue closing wrote "Rendering preview..." over the line a
+few milliseconds later, and "Rendered · 21 layers" over that. It hit SVG almost
+always and PNG often; PDF only got lucky.
+
+Not a timing problem, so not fixed by waiting. **Three kinds of thing want that
+line and they are not equals**, and `application/status_line.py` ranks them:
+
+- **A result** is what something the person asked for came to — a file written,
+  a style deleted, a source that said no. It stands until they ask for something
+  else, which is why Render map retires it and a redraw cannot.
+- **A report** is the application talking about itself: a redraw it decided to
+  do, the summary of what it drew. Shown when there is nothing better, never at
+  a result's expense.
+- **Activity** is what is in flight, and outranks both, because "Exported" over
+  a running fetch is a lie of a different sort. A stack, not a string, so a
+  place lookup finishing mid-fetch does not take the fetch's name off the bar.
+
+Two things fell out of it. **The colour belongs to the line on show**, so a
+failure announced mid-fetch no longer paints the fetch red — it appears, red,
+when the fetch ends. And **the busy accounting was balanced by luck**: each
+redraw popped one more than it pushed, and that stray pop was what stopped the
+fetch's spinner. Under a flat string that was invisible; under a ranking a stuck
+activity hides every result behind it. The fetch ends where its scene lands now,
+and `_busy_counter` is gone — the stack is the counter.
+
+### The suite may have exactly one window, and only for as long as one file
+
+The export round trip wanted a real window, and this is what it took to give it
+one. Both attempts hung a run until it had to be killed:
+
+- **Building the application twice in one interpreter hangs macOS Tk.** The
+  second bootstrap never returns. `test_main_window` had said so in its own
+  docstring since it was written, and was the only file that built one — so the
+  rule was true and untested until a second file wanted a window.
+- **Keeping the first alive for the rest of the process is no better.** The
+  files that follow build plain Tk roots of their own, and with the application
+  still up, `test_status_bar` hangs on its eighth test. A shared `gui_support`
+  fixture closed at exit looked like the clean answer and was the wrong one.
+- **Roots first and a bootstrap afterwards is worse still** — that one is a
+  hard crash rather than a hang. It is only survivable because a full run
+  collects alphabetically, and `test_main_window` sorts before every file that
+  makes a root of its own. Naming files on the command line in another order
+  will crash or hang, and that is not a fault in them.
+
+So: one application, built when `test_main_window` starts and closed when it
+ends, and **anything needing a real window belongs in that file**. The export
+round trip lives there for that reason and no other.
+
+### Then somebody looked at the panels, and it cost five more things
+
+Screenshots work now — Screen Recording was granted — and every capture goes
+through `screencapture -l <window id>`, by *title* rather than by z-order after
+the first attempt photographed the About splash sitting in front.
+
+- **The status bar could show about twenty characters.** `tk.Entry` with no
+  width asks for twenty and keeps them, and the column holding it had no weight
+  — the weight was on the progress bar's column, set before the columns were
+  known. Measured: **142 pixels**, whatever the window was doing. "Rendered · 21
+  layers · 79 608 features" arrived as "Rendered · 21 layers · 79 608", and an
+  export's result lost the name of the file it had just written. The morning's
+  work had made that result survive the redraw; there is no point in it
+  surviving unreadable. It is 595 pixels in the default window now.
+- **Widening it exposed the background.** The Entry was painted `palette.bg`,
+  which is not what ttk paints a frame on macOS — 242 against 233. At twenty
+  characters that was a pale rectangle nobody noticed; across the window it
+  reads as an empty text field, and a status line that looks like an input
+  invites typing into it. It asks ttk what it paints instead.
+- **"1 places found."** Counting inside a format string. Searching for a
+  specific name usually finds exactly one, so the commonest answer was the
+  ungrammatical one. The sentence moved to `geocoding`, beside the one that says
+  nothing was found, so both quote the search the same way.
+- **Choosing a style or a palette says nothing at all.** `_on_style_selected`
+  sets the variable and refreshes a button. That is deliberate — both take
+  effect on the next Render map, and the palette's tooltip says so — and the
+  swatch does highlight. But the map does not change and the bar does not speak,
+  so the click reads as a no-op. Not fixed.
+- **The style picker is below the fold.** At the default 1100×828 the right rail
+  shows Sources and Layers; Style — sixteen swatches in three columns, 265
+  points wide — is off the bottom. The panel whose whole claim is *see it, don't
+  read it* has to be scrolled to. Not fixed.
+
+**What was found working**, and had never been watched: the floating Locator
+opens on the right place at the right zoom, the graticule follows it, and an
+inland city is a dot and a name over ground with no coastline. Search takes a
+name, offers what came back, and setting the frame from a result says so. Saved
+places is a native macOS menu off the chevron — which is why a probe looking for
+a popover found none, and not a fault.
+
+### The Locator never drew the area it is about
+
+It drew a graticule, a coastline and place names, and not the one thing it
+exists to answer. Over South Bend that left a grid, a dot and a word, and no way
+to tell whether the frame about to be fetched was the city or the county — the
+readout opens as instructions and only names coordinates once you have clicked
+something.
+
+`frame_on_screen` in `application/world_view.py` decides where it goes, and the
+rules are the sort that are wrong quietly:
+
+- **Kept as ground, not pixels**, so it stays put while the view moves across
+  it. Pan away, zoom out to the whole world, and it is still there.
+- **Never smaller than nine pixels, grown about its own centre.** Athens is a
+  tenth of a degree, which on the whole world is under one pixel, and a
+  one-pixel rectangle reads as a speck of dust rather than as where you are.
+- **Never larger than it is.** Zoomed inside the frame, its edges belong off the
+  canvas, because that is where they are.
+- **Not in the rail**, where moving the view *is* choosing, so a rectangle round
+  the area would be a rectangle round the canvas.
+
+Photographed at three zooms: full-canvas when fitted, 165 pixels four steps out,
+a 20-pixel mark over Indiana on the whole world.
+
+### The overflow that had been one bad redraw away all along
+
+Writing the widget test for the frame found it. **A canvas reports one pixel
+until it is laid out**, and `whole_world(1, h)` fits the earth into that pixel —
+so the top-left corner unprojects to a latitude eight thousand million metres
+north, and `math.exp` of that raises `OverflowError`. Out of a redraw. Any
+`_draw` before layout would have taken the window down; `show` happened to guard
+its own path, which is why nobody had met it. `unproject` stops at the pole now,
+which is where the world stops.
+
+### What went wrong in this session
+
+- **I committed two files that were not mine, by reaching for `git add -A`.**
+  First `Hipparchus_Land_and_Sea.md`, which the user had written that evening;
+  then `tests/test_raster_export.py`, which belonged to a session working in
+  parallel on paper sizes. Both amended out within a minute and both left
+  exactly as they were, but the habit is the problem, not the recovery. Staging
+  by name is the only safe form in a repository somebody else is also editing.
+- **Two of my own test premises were wrong before the code was.** I asserted
+  that exporting into a missing folder fails — `PNGExporter` creates the folder,
+  so the way in is a path blocked by a file. And I asserted that a frame's pixel
+  centre equals `to_screen` of its middle latitude — Mercator's curvature means
+  it does not, and the honest assertion compares against the projected corners.
+- **I ran two gated files in the wrong order and hung the machine's afternoon
+  twice**, before working out that the order is not arbitrary. The second time
+  was avoidable: the first had already shown that mixing roots and a bootstrap
+  is what does it.
+
+### The gated suite was already red
+
+Three failures, all pre-dating this session — confirmed against a clean checkout
+of `8c82845` in a worktree:
+
+- `test_map_canvas::VisibleAreaTests` ×2 — `FakeRenderer` has no `fit_metrics`.
+  The stand-in went stale when `viewport.py` was fixed to inset by the
+  renderer's own offsets.
+- `test_menubar::AcceleratorTests::test_every_shortcut_actually_runs_its_verb` —
+  `export_png` does not fire from its accelerator.
+
+Nobody would have seen these. Running the suite that contains them is something
+you have to ask for, which is the point of the flag and also its cost.
+
 ## Still to be made
 
 Ranked by what it costs to leave.
 
-1. **The Settings window disagrees with itself under `HIPPARCHUS_THEME`.** The
+1. **The gated suite is red.** Three failures, none of them new; see above.
+   `FakeRenderer` needs `fit_metrics`, and `export_png` needs to fire from its
+   accelerator. A red suite nobody runs stops being a suite.
+2. **The Settings window disagrees with itself under `HIPPARCHUS_THEME`.** The
    `Theme` row shows the stored preference while the window wears the overridden
    one, and changing any setting snaps the appearance back to the file. Only
    reachable through the environment variable, which is why it survived.
-2. **The rest of the window has still not been read carefully.** The main window,
-   the splash and the settings window have now been looked at, and cost six bugs
-   between them. The Locator panel, the search field and the export dialogues
-   have not.
 3. **Resizable and collapsible columns** (B1.2, B1.3) — still fixed at
-   360 / flex / 300; the `ttk.PanedWindow` swap from D2 never happened.
-4. **Window size** (B1.5) — opens 1600×1080, minimum 1400×980. The Mac is
-   1100×800, minimum 960×620.
+   360 / flex / 300; the `ttk.PanedWindow` swap from D2 never happened. At the
+   1100-wide default this is what puts the style picker below the fold, so it
+   now has a symptom as well as a description.
+4. **Choosing a style or a palette says nothing.** Both are deliberately
+   deferred to the next Render map, and the swatch highlights, but nothing else
+   moves — so the click reads as a no-op. One result on the bar would fix it:
+   "Style: Coastal Survey — Render map to draw it".
 5. **Toolbar polish** (B2.4, B2.5, B2.7) — no area readout, no Cancel beside
    Render map, and Export is a bare SVG button with PDF and PNG only in the menu.
 6. **Layers panel** (B6b.3, B6b.5, B6b.6) — `All`/`None` in the header, the
    labels-versus-features tooltip, and hiding the group heading when there is
    one group.
-7. **SVG export does not reveal the file.** PDF and PNG do. Mine, and
-   inconsistent.
-8. **No application icon** (B14.7).
-9. **`featured_names()`** survives in `style_previews.py` with no caller but its
+7. **No application icon** (B14.7).
+8. **`featured_names()`** survives in `style_previews.py` with no caller but its
    own default and its own tests. The "featured six" idea died in Phase 6.
+
+### Struck off, and by what evidence
+
+- **Window size** (B1.5) was listed as opening 1600×1080. It opens **1100×828,
+  minimum 960×620** — read off the running window and its `AppConfig`. Fixed in
+  `d6d6fb1`; the list was stale.
+- **SVG export does not reveal the file** — fixed in `56fb367`; all three
+  exports end the same way, and a test drives each of them to prove it.
+- **The Locator panel, the search field and the export dialogues had not been
+  looked at.** All three now have, and the export dialogues are driven by a
+  test rather than by hand.
+
+### Still unverified by eye
+
+The Settings window under `HIPPARCHUS_THEME`. The **dark** appearance of the
+status bar: the widening was confirmed by photograph in light only, because the
+probe that took it hard-codes `HIPPARCHUS_THEME=light` — the fix asks ttk what
+it paints, so it follows whatever the window wears, but that is reasoning rather
+than a picture. The style picker and palette dropdown *in use*: the eleven
+palette names were read out of the menu and applying one was driven
+programmatically, but the open dropdown was never photographed, because a Tk
+menu on macOS is a native one and does not appear in the window list.
 
 *Merged into `main` and pushed.*
