@@ -153,13 +153,27 @@ def sequences_for(spec: str, system: str | None = None) -> tuple[str, ...]:
     accelerator = parse(spec)
     is_mac = system == "Darwin"
 
-    modifiers: list[str] = []
+    prefixes: list[list[str]] = [[]]
     if accelerator.shift:
-        modifiers.append("Shift")
+        prefixes = [[*prefix, "Shift"] for prefix in prefixes]
     if accelerator.alt:
-        # Tk on Aqua treats Option and Alt as the same modifier bit, so
-        # emitting both patterns would fire the action twice for one press.
-        modifiers.append("Option" if is_mac else "Alt")
+        # Both spellings on a Mac, and this is not belt and braces for its own
+        # sake. The note here used to say that Aqua treats Option and Alt as one
+        # modifier bit, so binding both would fire the action twice; both halves
+        # were wrong, and ⌥⌘E — Export PNG — did nothing at all for a release.
+        #
+        # They are different bits: Option is 16, Alt is 1 << 17. And `Option`
+        # makes Tk translate the keysym the way macOS composes it, so Option-E
+        # arrives as `acute` and a binding on `Key-e` cannot match. Only the
+        # `Alt` form fires under `event_generate`. Binding both cannot
+        # double-fire: both go on the `all` tag, and Tk runs the best match
+        # only, one script per tag.
+        #
+        # `Alt` is therefore first, because it is the one known to work. Option
+        # is kept because a physical keypress is the one thing a test here
+        # cannot make.
+        spellings = ("Alt", "Option") if is_mac else ("Alt",)
+        prefixes = [[*prefix, spelling] for spelling in spellings for prefix in prefixes]
 
     # A PC keyboard plugged into a Mac is common, and an extra accelerator
     # costs nothing — Command and Control are different modifier bits, so this
@@ -168,21 +182,24 @@ def sequences_for(spec: str, system: str | None = None) -> tuple[str, ...]:
     keys = (accelerator.key, *_ALIASES.get(accelerator.key, ()))
 
     sequences: list[str] = []
-    for primary in primaries:
-        for key in keys:
-            detail = key
-            if len(detail) == 1 and detail.isalpha():
-                # With Shift held the keysym of a letter is the capital;
-                # binding the lower-case one makes a shortcut that never fires.
-                detail = detail.upper() if accelerator.shift else detail.lower()
-            # The explicit ``Key`` field is not decoration. Tk reads a bare
-            # digit 1–5 as a *mouse button number*, so `<Command-1>` binds
-            # Command-click and `<Command-Key-1>` binds the number key — which
-            # made ⌘1…⌘5 for the saved places silently do nothing at all while
-            # ⌘6…⌘9 worked. Saying Key every time makes that impossible.
-            sequence = "<" + "-".join([*modifiers, primary, "Key", detail]) + ">"
-            if sequence not in sequences:
-                sequences.append(sequence)
+    for modifiers in prefixes:
+        for primary in primaries:
+            for key in keys:
+                detail = key
+                if len(detail) == 1 and detail.isalpha():
+                    # With Shift held the keysym of a letter is the capital;
+                    # binding the lower-case one makes a shortcut that never
+                    # fires.
+                    detail = detail.upper() if accelerator.shift else detail.lower()
+                # The explicit ``Key`` field is not decoration. Tk reads a bare
+                # digit 1–5 as a *mouse button number*, so `<Command-1>` binds
+                # Command-click and `<Command-Key-1>` binds the number key —
+                # which made ⌘1…⌘5 for the saved places silently do nothing at
+                # all while ⌘6…⌘9 worked. Saying Key every time makes that
+                # impossible.
+                sequence = "<" + "-".join([*modifiers, primary, "Key", detail]) + ">"
+                if sequence not in sequences:
+                    sequences.append(sequence)
     return tuple(sequences)
 
 

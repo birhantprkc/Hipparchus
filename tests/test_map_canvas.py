@@ -42,6 +42,21 @@ class FakeRenderer:
     def screen_to_world(self, x, y, width, height):
         return (x, y)
 
+    def fit_metrics(self, width: int, height: int):
+        """``(fit_scale, offset_x, offset_y, min_x, max_y)``, as Skia gives it.
+
+        The canvas asks the renderer for its *own* fit gap rather than working
+        one out, so that what it reads back cannot disagree with what was
+        drawn. This stand-in went stale when that changed and took two tests
+        with it — into an `AttributeError` rather than a wrong answer, which is
+        at least the loud kind of failure.
+
+        The numbers only have to be a plausible inset; the margin matches the
+        real renderer's so the shape of the answer is the shape of a real one.
+        """
+        margin = max(16.0, min(width, height) * 0.06)
+        return (1.0, margin, margin, 0.0, float(height))
+
 
 class FakeProjection:
     def unproject_point(self, x: float, y: float) -> tuple[float, float]:

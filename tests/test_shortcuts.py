@@ -97,11 +97,30 @@ class GeneralAcceleratorTests(unittest.TestCase):
         self.assertTrue(any("Option" in s for s in sequences_for("Cmd+Alt+E", "Darwin")))
         self.assertTrue(any("Alt" in s for s in sequences_for("Cmd+Alt+E", "Windows")))
 
-    def test_option_is_not_bound_twice_on_a_mac(self) -> None:
-        """Tk on Aqua treats Option and Alt as the same modifier bit, so
-        binding both patterns fires the action twice for one press."""
+    def test_a_mac_gets_the_alt_form_as_well_as_the_option_one(self) -> None:
+        """Because the `Option` form never fires, and that is not a guess.
+
+        This used to say that Aqua treats Option and Alt as one modifier bit,
+        so binding both would fire the action twice. Both halves are wrong, and
+        ⌥⌘E — Export PNG — did nothing at all for a release because of it.
+
+        They are different bits: `Option` is 16, `Alt` is 1 << 17. Worse,
+        `Option` makes Tk translate the *keysym* the way macOS composes it, so
+        Option-E arrives as `acute` and a binding on `Key-e` cannot match. Only
+        the `Alt` form fires. And binding both cannot double-fire, because both
+        go on the `all` tag and Tk runs one script per tag — the best match.
+
+        So both are emitted: `Alt` because it is what fires here, `Option`
+        because a physical keypress is the one thing this cannot test.
+        """
         sequences = sequences_for("Cmd+Alt+E", "Darwin")
-        self.assertFalse(any("Alt" in s for s in sequences))
+        self.assertTrue(any("Alt-" in s for s in sequences))
+        self.assertTrue(any("Option-" in s for s in sequences))
+
+    def test_an_alt_shortcut_still_ends_on_the_right_key(self) -> None:
+        for sequence in sequences_for("Cmd+Alt+E", "Darwin"):
+            with self.subTest(sequence=sequence):
+                self.assertTrue(sequence.endswith("-Key-e>"))
 
     def test_punctuation_becomes_the_tk_keysym_rather_than_the_character(self) -> None:
         for spec, keysym in (
