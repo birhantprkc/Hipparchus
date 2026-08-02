@@ -35,6 +35,8 @@ from shapely.geometry import mapping
 
 from hipparchus.geometry.bands import band_boundaries, elevation_bands, map_coordinates
 from hipparchus.geometry.contours import contour_levels, contour_polylines, orient_uphill_left
+from hipparchus.geometry.hillshade import SunPosition, hillshade
+from hipparchus.geometry.projection import EARTH_RADIUS_M, MAX_MERCATOR_LAT
 from hipparchus.data_sources.simulated_field import nice_interval
 
 
@@ -50,6 +52,7 @@ INDEX_CONTOUR_LAYER = "terrain_index_contours"
 BATHYMETRY_LAYER = "bathymetry"
 SUMMIT_LAYER = "summits"
 ELEVATION_BANDS_LAYER = "elevation_bands"
+HILLSHADE_LAYER = "terrain_hillshade"
 
 TILE_PIXELS = 256
 # The mosaic's own limit; asking beyond it returns nothing useful.
@@ -102,6 +105,19 @@ class TerrainTileSettings:
     # Real DEMs carry step noise from their source resolution; one light pass
     # settles it without moving the landforms.
     smoothing_passes: int = 1
+    # Relief shading, banded the same way elevation is. Off by default: it
+    # changes the look of every sheet, which is a choice about the drawing
+    # rather than a fact about the ground.
+    emit_hillshade: bool = False
+    hillshade_band_count: int = 7
+    hillshade_grid_max_pixels: int = 420
+    # A derivative carries several times the noise of the elevation it comes
+    # from; smoothed after shading rather than before, or the bands speckle
+    # into hundreds of one-cell polygons.
+    hillshade_smoothing_passes: int = 2
+    hillshade_sun_azimuth_degrees: float = 315.0
+    hillshade_sun_altitude_degrees: float = 45.0
+    hillshade_exaggeration: float = 1.0
 
 
 @dataclass(slots=True)
@@ -192,6 +208,22 @@ class TerrainTileProvider:
                 max_pixels=self.settings.band_grid_max_pixels,
             )
 
+        if self.settings.emit_hillshade:
+            features_by_layer[HILLSHADE_LAYER] = _hillshade_features(
+                grid,
+                window,
+                zoom,
+                provider_id=self.provider_id,
+                count=self.settings.hillshade_band_count,
+                max_pixels=self.settings.hillshade_grid_max_pixels,
+                sun=SunPosition(
+                    azimuth_degrees=self.settings.hillshade_sun_azimuth_degrees,
+                    altitude_degrees=self.settings.hillshade_sun_altitude_degrees,
+                ),
+                exaggeration=self.settings.hillshade_exaggeration,
+                smoothing_passes=self.settings.hillshade_smoothing_passes,
+            )
+
         features_by_layer[SUMMIT_LAYER] = _summit_features(
             grid,
             to_lonlat,
@@ -209,6 +241,7 @@ class TerrainTileProvider:
                 "format": "terrarium_tiles",
                 "summit_count": len(features_by_layer[SUMMIT_LAYER]),
                 "elevation_band_count": len(features_by_layer[ELEVATION_BANDS_LAYER]),
+                "hillshade_band_count": len(features_by_layer[HILLSHADE_LAYER]),
                 "measured": True,
                 "zoom": zoom,
                 "grid_shape": [int(grid.shape[0]), int(grid.shape[1])],
@@ -399,6 +432,19 @@ def _probe_step(window: _Window, zoom: int) -> float:
     return max(1e-12, 360.0 / world)
 
 
+def _ground_resolution_metres(lat_degrees: float, zoom: int) -> float:
+    """Metres a single tile pixel spans at this latitude and zoom.
+
+    Web Mercator stretches east-west scale by ``1 / cos(latitude)`` to stay
+    conformal, so a pixel near a pole covers less ground than one at the
+    equator. Hillshade needs the real spacing to get slope right -- a fixed
+    metres-per-pixel hardens the same mountain every time the zoom steps up.
+    """
+    world = (2**zoom) * TILE_PIXELS
+    lat = max(-MAX_MERCATOR_LAT, min(MAX_MERCATOR_LAT, lat_degrees))
+    return math.cos(math.radians(lat)) * (2.0 * math.pi * EARTH_RADIUS_M) / world
+
+
 def _smooth(grid: np.ndarray, passes: int) -> np.ndarray:
     if passes <= 0 or grid.size == 0:
         return grid
@@ -463,6 +509,83 @@ def _band_features(
                     "band_index": index,
                     "band_count": len(bands),
                     "hipparchus_layer": ELEVATION_BANDS_LAYER,
+                    "hipparchus_source": provider_id,
+                    "measured": True,
+                },
+            }
+        )
+    return features
+
+
+def _hillshade_features(
+    grid: np.ndarray,
+    window: "_Window",
+    zoom: int,
+    *,
+    provider_id: str,
+    count: int,
+    max_pixels: int,
+    sun: SunPosition,
+    exaggeration: float,
+    smoothing_passes: int,
+) -> list[dict[str, Any]]:
+    """Relief shading, filled and banded the way the elevation bands are.
+
+    Banded on a **fixed** 0...1 scale, not the observed range of light and
+    shadow actually in the tile. Stretching the observed range sounds right --
+    gentle ground never reaches either extreme -- but it turns "how much
+    relief is there" into "always maximum contrast", and flat or nearly flat
+    ground mottles into a texture that reads as terrain and is not.
+    """
+    if count < 2:
+        return []
+
+    step = max(1, int(math.ceil(max(grid.shape) / max(16, max_pixels))))
+    coarse = grid[::step, ::step]
+    if coarse.size == 0 or not np.isfinite(coarse).any():
+        return []
+
+    centre_row = window.top + (coarse.shape[0] * step) / 2.0
+    centre_col = window.left + (coarse.shape[1] * step) / 2.0
+    _, centre_lat = _lonlat_for_pixel(centre_col, centre_row, zoom)
+    cell_size_metres = _ground_resolution_metres(centre_lat, zoom) * step
+
+    illumination = hillshade(coarse, sun=sun, cell_size_metres=cell_size_metres, exaggeration=exaggeration)
+    illumination = _smooth(illumination, smoothing_passes)
+
+    boundaries = band_boundaries(0.0, 1.0, count)
+    bands = elevation_bands(illumination, boundaries)
+    if not bands:
+        return []
+
+    def to_lonlat(row: float, col: float) -> tuple[float, float]:
+        # Decimation changes the index scale, not the geography.
+        return _lonlat_for_pixel(window.left + col * step, window.top + row * step, zoom)
+
+    features: list[dict[str, Any]] = []
+    for band in bands:
+        geometry = map_coordinates(band.geometry, to_lonlat)
+        if geometry.is_empty:
+            continue
+        # The band's place on the fixed scale, not in this (possibly
+        # compacted) list: `elevation_bands` drops any band the illumination
+        # never reaches, and a band index taken from list position would put
+        # ground that only ever reaches two adjacent tones at the ramp's two
+        # extremes -- the stretching above, moved one step downstream.
+        index = int(round(band.lower * count))
+        features.append(
+            {
+                "type": "Feature",
+                "id": f"{provider_id}/{HILLSHADE_LAYER}/{index}",
+                "geometry": mapping(geometry),
+                "properties": {
+                    "shade_low": band.lower,
+                    "shade_high": band.upper,
+                    "band_index": index,
+                    "band_count": count,
+                    "sun_azimuth": sun.azimuth_degrees,
+                    "sun_altitude": sun.altitude_degrees,
+                    "hipparchus_layer": HILLSHADE_LAYER,
                     "hipparchus_source": provider_id,
                     "measured": True,
                 },
@@ -549,6 +672,8 @@ def _default_http_get_bytes(url: str, timeout_seconds: float) -> bytes:
 __all__ = [
     "DEFAULT_TERRAIN_TILE_URL",
     "TERRAIN_TILES_PROVIDER_ID",
+    "ELEVATION_BANDS_LAYER",
+    "HILLSHADE_LAYER",
     "TerrainTileError",
     "TerrainTileSettings",
     "TerrainTileProvider",

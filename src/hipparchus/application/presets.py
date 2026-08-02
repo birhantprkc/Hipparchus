@@ -20,6 +20,12 @@ class GeometryPipelineProfile:
     derive_delaunay: bool = False
     derive_hex_grid: bool = False
     derive_circle_packing: bool = False
+    # Relief is ground, and buildings sit on it, so by default the hillshade
+    # draws underneath them -- correct in open country, but in a dense city it
+    # leaves the shading visible only in the parks and the street corridors.
+    # Switching this on lifts it over the whole built environment instead,
+    # stopping just short of the labels.
+    relief_over_buildings: bool = False
     hex_radius: float = 60.0
     circle_min_radius: float = 8.0
     circle_max_radius: float = 30.0

@@ -12,7 +12,11 @@ from hipparchus.application.presets import GeometryPipelineProfile, QualityMode,
 from hipparchus.application.quality import quality_profile
 from hipparchus.data_sources.provider import FeatureCollection
 from hipparchus.data_sources.satellite_provider import TRACK_LAYER
-from hipparchus.data_sources.terrain_tiles import ELEVATION_BANDS_LAYER as BAND_LAYER, SUMMIT_LAYER
+from hipparchus.data_sources.terrain_tiles import (
+    ELEVATION_BANDS_LAYER as BAND_LAYER,
+    HILLSHADE_LAYER,
+    SUMMIT_LAYER,
+)
 from hipparchus.data_sources.usgs_provider import EARTHQUAKE_LAYERS
 from hipparchus.geometry.circle_packing import CirclePackingOptions, pack_circles_in_boundary
 from hipparchus.geometry.hex_grid import HexGridOptions, generate_hex_grid
@@ -21,6 +25,18 @@ from hipparchus.geometry.projection import ProjectionProfile
 from hipparchus.geometry.simplification import SimplificationOptions, simplify_geometries, simplify_geometry
 from hipparchus.geometry.smoothing import smooth_layer_geometries
 from hipparchus.rendering.models import LayerStyle, RGBAColor, RenderLayer, RenderScene, PlaceLabel
+
+# Layers whose features carry a band_index/band_count pair and so get a
+# per-feature position along their style's two-stop fill ramp, rather than one
+# flat colour. Elevation bands the source terrain measured directly; relief
+# shading the same source lit and banded on a fixed scale -- different
+# quantities, the same pipeline.
+_BANDED_LAYERS = frozenset({BAND_LAYER, HILLSHADE_LAYER})
+
+# Where "relief over buildings" stops raising the hillshade layer -- it goes
+# above every layer of the built environment, but not above the labels naming
+# it.
+_LABEL_LAYER_NAMES = frozenset({SUMMIT_LAYER, "places", "street_names", "amenities", "shops"})
 
 
 @dataclass(slots=True)
@@ -94,7 +110,7 @@ class RenderSceneBuilder:
                         diagnostics["smoothed_geometries"] = int(diagnostics["smoothed_geometries"]) + smoothed
                         diagnostics["invalid_geometries"] = int(diagnostics["invalid_geometries"]) + invalid
                         layer_geometries[road_type] = geoms[:max_n]
-            elif layer_name == BAND_LAYER:
+            elif layer_name in _BANDED_LAYERS:
                 # Bands carry a colour that lives in the feature's properties,
                 # which the geometry pipeline drops. Running the pipeline one
                 # feature at a time is what keeps geometry and colour paired:
@@ -302,6 +318,9 @@ class RenderSceneBuilder:
                     fill_colors=fill_colors,
                 )
             )
+
+        if geometry_profile.relief_over_buildings:
+            layers = _raise_relief_over_the_built_environment(layers)
 
         # Use the bbox from the feature collection if available
         scene_bbox = projection.project_bbox(feature_collection.bbox)
@@ -711,6 +730,29 @@ def _ordered_layers(layer_names: set[str] | list[str] | tuple[str, ...]) -> list
     order: list[str] = [name for name in preferred if name in names]
     rest = sorted([name for name in names if name not in preferred])
     return order + rest
+
+
+def _raise_relief_over_the_built_environment(layers: list[RenderLayer]) -> list[RenderLayer]:
+    """Move the hillshade layer above roads, buildings and every other layer of
+    the built environment, stopping just short of the labels.
+
+    Relief is ground and buildings sit on it, so shading is drawn underneath
+    them by default -- correct in open country. In a dense city that means the
+    shading is almost entirely hidden behind the building fills, showing only
+    in the parks and the street corridors. This is the other choice: the whole
+    sheet, not just what shows through. Labels stay on top either way.
+    """
+    from_index = next((index for index, layer in enumerate(layers) if layer.name == HILLSHADE_LAYER), None)
+    if from_index is None:
+        return layers
+    reordered = list(layers)
+    relief = reordered.pop(from_index)
+    insert_at = next(
+        (index for index, layer in enumerate(reordered) if layer.name in _LABEL_LAYER_NAMES),
+        len(reordered),
+    )
+    reordered.insert(insert_at, relief)
+    return reordered
 
 
 def _clip_geometries(geometries: list[BaseGeometry], clip_bbox: BaseGeometry) -> list[BaseGeometry]:

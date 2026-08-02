@@ -1,10 +1,16 @@
 from __future__ import annotations
 
+from dataclasses import replace
 import unittest
 
 from hipparchus.application.presets import GeometryPipelineProfile, StyleProfile, default_preset
-from hipparchus.application.scene_builder import RenderSceneBuilder, _ordered_layers
+from hipparchus.application.scene_builder import (
+    RenderSceneBuilder,
+    _ordered_layers,
+    _raise_relief_over_the_built_environment,
+)
 from hipparchus.data_sources.provider import FeatureCollection
+from hipparchus.rendering.models import RenderLayer
 
 
 class RenderSceneBuilderTests(unittest.TestCase):
@@ -292,6 +298,63 @@ class DrawOrderTests(unittest.TestCase):
         """
         plain = _ordered_layers({"coastline", "water", "parks", "buildings", "roads_primary"})
         self.assertEqual(plain, ["parks", "coastline", "water", "buildings", "roads_primary"])
+
+
+class ReliefOverBuildingsTests(unittest.TestCase):
+    """The switch for a dense city, where relief drawn under the buildings by
+    default is hidden behind almost all of them."""
+
+    def names(self, layers: list[RenderLayer]) -> list[str]:
+        return [layer.name for layer in layers]
+
+    def test_relief_moves_above_the_built_environment(self) -> None:
+        layers = [RenderLayer(name=name) for name in ("elevation_bands", "terrain_hillshade", "coastline", "water", "buildings", "roads_primary", "places")]
+        reordered = self.names(_raise_relief_over_the_built_environment(layers))
+        self.assertLess(reordered.index("terrain_hillshade"), reordered.index("places"))
+        for layer in ("coastline", "water", "buildings", "roads_primary"):
+            with self.subTest(layer=layer):
+                self.assertLess(reordered.index(layer), reordered.index("terrain_hillshade"))
+
+    def test_relief_still_sits_below_the_labels(self) -> None:
+        layers = [RenderLayer(name=name) for name in ("terrain_hillshade", "buildings", "summits", "places", "shops")]
+        reordered = self.names(_raise_relief_over_the_built_environment(layers))
+        for label in ("summits", "places", "shops"):
+            with self.subTest(label=label):
+                self.assertLess(reordered.index("terrain_hillshade"), reordered.index(label))
+
+    def test_a_scene_with_no_relief_is_unchanged(self) -> None:
+        layers = [RenderLayer(name=name) for name in ("coastline", "water", "buildings")]
+        self.assertEqual(_raise_relief_over_the_built_environment(layers), layers)
+
+    def test_a_scene_with_no_labels_puts_relief_last(self) -> None:
+        layers = [RenderLayer(name=name) for name in ("terrain_hillshade", "coastline", "buildings")]
+        reordered = self.names(_raise_relief_over_the_built_environment(layers))
+        self.assertEqual(reordered[-1], "terrain_hillshade")
+
+    def test_the_geometry_profile_switch_reaches_the_built_scene(self) -> None:
+        """Not just the pure reorder function -- the flag on the preset that is
+        supposed to trigger it during a real build."""
+        fc = FeatureCollection(
+            geojson_by_layer={
+                "buildings": {"features": [{"type": "Feature", "geometry": {"type": "Polygon", "coordinates": [[[0, 0], [1, 0], [1, 1], [0, 1], [0, 0]]]}, "properties": {}}]},
+                "terrain_hillshade": {"features": [{"type": "Feature", "geometry": {"type": "Polygon", "coordinates": [[[0, 0], [2, 0], [2, 2], [0, 2], [0, 0]]]}, "properties": {"band_index": 0, "band_count": 2}}]},
+            },
+            bbox=(0.0, 0.0, 2.0, 2.0),
+        )
+        preset = default_preset("Hypsometric Relief")
+        lifted = RenderSceneBuilder().build(
+            fc,
+            replace(preset.geometry_profile, relief_over_buildings=True),
+            preset.style_profile,
+            "preview",
+        )
+        grounded = RenderSceneBuilder().build(fc, preset.geometry_profile, preset.style_profile, "preview")
+
+        def index_of(scene, name: str) -> int:
+            return next(i for i, layer in enumerate(scene.layers) if layer.name == name)
+
+        self.assertLess(index_of(grounded, "terrain_hillshade"), index_of(grounded, "buildings"))
+        self.assertGreater(index_of(lifted, "terrain_hillshade"), index_of(lifted, "buildings"))
 
 
 if __name__ == "__main__":

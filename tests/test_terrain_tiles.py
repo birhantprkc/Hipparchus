@@ -24,11 +24,13 @@ from hipparchus.data_sources.terrain_tiles import (
     TerrainTileSettings,
     _choose_zoom,
     _decode_terrarium,
+    _ground_resolution_metres,
     _lonlat_for_pixel,
     _pixel_for,
     _tile_for,
     terrain_tile_provider,
 )
+from hipparchus.geometry.projection import MAX_MERCATOR_LAT
 
 
 ATHENS = BBoxQuery(min_lon=23.57, min_lat=37.81, max_lon=23.89, max_lat=38.13)
@@ -55,6 +57,16 @@ def _ramp_tile() -> bytes:
     """A tile rising smoothly west to east, 0 m to 1000 m."""
     ramp = np.linspace(0.0, 1000.0, TILE_PIXELS)
     return _terrarium_png(np.tile(ramp, (TILE_PIXELS, 1)))
+
+
+def _dome_tile() -> bytes:
+    """A dome, so the sun catches a different slope in every direction --
+    unlike the ramp tile, whose constant gradient shades in exactly one tone."""
+    axis = np.arange(TILE_PIXELS, dtype=float)
+    row, column = np.meshgrid(axis, axis, indexing="ij")
+    centre = (TILE_PIXELS - 1) / 2.0
+    radius = np.hypot(row - centre, column - centre)
+    return _terrarium_png(1500.0 - 6.0 * radius)
 
 
 class ProjectionTests(unittest.TestCase):
@@ -255,6 +267,96 @@ class FetchTests(unittest.TestCase):
         status = terrain_tile_provider().status()
         self.assertTrue(status.available)
         self.assertEqual(status.provider_id, "terrain_tiles")
+
+
+@unittest.skipUnless(SKIA_AVAILABLE, "skia-python not installed")
+class HillshadeTests(unittest.TestCase):
+    """`terrain_hillshade` had a label, a group, a palette style and a place in
+    the draw order, and nothing that ever wrote a feature into it."""
+
+    def test_hillshade_is_off_by_default(self) -> None:
+        settings = TerrainTileSettings(max_tiles=8, target_pixels=512)
+        result = terrain_tile_provider(settings, lambda url, timeout: _dome_tile()).fetch_bbox(ATHENS)
+        self.assertEqual(result.features_by_layer["terrain_hillshade"], [])
+
+    def test_hillshade_bands_are_produced_when_switched_on(self) -> None:
+        settings = TerrainTileSettings(max_tiles=8, target_pixels=512, emit_hillshade=True)
+        result = terrain_tile_provider(settings, lambda url, timeout: _dome_tile()).fetch_bbox(ATHENS)
+        features = result.features_by_layer["terrain_hillshade"]
+        self.assertTrue(features)
+        for feature in features:
+            self.assertIn(feature["geometry"]["type"], {"Polygon", "MultiPolygon"})
+            properties = feature["properties"]
+            self.assertLess(properties["shade_low"], properties["shade_high"])
+            self.assertTrue(properties["measured"])
+
+    def test_band_index_is_the_absolute_position_on_the_fixed_scale(self) -> None:
+        """Not the position in the (possibly shorter) list `elevation_bands`
+        returns -- ground reaching only two adjacent tones must not be pushed
+        to the ramp's two extremes, which is the fixed-scale rule moved one
+        step downstream."""
+        settings = TerrainTileSettings(
+            max_tiles=8, target_pixels=512, emit_hillshade=True, hillshade_band_count=7
+        )
+        result = terrain_tile_provider(settings, lambda url, timeout: _dome_tile()).fetch_bbox(ATHENS)
+        features = result.features_by_layer["terrain_hillshade"]
+        self.assertTrue(features)
+        indices = [f["properties"]["band_index"] for f in features]
+        self.assertEqual(indices, sorted(indices))
+        self.assertEqual(len(indices), len(set(indices)))
+        for feature in features:
+            self.assertEqual(feature["properties"]["band_count"], 7)
+            self.assertGreaterEqual(feature["properties"]["band_index"], 0)
+            self.assertLess(feature["properties"]["band_index"], 7)
+
+    def test_flat_ground_lands_in_one_band_not_a_mottle(self) -> None:
+        """The bug a fixed 0...1 scale exists to prevent: stretching to the
+        observed range would spread a single true shade value across several
+        bands and paint flat ground as if it had relief."""
+        settings = TerrainTileSettings(
+            max_tiles=8, target_pixels=512, emit_hillshade=True, hillshade_band_count=7
+        )
+        flat = _terrarium_png(np.full((TILE_PIXELS, TILE_PIXELS), 250.0))
+        result = terrain_tile_provider(settings, lambda url, timeout: flat).fetch_bbox(ATHENS)
+        features = result.features_by_layer["terrain_hillshade"]
+        self.assertEqual(len({f["properties"]["band_index"] for f in features}), 1)
+
+    def test_the_sun_can_be_moved(self) -> None:
+        low = TerrainTileSettings(
+            max_tiles=8, target_pixels=512, emit_hillshade=True, hillshade_sun_altitude_degrees=10.0
+        )
+        high = TerrainTileSettings(
+            max_tiles=8, target_pixels=512, emit_hillshade=True, hillshade_sun_altitude_degrees=80.0
+        )
+        low_result = terrain_tile_provider(low, lambda url, timeout: _dome_tile()).fetch_bbox(ATHENS)
+        high_result = terrain_tile_provider(high, lambda url, timeout: _dome_tile()).fetch_bbox(ATHENS)
+        low_shade = {f["properties"]["sun_altitude"] for f in low_result.features_by_layer["terrain_hillshade"]}
+        high_shade = {f["properties"]["sun_altitude"] for f in high_result.features_by_layer["terrain_hillshade"]}
+        self.assertEqual(low_shade, {10.0})
+        self.assertEqual(high_shade, {80.0})
+
+
+class GroundResolutionTests(unittest.TestCase):
+    """Real ground metres per pixel, not a fixed constant -- what a hillshade
+    needs to get slope right at any zoom or latitude."""
+
+    def test_resolution_narrows_towards_the_poles(self) -> None:
+        equator = _ground_resolution_metres(0.0, 12)
+        high_latitude = _ground_resolution_metres(60.0, 12)
+        self.assertAlmostEqual(high_latitude, equator * math.cos(math.radians(60.0)), places=6)
+
+    def test_latitude_is_clamped_to_the_mercator_limit(self) -> None:
+        self.assertEqual(
+            _ground_resolution_metres(89.9, 10),
+            _ground_resolution_metres(MAX_MERCATOR_LAT, 10),
+        )
+
+    def test_resolution_halves_with_every_zoom_level(self) -> None:
+        self.assertAlmostEqual(
+            _ground_resolution_metres(38.0, 11),
+            _ground_resolution_metres(38.0, 10) / 2.0,
+            places=9,
+        )
 
 
 @unittest.skipUnless(SKIA_AVAILABLE, "skia-python not installed")
