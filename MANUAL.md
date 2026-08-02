@@ -200,14 +200,25 @@ $env:HIPPARCHUS_PYTHON = "C:\path\to\python.exe"; .\run_hprs.ps1
 
 ## 4. The Main Window
 
-The Hipparchus window has four main areas:
+The Hipparchus window has a menu bar and three columns:
 
-- Top bar: location search, fetch, preset, quality, and SVG export.
-- Left sidebar: area controls, viewport controls, and layer toggles.
-- Center canvas: map preview.
-- Right sidebar: label settings, renderer settings, online provider settings, presets, cache, and diagnostics.
+- **Menu bar**: every verb the interface has, each with its keyboard shortcut.
+  Nothing there is unreachable by mouse, and nothing on screen is missing from
+  it.
+- **Top bar**: place search, `Render map`, the Locator, `Draw area`, and export.
+- **Left rail**: the **Locator** — a world map you can drag — the four
+  coordinates, and the saved places.
+- **Centre canvas**: the map preview, with zoom, turn and fit controls floating
+  on the map itself rather than in a rail beside it.
+- **Right rail**: **Sources** (what the map is made of), **Layers in this map**
+  (what it actually contains, with counts), **Style**, **Palette** and
+  **Quality**.
+- **Status bar**: one row per source while a fetch runs — which is running,
+  which finished with what, which failed and why — the map's provenance, and the
+  maker's mark, which opens tsevis.com.
 
-The bottom status bar shows app state and cache information.
+Settings live at `Cmd+,` rather than in the rail: the rail is about the map in
+front of you, and how the application behaves is a different question.
 
 ## 5. Choosing An Area
 
@@ -242,14 +253,37 @@ The left sidebar includes preset locations:
 - Goa Coast — a monsoon coast of estuaries and low hills
 - Addis Ababa — a highland capital above 2,300 m
 - Shanghai Bund — a delta city at sea level on the Huangpu
+- Sydney Harbour — a drowned river valley
+- Lefkada, Kefalonia, Ithaca, Corfu, Zakynthos — the Ionian islands, shared with
+  the macOS application
 
-Any of these names also works with `HIPPARCHUS_START_AREA` (see section 21).
+The first nine also carry `Cmd+1` to `Cmd+9`, derived from the order rather than
+written beside it. Any of these names also works with `HIPPARCHUS_START_AREA`
+(see section 21).
 
-To use one:
+To use one, click it in the rail or choose it from the `Map` menu.
 
-1. Pick a preset from the `Area` dropdown.
-2. Click `Use Preset AOI`.
-3. Click `Fetch`.
+### Use The Locator
+
+The Locator is a world map drawn from Natural Earth — coastlines, national
+borders and lakes. No network, no key, no tile policy.
+
+- **In the rail**, what it shows *is* the area: there is no room to aim at
+  anything smaller, so dragging and zooming choose.
+- **In its own window** (`Cmd+L`) there is room, so the two come apart. Panning
+  and zooming go *looking*; a **click** chooses. That is what lets you pick a
+  place, zoom out to check you picked the right one, and still have it picked.
+  `D` draws a rectangle instead, and turns itself off after one.
+
+It follows the zoom into the detailed 1:10m dataset, so a sea shows its islands
+rather than a coarse outline at every scale.
+
+### Keep it a sensible size
+
+An area is a request to a public service, and it costs roughly what it covers. A
+city centre is seconds; a whole sea does not return at all. Hipparchus says so
+before the wait rather than after: past about 120 km² it asks first, and names
+the size it is about to fetch.
 
 ### Search By Name
 
@@ -614,13 +648,38 @@ presets from live data, which is the quickest way to pick one by eye.
 
 ### Creating A Custom Preset
 
-In the right sidebar:
-
-1. Go to `Presets`.
-2. Enter a name in `New Name`.
-3. Click `Add Current To Presets`.
+Under `Style` in the right rail, `Save this style…` keeps the current one — with
+its derivation sizes — under a name of your own. A style you saved can also be
+deleted; the sixteen built-in ones cannot.
 
 Custom presets are saved to your user app data folder (`~/.hipparchus/presets.json`) so they persist between sessions. Override the location with `HIPPARCHUS_PRESETS_FILE`.
+
+### Palettes: colour, separate from the style
+
+A preset is a whole sheet — geometry, weights and colour together — so "the same
+map in different colours" was not something you could ask for. A **palette** is
+eight colours and nothing else, so it can be laid over any of the sixteen:
+
+| palette | what it is |
+|---|---|
+| `Preset's own` | leave the style's colours alone. Where a new session starts. |
+| `Tsevis Daylight` | the two brand colours, turquoise water against blue land |
+| `Tsevis Nocturne` | the same two on a dark ground |
+| `Admiralty` | a chart: thin roads, heavy contours, a filled sea |
+| `Riso Teal & Coral` | two inks and paper, the way a risograph prints |
+| `Riso Blue & Ochre` | the same, in the other pair |
+| `Sepia` | a warm archival sheet |
+| `Botanical` | a printed plate: soft greens on cream |
+| `Slate` | a dark neutral |
+| `High Contrast Light` / `Dark` | black on white and white on black, roads at nearly twice the weight |
+
+Every layer's colour is *derived* from those eight rather than chosen one by
+one, which is what keeps a sheet coherent: picked layer by layer, the water ends
+up a blue that belongs to no other colour on the map.
+
+A palette takes effect on the next `Render map`, as a style does. The fetch
+behind it is cached, so redrawing the same area in other colours costs no
+network.
 
 ## 10. Layer Controls
 
@@ -1066,13 +1125,25 @@ Mouse:
 
 Keyboard:
 
-- `Cmd+Enter` (macOS) or `Ctrl+Enter` (Windows / Linux): update the map. It
-  works while the cursor is in the location or coordinate fields, which is
-  exactly when you want it — type a place, then update without reaching for the
-  mouse.
-- `+`: zoom in.
-- `-`: zoom out.
-- `0` or `r`: reset the view.
+- `Cmd+Enter`: Render map. It works while the cursor is in the location or
+  coordinate fields, which is exactly when you want it — type a place, then
+  render without reaching for the mouse.
+- `Cmd+.`: cancel a fetch in progress.
+- `Cmd+L`: open the Locator.
+- `Cmd+F`: put the cursor in the place search.
+- `Cmd+1` … `Cmd+9`: the first nine saved places.
+- `Cmd+Z` / `Shift+Cmd+Z`: undo and redo. Undo names what it will take back, and
+  never re-fetches to do it.
+- `Cmd+,`: settings.
+- `Cmd+E` / `Shift+Cmd+E` / `Opt+Cmd+E`: export SVG, PDF and PNG.
+- `Shift+Cmd+V`: paste an area from the clipboard — a bounding box, two corners,
+  a point, or a map link.
+- `+` / `-`: zoom in and out.
+- `0` or `r`: fit the map to the window, north up.
+- `[` / `]`: turn the view.
+
+In the Locator window: arrows move, `Shift` with them moves further, `+` and `-`
+zoom, `0` returns to the whole world, `D` draws an area and `Esc` stops drawing.
 
 Buttons:
 

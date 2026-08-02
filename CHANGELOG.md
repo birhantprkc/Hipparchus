@@ -94,8 +94,39 @@ declared in the source and did nothing.
   launch moved to Settings, where the other choices are.
 - **The maker's mark opens tsevis.com.** It had named the address in a tooltip
   and done nothing when clicked.
+- Five more saved places, shared with the macOS application: Lefkada,
+  Kefalonia, Ithaca, Corfu and Zakynthos.
 - **All sixteen styles on show** rather than six with the rest in a dropdown,
   and styles of your own can be saved and deleted.
+### Fixed, once somebody looked
+
+Everything below was found by running the application rather than by a test, and
+most of it had been true since the interface was rebuilt.
+
+- **Render map fetches the area you chose.** It read the canvas and took
+  whatever it found, so the Locator, a search result, a saved place and four
+  typed numbers all lost to the map already on screen. It worked once per
+  session and silently re-fetched the old area thereafter.
+- **The area no longer walks outwards.** The canvas fits a map by its tighter
+  dimension and centres it, so the gap it leaves is only the fit margin on that
+  axis; insetting by the same number on both read back ground that was never
+  drawn, and each press of Render map grew the area 3.2 % — 71 % in ten.
+- **The sea is drawn over the relief.** Terrain tiles carry the sea floor in the
+  same band as the ground, so an opaque hypsometric fill drawn after the water
+  painted harbours out.
+- **A window started in dark mode is dark throughout.** Only the appearance
+  toggle told the theme which palette was in force, so a window launched dark
+  wore dark styling over light hand-drawn widgets.
+- **The Locator opens where it was told to.** It was asked to show an area
+  before its canvas had been laid out, and an area fitted into one pixel came
+  back as the whole world.
+- **The Locator draws lakes**, so it is not a blank rectangle over the middle of
+  a continent, where there is no coastline and no national border.
+- **No more error dialogue from the render thread.** It asked a Tk variable
+  whether debug logging was on, which from any thread but the main one raises —
+  and the worker turned that into a modal alert on top of whatever you were
+  doing.
+
 - Gone: the source-library presets and the map-model dropdown, both replaced by
   the composing source stack; `Apply Settings`; the canvas scrollbars; and
   `project_state.py`, superseded by the session.

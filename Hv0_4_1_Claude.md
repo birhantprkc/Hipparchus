@@ -1369,6 +1369,42 @@ sampling" — is a report of a decision already taken about a request already se
 - **I should have looked for a size guard when I made the Locator work.** The
   consequence of a fix is part of the fix.
 
+### Then somebody looked, and it cost three more bugs
+
+Taking the two README screenshots — South Bend in light with the floating
+Locator, Valletta in dark — turned up three things no test would have:
+
+- **A window started in dark mode was only half dark.** `theme.current()` is
+  what every hand-drawn widget reads for its own colours, and it answers from
+  module state that only the appearance *toggle* ever set. Dark ttk styling sat
+  over light hand-drawn widgets, and the Locator was a white box in the corner
+  until somebody toggled the theme twice. Visible in the first attempt at the
+  Valletta shot.
+- **The floating Locator opened on the wrong continent.** It is told which area
+  to show the moment it is built, before its canvas has been laid out, and an
+  area fitted into a one-pixel canvas yields a scale the clamp pulls back to the
+  whole world. Asked for South Bend, it opened on North America.
+- **Inland, the Locator drew nothing at all.** It read coastlines and national
+  borders, and over Indiana there are neither — blank white at every zoom. The
+  lakes are in the same Natural Earth distribution and were already on disk.
+
+And the five Ionian places the macOS style pack ships, appended rather than
+slotted in among the cities because the number-key shortcuts are derived from
+the order.
+
+**The Mac's four style packs needed no importing.** Their seven presets — Tsevis
+Daylight and Nocturne, Admiralty Chart, the two Riso duotones, High Contrast
+Light and Dark — are the ten palettes, from the same derivation. A pack is one
+fixed sheet; a palette dresses any of the sixteen.
+
+### What went wrong taking the screenshots
+
+- **The first capture photographed the user's screen, not the application.** It
+  took a rectangle of the display, and the display had their Finder window and
+  their file names on it. Deleted rather than used. Captures go through
+  `screencapture -l` now, which takes one window by its id and cannot include
+  anything else, whether or not the window is in front.
+
 ### Still unverified by eye
 
 `screencapture` on this machine returns the desktop without window contents —
@@ -1383,13 +1419,13 @@ dropdown and the splash have still never been seen in a running window.
 
 Ranked by what it costs to leave.
 
-1. **Almost nothing has been looked at.** The logic of Phases 5–13 is now
-   exercised — the Locator by driving its real widgets, the splash by measuring
-   it, the palettes and the plates by rendering them — but the *layout* has been
-   seen by nobody. Screenshots are not available on this machine.
-2. **The elevation bands paint over the inferred sea.** `_ordered_layers` puts
-   `elevation_bands` after `water`, and an opaque band fill hides a harbour —
-   visible in the Auckland plate.
+1. **The rail's Locator strip is blank for an inland city.** What it shows *is*
+   the area, and at city scale over Indiana there is no coastline, no border and
+   no lake. The design working as written, and the one thing in the South Bend
+   screenshot that looks like a fault.
+2. **Most of the window has still not been read carefully.** The two screenshots
+   are the first proper look at it, and they cost three bugs in an hour. The
+   splash and the settings window have never been seen at all.
 3. **Resizable and collapsible columns** (B1.2, B1.3) — still fixed at
    360 / flex / 300; the `ttk.PanedWindow` swap from D2 never happened.
 4. **Window size** (B1.5) — opens 1600×1080, minimum 1400×980. The Mac is
@@ -1405,4 +1441,4 @@ Ranked by what it costs to leave.
 9. **`featured_names()`** survives in `style_previews.py` with no caller but its
    own default and its own tests. The "featured six" idea died in Phase 6.
 
-*Nothing pushed.*
+*Merged into `main` and pushed.*
