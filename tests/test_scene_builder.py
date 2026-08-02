@@ -3,7 +3,7 @@ from __future__ import annotations
 import unittest
 
 from hipparchus.application.presets import GeometryPipelineProfile, StyleProfile, default_preset
-from hipparchus.application.scene_builder import RenderSceneBuilder
+from hipparchus.application.scene_builder import RenderSceneBuilder, _ordered_layers
 from hipparchus.data_sources.provider import FeatureCollection
 
 
@@ -233,6 +233,65 @@ class RenderSceneBuilderTests(unittest.TestCase):
             (scene.background.r, scene.background.g, scene.background.b),
             (expected.r, expected.g, expected.b),
         )
+
+
+class DrawOrderTests(unittest.TestCase):
+    """Where the sea sits in the stack.
+
+    Elevation bands cover the sea as well as the land — the tiles carry the sea
+    floor in the same band as the ground — and a hypsometric band fill is
+    opaque. Drawn after the water, they paint the harbour out: the Auckland
+    plate infers the Waitematā correctly from the coastline and then hides it
+    under a land tint. A printed sheet draws the sea *over* the hypsometric
+    tint, and so does this now.
+    """
+
+    TERRAIN = {
+        "coastline", "water", "parks", "elevation_bands", "terrain_hillshade",
+        "bathymetry", "terrain_contours", "terrain_index_contours",
+        "buildings", "roads_primary", "places",
+    }
+
+    def order(self) -> list[str]:
+        return _ordered_layers(self.TERRAIN)
+
+    def test_the_sea_is_drawn_over_the_relief(self) -> None:
+        order = self.order()
+        self.assertLess(order.index("elevation_bands"), order.index("water"))
+        self.assertLess(order.index("terrain_hillshade"), order.index("water"))
+
+    def test_the_relief_still_sits_over_the_land_cover(self) -> None:
+        """It is a tint on the ground, not a layer beside it."""
+        self.assertLess(self.order().index("parks"), self.order().index("elevation_bands"))
+
+    def test_depth_and_contours_are_drawn_over_the_water_they_describe(self) -> None:
+        order = self.order()
+        for layer in ("bathymetry", "terrain_contours", "terrain_index_contours"):
+            with self.subTest(layer=layer):
+                self.assertLess(order.index("water"), order.index(layer))
+
+    def test_the_built_environment_still_sits_on_top_of_all_of_it(self) -> None:
+        order = self.order()
+        for layer in ("coastline", "water", "elevation_bands", "terrain_contours"):
+            with self.subTest(layer=layer):
+                self.assertLess(order.index(layer), order.index("buildings"))
+                self.assertLess(order.index(layer), order.index("roads_primary"))
+
+    def test_labels_are_last(self) -> None:
+        order = self.order()
+        self.assertEqual(order[-1], "places")
+
+    def test_water_is_drawn_over_the_land_cover_too(self) -> None:
+        """A consequence rather than a separate decision, and the right one.
+
+        Relief has to sit above land cover — it is a tint on the ground — and
+        below the water, or it paints the sea out. Both together put water above
+        land cover. That is also how it should have been: an OSM park polygon
+        commonly includes its ponds, and drawing the park afterwards filled them
+        in with grass.
+        """
+        plain = _ordered_layers({"coastline", "water", "parks", "buildings", "roads_primary"})
+        self.assertEqual(plain, ["parks", "coastline", "water", "buildings", "roads_primary"])
 
 
 if __name__ == "__main__":
