@@ -53,6 +53,8 @@ src/hipparchus/
 │   ├── geocoding.py          Place names to frames, clamped to map-sized
 │   ├── layer_inventory.py    What a rendered map contains, for the layer panel
 │   ├── locator.py            What a click chooses; the draw-area mode
+│   ├── palette_sheet.py      A whole map's layers derived from a palette
+│   ├── palettes.py           Colour as an axis of its own, separate from style
 │   ├── places.py             The saved places, with ⌘1…⌘9 derived from them
 │   ├── preset_store.py       Persistent custom preset storage
 │   ├── presets.py            Built-in cartographic presets
@@ -67,7 +69,8 @@ src/hipparchus/
 │   ├── style_catalogue.py    Which styles exist, and what may be done to them
 │   ├── style_previews.py     Preset thumbnails for the style picker
 │   ├── viewport.py           What is on screen, and what shape to ask for
-│   ├── world_outline.py      The Natural Earth coastline the locator draws
+│   ├── world_outline.py      The Natural Earth coastline, at the scale the zoom deserves
+│   ├── world_paths.py        That outline projected once, and culled per frame
 │   └── world_view.py         Where the locator is looking, and how closely
 │
 ├── cache/                    Disk cache for Overpass responses

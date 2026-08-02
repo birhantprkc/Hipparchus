@@ -21,8 +21,23 @@ from __future__ import annotations
 import tkinter as tk
 from typing import Any, Callable
 
+import threading
+
 from hipparchus.application.locator import Mode, area_between
-from hipparchus.application.world_outline import Outline, load as load_outline
+from hipparchus.application.world_outline import (
+    DETAIL_110M,
+    Outline,
+    detail_for,
+    is_available,
+    load as load_outline,
+)
+from hipparchus.application.world_paths import (
+    WorldPaths,
+    prepare,
+    screen_coordinates,
+    visible,
+    window_of,
+)
 from hipparchus.application.world_view import WorldView
 from hipparchus.ui import theme
 
@@ -64,9 +79,12 @@ class WorldMap:
         self._press_at: tuple[int, int] | None = None
         self._rubber_band: int | None = None
         self._on_area_changed = on_area_changed
-        #: Loaded once and shared: reading the shapefile per instance would be
-        #: the same work twice for the rail and the panel.
-        self._outline = outline if outline is not None else _shared_outline()
+        #: An outline handed in is used as given, at whatever detail it is —
+        #: the seam the tests use. Otherwise the shared, projected cache.
+        self._own_paths = prepare(outline, DETAIL_110M) if outline is not None else None
+        if outline is None:
+            _load_coarse()
+        self._detail_poll: str | None = None
 
         palette = theme.current()
         self.widget = tk.Canvas(
@@ -279,14 +297,17 @@ class WorldMap:
         palette = theme.current()
         self._draw_graticule(palette)
 
+        paths = self._paths_for_this_view()
+        window = window_of(self._view)
+
         # Borders under the coast, so a coastline is never broken by a border
         # drawn over it.
-        for line in self._outline.borders:
-            self._draw_line(line, palette.border, 1)
-        for line in self._outline.coastline:
-            self._draw_line(line, palette.muted, 1)
+        for segment in visible(paths.borders, window):
+            self._draw_segment(segment, palette.border, 1)
+        for segment in visible(paths.coastline, window):
+            self._draw_segment(segment, palette.muted, 1)
 
-        if self._outline.is_empty:
+        if paths.is_empty:
             canvas.create_text(
                 max(1, canvas.winfo_width()) // 2,
                 max(1, canvas.winfo_height()) // 2,
@@ -295,27 +316,61 @@ class WorldMap:
                 font=theme.font("caption"),
             )
 
-    def _draw_line(self, line: tuple[tuple[float, float], ...], colour: str, width: int) -> None:
-        """One polyline, dropped if it is nowhere near the view.
-
-        The whole world is drawn at every scale, so at a city the great
-        majority of it is off-canvas; asking Tk to clip fifteen thousand
-        vertices it will not show is the difference between a smooth drag and a
-        stuttering one.
-        """
-        west, south, east, north = self._view.bounds()
-        if not any(west <= lon <= east and south <= lat <= north for lon, lat in line):
-            # Cheap rejection, and deliberately not exact: a line crossing the
-            # view with no vertex inside it is rare at this scale, and drawing
-            # one too few is better than clipping properly on every frame.
-            return
-
-        points: list[float] = []
-        for lon, lat in line:
-            x, y = self._view.to_screen(lon, lat)
-            points.extend((x, y))
+    def _draw_segment(self, segment, colour: str, width: int) -> None:
+        """One polyline, already projected and already known to be on screen."""
+        points = screen_coordinates(segment, self._view)
         if len(points) >= 4:
             self.widget.create_line(*points, fill=colour, width=width)
+
+    # -- which dataset ---------------------------------------------------------
+
+    def _paths_for_this_view(self) -> WorldPaths:
+        """The outline at the detail this zoom deserves, if it is ready.
+
+        Asking for the detailed set does not block on reading it: the coarse one
+        keeps being drawn until the read finishes, which is a coastline that
+        sharpens a moment after you arrive rather than a window that stops
+        responding while ten megabytes are parsed.
+        """
+        if self._own_paths is not None:
+            return self._own_paths
+
+        west, _south, east, _north = self._view.bounds()
+        wanted = detail_for(abs(east - west))
+        ready = _prepared(wanted)
+        if ready is not None:
+            return ready
+        _request(wanted)
+        self._watch_for(wanted)
+        return _prepared(DETAIL_110M) or WorldPaths()
+
+    def _watch_for(self, detail: str) -> None:
+        """Redraw once a finer outline arrives, without touching Tk off-thread.
+
+        The reading thread only fills a dictionary; this is the UI thread asking
+        whether it has, which is the only side of that exchange allowed to draw.
+        """
+        if self._detail_poll == detail:
+            return
+        self._detail_poll = detail
+
+        def look() -> None:
+            if _prepared(detail) is None:
+                try:
+                    self.widget.after(150, look)
+                except tk.TclError:  # pragma: no cover - the window went away
+                    self._detail_poll = None
+                return
+            self._detail_poll = None
+            try:
+                self._draw()
+            except tk.TclError:  # pragma: no cover - the window went away
+                pass
+
+        try:
+            self.widget.after(150, look)
+        except tk.TclError:  # pragma: no cover - the window went away
+            self._detail_poll = None
 
     def _draw_graticule(self, palette: theme.Palette) -> None:
         width = max(1, self.widget.winfo_width())
@@ -346,15 +401,58 @@ class WorldMap:
             self._on_area_changed(self._view.bounds())
 
 
-_OUTLINE: Outline | None = None
+# The outlines, read and projected once for the process rather than once per
+# WorldMap: the rail and the floating panel would otherwise do the same work
+# twice, and the detailed set is ten megabytes of it.
+_PATHS: dict[str, WorldPaths] = {}
+_LOADING: set[str] = set()
+_LOCK = threading.Lock()
 
 
-def _shared_outline() -> Outline:
-    """The world, read once for the process."""
-    global _OUTLINE
-    if _OUTLINE is None:
-        _OUTLINE = load_outline()
-    return _OUTLINE
+def _prepared(detail: str) -> WorldPaths | None:
+    with _LOCK:
+        return _PATHS.get(detail)
+
+
+def _install(detail: str, paths: WorldPaths) -> None:
+    with _LOCK:
+        _PATHS[detail] = paths
+        _LOADING.discard(detail)
+
+
+def _request(detail: str) -> None:
+    """Start reading a scale that is not in hand yet, once.
+
+    The coarse set is read on the calling thread — it is a sixth of a second and
+    the locator has nothing to draw without it. The detailed set is read on
+    another, because a second and a half of parsing on the UI thread is a window
+    that has stopped responding.
+    """
+    if not is_available(detail):
+        # Nothing to load. Remember that, so this is not asked again every frame.
+        _install(detail, _prepared(DETAIL_110M) or WorldPaths())
+        return
+
+    with _LOCK:
+        if detail in _PATHS or detail in _LOADING:
+            return
+        _LOADING.add(detail)
+
+    def read() -> None:
+        try:
+            _install(detail, prepare(load_outline(detail=detail), detail))
+        except Exception:  # noqa: BLE001 - a scale that will not read is not fatal
+            _install(detail, _prepared(DETAIL_110M) or WorldPaths())
+        # Deliberately touches no widget: calling into Tk from this thread is
+        # what raises "main thread is not in main loop". The caller polls.
+
+    threading.Thread(target=read, daemon=True, name=f"world-outline-{detail}").start()
+
+
+def _load_coarse() -> None:
+    """The coarse world, read once for the process, on the calling thread."""
+    if _prepared(DETAIL_110M) is None:
+        _install(DETAIL_110M, prepare(load_outline(detail=DETAIL_110M), DETAIL_110M))
 
 
 #: How far a press may move and still be a click. A hand on a trackpad is never
