@@ -18,10 +18,15 @@ from pathlib import Path
 import tkinter as tk
 from tkinter import ttk
 from typing import Any, Callable
+import webbrowser
 
 from hipparchus.application.source_stack import default_sources
 from hipparchus.ui import theme, tooltip
 from hipparchus.ui.icons import IconButton
+
+#: Where the maker's mark leads. The macOS application's mark is a button to
+#: the same address; this one carried the tooltip without the button.
+MAKERS_SITE = "https://tsevis.com"
 
 #: Which glyph says what. Waiting, running, done, failed and cancelled have to
 #: be told apart at a glance: a failure that looks like a wait is a five-minute
@@ -76,13 +81,17 @@ class StatusBar:
         self._frame = ttk.Frame(parent, padding=(12, 6, 12, 8))
         self._frame.grid_columnconfigure(1, weight=1)
 
-        # Whose app this is, in the corner — when the asset is there to show.
+        # Whose app this is, in the corner — when the asset is there to show,
+        # and a way to find out who that is. It had the tooltip already, which
+        # named a website and did nothing when clicked: a thing that looks like
+        # a link and is not one is worse than a plain picture.
         self._mark_image = self.load_mark(mark_path)
         column = 0
         if self._mark_image is not None:
-            mark = tk.Label(self._frame, image=self._mark_image, bd=0)
+            mark = tk.Label(self._frame, image=self._mark_image, bd=0, cursor="pointinghand")
             mark.grid(row=0, column=column, padx=(0, 10))
-            tooltip.attach(mark, "tsevis.com")
+            mark.bind("<Button-1>", lambda _event: self._open_makers_site())
+            tooltip.attach(mark, MAKERS_SITE)
             column += 1
 
         self._progress = ttk.Progressbar(self._frame, mode="indeterminate", length=90)
@@ -252,6 +261,11 @@ class StatusBar:
     @property
     def cache(self) -> str:
         return self._cache_var.get()
+
+    @staticmethod
+    def _open_makers_site() -> None:
+        """Whose application this is, at the address the mark names."""
+        webbrowser.open(MAKERS_SITE)
 
     # -- the maker's mark -----------------------------------------------------
 
