@@ -20,6 +20,7 @@ from hipparchus.application import geocoding, places, provenance, session_edit
 from hipparchus.application.coordinate_import import parse as parse_coordinates
 from hipparchus.application.locator import describe_area
 from hipparchus.application.controller import ApplicationController
+from hipparchus.application import fetch_cost
 from hipparchus.application.layer_inventory import fetch_layers
 from hipparchus.application.palette_sheet import recoloured
 from hipparchus.application.palettes import PRESET_OWN, named as palette_named, names as palette_names
@@ -1229,6 +1230,22 @@ class MainWindow:
             )
         except ValueError:
             messagebox.showerror("Invalid AOI", "Coordinates must be valid numbers.")
+            return
+
+        # What this will cost, before it is spent. The Locator makes a whole
+        # sea one drag away, and an area that size never returns; discovering
+        # that by waiting is the worst way to find out.
+        cost = fetch_cost.estimate(
+            (aoi.min_lon, aoi.min_lat, aoi.max_lon, aoi.max_lat),
+            self.source_stack.enabled_ids(),
+        )
+        if cost.worth_asking and not messagebox.askokcancel(
+            "This is a large area", cost.message, default=messagebox.CANCEL
+        ):
+            self._status.set_message(
+                f"Not fetched — {fetch_cost.readable_area(cost.square_km)} km²"
+                " is more than this will draw quickly."
+            )
             return
 
         preset = self._resolve_selected_preset()

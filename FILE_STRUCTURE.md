@@ -50,6 +50,7 @@ src/hipparchus/
 │   ├── about.py              What the app is and what it owes, as data
 │   ├── controller.py         Central controller wiring requests to services
 │   ├── coordinate_import.py  Clipboard text to an area, refusing prose
+│   ├── fetch_cost.py         What a fetch will cost, before it is made
 │   ├── geocoding.py          Place names to frames, clamped to map-sized
 │   ├── layer_inventory.py    What a rendered map contains, for the layer panel
 │   ├── locator.py            What a click chooses; the draw-area mode
