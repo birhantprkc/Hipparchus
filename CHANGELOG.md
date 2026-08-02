@@ -27,9 +27,11 @@ declared in the source and did nothing.
 
 ### A map you can point at
 
-- **An interactive world map** drawn from the Natural Earth data already in this
-  repository — no network, no key, no tile policy. Drag it, zoom it, and what it
-  shows is the area to fetch.
+- **An interactive world map** drawn from the Natural Earth data already on
+  disk — no network, no key, no tile policy. Drag it, zoom it, and what it
+  shows is the area to fetch. It follows the zoom into the detailed 1:10m set,
+  so a sea has its islands and Italy has its boot rather than the coarse world
+  outline at every scale.
 - **A floating Locator** with room to aim in, where panning and zooming go
   looking and a click chooses — so you can pick a place, zoom out to check, and
   still have it picked.
@@ -37,6 +39,26 @@ declared in the source and did nothing.
   a bearing that appears only when the view is turned.
 - **Render map draws what you are looking at.** Zooming out and pressing it used
   to re-fetch the old area while the screen showed the wider one.
+- **Render map fetches the area you chose.** Once any map had been drawn, it
+  read the canvas and took whatever it found — so the Locator, a search result,
+  a saved place and four typed numbers all lost to the map already on screen.
+  It worked once per session and silently re-fetched the old area thereafter.
+- **A large area says what it will cost before you wait for it.** The Locator
+  makes a whole sea one drag away, and an area that size does not return; there
+  was no size guard of any kind.
+
+### Colour, separate from the style
+
+- **Ten palettes**, and *Preset's own* for leaving a style alone. A preset is a
+  whole sheet — geometry, weights and colour together — so the same map in other
+  colours was not something you could ask for. A palette replaces the colour and
+  keeps the geometry, and applies to any of the sixteen styles.
+- Every layer's colour is **derived** from the palette's eight rather than
+  chosen one by one, which is what keeps a sheet coherent: hand-picked, the
+  water ends up a blue that belongs to no other colour on the map.
+- It takes effect on the next Render map, as a style does. The fetch behind it
+  is cached, so re-drawing in other colours costs no network.
+- It is saved with the session and undo calls it "Change Palette".
 
 ### Saying why, before the click
 
@@ -65,7 +87,13 @@ declared in the source and did nothing.
 ### Also
 
 - **An About window**, carrying the OpenStreetMap attribution the licence
-  requires, with the text under test so it cannot quietly go missing.
+  requires, with the text under test so it cannot quietly go missing. It is the
+  macOS one rather than a resemblance of it — the same Cyprus key art, drawn by
+  the application from real elevation and coastline, and the same measurements
+  down to where the mark sits against the type beside it. Whether it appears at
+  launch moved to Settings, where the other choices are.
+- **The maker's mark opens tsevis.com.** It had named the address in a tooltip
+  and done nothing when clicked.
 - **All sixteen styles on show** rather than six with the rest in a dropdown,
   and styles of your own can be saved and deleted.
 - Gone: the source-library presets and the map-model dropdown, both replaced by
