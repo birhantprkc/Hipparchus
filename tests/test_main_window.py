@@ -120,6 +120,16 @@ class WindowTests(unittest.TestCase):
         self.window._toggle_theme()
         self.root.update()
 
+    def test_the_window_adopts_its_appearance_before_it_builds_anything(self) -> None:
+        """`theme.current()` is what every hand-drawn widget reads for its own
+        colours, and it answers from module state. Only the appearance toggle
+        used to set it, so a window *started* in dark mode wore dark ttk styling
+        over light hand-drawn widgets — the Locator sat in the corner as a white
+        box until somebody toggled the theme twice."""
+        from hipparchus.ui import theme
+
+        self.assertEqual(theme.current_mode(), self.window._theme_mode)
+
     # -- what a worker thread may touch ---------------------------------------
 
     def test_the_debug_flag_can_be_read_from_another_thread(self) -> None:

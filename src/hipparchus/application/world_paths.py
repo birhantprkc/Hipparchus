@@ -64,18 +64,22 @@ class WorldPaths:
 
     coastline: tuple[Segment, ...] = ()
     borders: tuple[Segment, ...] = ()
+    #: Inland, a coastline and a national border draw nothing; the lakes are
+    #: what a locator over the middle of a continent has to show.
+    lakes: tuple[Segment, ...] = ()
     #: Which dataset this came from, so the widget can tell whether what it is
     #: holding is the detail the current zoom asked for.
     detail: str = ""
 
     @property
     def is_empty(self) -> bool:
-        return not self.coastline and not self.borders
+        return not self.coastline and not self.borders and not self.lakes
 
     @property
     def vertex_count(self) -> int:
         return sum(
-            len(segment.points) for segment in (*self.coastline, *self.borders)
+            len(segment.points)
+            for segment in (*self.coastline, *self.borders, *self.lakes)
         )
 
 
@@ -98,6 +102,7 @@ def prepare(outline: Outline, detail: str) -> WorldPaths:
     return WorldPaths(
         coastline=tuple(_segments(outline.coastline)),
         borders=tuple(_segments(outline.borders)),
+        lakes=tuple(_segments(outline.lakes)),
         detail=detail,
     )
 

@@ -60,6 +60,14 @@ PLACES: tuple[Place, ...] = (
     Place("Addis Ababa", 38.65, 8.90, 38.88, 9.10),
     Place("Shanghai Bund", 121.35, 31.15, 121.60, 31.33),
     Place("Sydney Harbour", 151.14, -33.90, 151.30, -33.80),
+    # The Ionian islands, from the macOS application's own style pack. Appended
+    # rather than slotted in among the cities: the shortcuts are derived from
+    # this order, so inserting anywhere above would move nine of them.
+    Place("Lefkada", 20.53, 38.56, 20.80, 38.86),
+    Place("Kefalonia", 20.35, 38.05, 20.80, 38.50),
+    Place("Ithaca", 20.60, 38.32, 20.80, 38.52),
+    Place("Corfu", 19.62, 39.35, 20.12, 39.82),
+    Place("Zakynthos", 20.60, 37.68, 20.98, 37.95),
 )
 
 

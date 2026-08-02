@@ -106,3 +106,34 @@ class GeometryTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class IonianTests(unittest.TestCase):
+    """The five the macOS style pack ships, which this one did not have.
+
+    Appended rather than inserted: ⌘1…⌘9 are derived from the order, so putting
+    them anywhere but the end would silently move nine shortcuts.
+    """
+
+    IONIAN = ("Lefkada", "Kefalonia", "Ithaca", "Corfu", "Zakynthos")
+
+    def test_they_are_all_here(self) -> None:
+        for name in self.IONIAN:
+            with self.subTest(place=name):
+                self.assertIsNotNone(places.by_name(name))
+
+    def test_they_did_not_take_anybody_s_shortcut(self) -> None:
+        with_keys = {place.name: key for key, place in places.with_shortcuts()}
+        self.assertEqual(with_keys.get("London Center"), "1")
+        for name in self.IONIAN:
+            with self.subTest(place=name):
+                self.assertNotIn(name, with_keys)
+
+    def test_each_is_an_island_sized_frame(self) -> None:
+        for name in self.IONIAN:
+            place = places.by_name(name)
+            assert place is not None
+            with self.subTest(place=name):
+                self.assertGreater(place.lon_span, 0.0)
+                self.assertGreater(place.lat_span, 0.0)
+                self.assertLess(place.lon_span, 1.0)

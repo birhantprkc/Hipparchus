@@ -233,8 +233,8 @@ docs/
     ├── gallery-shanghai-night-lights.png
     ├── gallery-cartagena-coastal-survey.png
     ├── gallery-auckland-hypsometric.png
-    ├── hipparchus-santorini-light.png
-    ├── hipparchus-sydney-dark.png
+    ├── hipparchus-south-bend-light.png
+    ├── hipparchus-valletta-dark.png
     └── gallery-*.png          Ten preset renders used by the README gallery
 
 documents/

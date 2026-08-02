@@ -121,6 +121,14 @@ class MainWindow:
     def __post_init__(self) -> None:
         self._root = tk.Tk()
         self._theme_mode = self.config.theme_mode
+        # Before anything is built. `theme.current()` is what every raw Tk
+        # widget reads for its own colours — the Locator's canvas, the map's
+        # controls, the status bar — and it answers from module state that only
+        # the appearance toggle used to set. So a window *started* in dark mode
+        # got dark ttk styling over light hand-drawn widgets, and the Locator
+        # sat in the corner as a white box until somebody toggled the theme
+        # twice.
+        theme.set_mode(self._theme_mode)
         self._current_scene: RenderScene | None = None
         #: The area the map on screen was drawn for. What tells a pan apart
         #: from a choice when Render map is pressed — see `area_to_fetch`.

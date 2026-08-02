@@ -114,3 +114,38 @@ class GeometryTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class LakeTests(unittest.TestCase):
+    """Inland, a coastline and a national border draw nothing.
+
+    Taking the South Bend screenshot is what showed this: the Locator over
+    Indiana was a blank white rectangle at every zoom, because the only things
+    it read were `coastline` and `admin_0_countries`. The lakes are in the same
+    Natural Earth distribution and were already on disk.
+    """
+
+    def setUp(self) -> None:
+        if not (world_outline.repository_root() / world_outline.COASTLINE).is_file():
+            self.skipTest("the Natural Earth dataset is not in this checkout")
+
+    def test_the_lakes_are_read(self) -> None:
+        self.assertTrue(world_outline.load().lakes)
+
+    def test_the_great_lakes_are_among_them(self) -> None:
+        """The test is inland North America, which is where the gap was."""
+        lakes = world_outline.load().lakes
+        near_michigan = [
+            line
+            for line in lakes
+            if any(-88.5 < lon < -84.5 and 41.0 < lat < 46.5 for lon, lat in line)
+        ]
+        self.assertTrue(near_michigan, "nothing is drawn where Lake Michigan is")
+
+    def test_an_empty_outline_has_no_lakes(self) -> None:
+        self.assertEqual(world_outline.Outline().lakes, ())
+
+    def test_they_count_towards_what_has_to_be_drawn(self) -> None:
+        outline = world_outline.Outline(lakes=(((0.0, 0.0), (1.0, 1.0)),))
+        self.assertFalse(outline.is_empty)
+        self.assertEqual(outline.vertex_count, 2)

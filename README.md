@@ -119,22 +119,25 @@ to check you picked the right one, and still have it picked.
 
 <table>
   <tr>
-    <td width="50%"><img src="docs/assets/hipparchus-santorini-light.png" width="100%" alt="The Hipparchus interface in light appearance, showing Santorini drawn from real elevation"></td>
-    <td width="50%"><img src="docs/assets/hipparchus-sydney-dark.png" width="100%" alt="The Hipparchus interface in dark appearance, showing Sydney Harbour with streets over real elevation"></td>
+    <td width="50%"><img src="docs/assets/hipparchus-south-bend-light.png" width="100%" alt="The Hipparchus interface in light appearance, showing South Bend, Indiana with the floating Locator open over the Great Lakes"></td>
+    <td width="50%"><img src="docs/assets/hipparchus-valletta-dark.png" width="100%" alt="The Hipparchus interface in dark appearance, showing Valletta and the Grand Harbour with the sea inferred from the coastline"></td>
   </tr>
   <tr>
-    <td align="center"><em>Santorini from real elevation — <code>Hypsometric Relief</code></em></td>
-    <td align="center"><em>Sydney Harbour, streets over real elevation — dark appearance</em></td>
+    <td align="center"><em>South Bend, Indiana — <code>Clean Atlas</code>, with the floating Locator</em></td>
+    <td align="center"><em>Valletta — <code>Coastal Survey</code> in the <code>Tsevis Nocturne</code> palette, dark appearance</em></td>
   </tr>
 </table>
 
-Both are screenshots of the running app, not mockups. The layer list on the
-right is the map that was actually fetched, layer by layer with its counts, so
-a layer holding nothing says so instead of sitting there ticked and blank.
+Both are screenshots of the running app, not mockups, and both were made by
+`scripts/screenshot_session.py` so either can be taken again. The layer list on
+the right is the map that was actually fetched, layer by layer with its counts,
+so a layer holding nothing says so instead of sitting there ticked and blank.
 
-*These two were taken before the 0.4.1 interface revision and do not show the
-menu bar, the Locator or the palette row. `scripts/screenshot_session.py`
-prepares the application for their replacements.*
+South Bend shows the floating Locator, zoomed out to the Great Lakes: in that
+window panning and zooming go looking and a click chooses, so you can pick a
+place, zoom out to check, and still have it picked. Valletta shows the same
+interface in dark appearance, with the Grand Harbour and Marsamxett filled from
+coastline lines that OpenStreetMap does not close into polygons.
 
 The maps at the top of this page and in the gallery are the app's own output,
 rendered through the same pipeline that writes the SVG.

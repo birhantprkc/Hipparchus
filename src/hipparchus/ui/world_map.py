@@ -85,6 +85,8 @@ class WorldMap:
         if outline is None:
             _load_coarse()
         self._detail_poll: str | None = None
+        #: An area asked for before the canvas had a size, applied once it has.
+        self._pending_show: tuple[float, float, float, float] | None = None
 
         palette = theme.current()
         self.widget = tk.Canvas(
@@ -132,9 +134,19 @@ class WorldMap:
         The host sets the area from a saved place, a search result or a typed
         coordinate; echoing it back as a change would be the view arguing with
         the thing that set it.
+
+        A canvas that has not been laid out yet reports a width of one pixel,
+        and fitting an area into one pixel yields a scale the clamp then pulls
+        back to the whole world. That is what opening the floating Locator did:
+        it was told to show a city and opened on a continent, because the window
+        asks the moment it is built. Held until there is a canvas to fit into.
         """
-        width = max(1, self.widget.winfo_width())
-        height = max(1, self.widget.winfo_height())
+        width = self.widget.winfo_width()
+        height = self.widget.winfo_height()
+        if width <= 1 or height <= 1:
+            self._pending_show = bbox
+            return
+        self._pending_show = None
         self._settling = True
         try:
             self._view = WorldView.fitted(bbox, width, height)
@@ -170,6 +182,10 @@ class WorldMap:
     # -- pointing -------------------------------------------------------------
 
     def _on_resize(self, event: tk.Event) -> None:
+        if self._pending_show is not None and event.width > 1 and event.height > 1:
+            # The area arrived before there was anything to fit it into.
+            self.show(self._pending_show)
+            return
         self._view = self._view.resized(event.width, event.height)
         self._draw()
 
@@ -301,8 +317,11 @@ class WorldMap:
         window = window_of(self._view)
 
         # Borders under the coast, so a coastline is never broken by a border
-        # drawn over it.
+        # drawn over it. Lakes between the two: they are shorelines rather than
+        # boundaries, and inland they are the only thing there is to see.
         for segment in visible(paths.borders, window):
+            self._draw_segment(segment, palette.border, 1)
+        for segment in visible(paths.lakes, window):
             self._draw_segment(segment, palette.border, 1)
         for segment in visible(paths.coastline, window):
             self._draw_segment(segment, palette.muted, 1)

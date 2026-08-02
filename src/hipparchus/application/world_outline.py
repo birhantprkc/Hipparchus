@@ -38,12 +38,18 @@ DETAIL_10M = "10m"
 #: Where the shapes live, relative to the repository root.
 COASTLINE = Path("datasets/natural_earth/ne_110m_coastline/ne_110m_coastline.shp")
 COUNTRIES = Path("datasets/natural_earth/ne_110m_admin_0_countries/ne_110m_admin_0_countries.shp")
+LAKES = Path("datasets/natural_earth/ne_110m_lakes/ne_110m_lakes.shp")
 
-DATASETS: dict[str, tuple[Path, Path]] = {
-    DETAIL_110M: (COASTLINE, COUNTRIES),
+#: Coastline, borders and lakes, per scale. The lakes matter more than their
+#: size suggests: a coastline and a national border draw nothing at all over
+#: the middle of a continent, and the Locator over Indiana was a blank white
+#: rectangle at every zoom until they were added.
+DATASETS: dict[str, tuple[Path, Path, Path]] = {
+    DETAIL_110M: (COASTLINE, COUNTRIES, LAKES),
     DETAIL_10M: (
         Path("datasets/natural_earth_10m/ne_10m_coastline/ne_10m_coastline.shp"),
         Path("datasets/natural_earth_10m/ne_10m_admin_0_countries/ne_10m_admin_0_countries.shp"),
+        Path("datasets/natural_earth_10m/ne_10m_lakes/ne_10m_lakes.shp"),
     ),
 }
 
@@ -79,14 +85,15 @@ class Outline:
 
     coastline: tuple[Polyline, ...] = ()
     borders: tuple[Polyline, ...] = ()
+    lakes: tuple[Polyline, ...] = ()
 
     @property
     def is_empty(self) -> bool:
-        return not self.coastline and not self.borders
+        return not self.coastline and not self.borders and not self.lakes
 
     @property
     def vertex_count(self) -> int:
-        return sum(len(line) for line in (*self.coastline, *self.borders))
+        return sum(len(line) for line in (*self.coastline, *self.borders, *self.lakes))
 
 
 def repository_root() -> Path:
@@ -100,10 +107,11 @@ def load(root: Path | None = None, detail: str = DETAIL_110M) -> Outline:
     than no locator, but a window that will not open is worse than both.
     """
     base = root if root is not None else repository_root()
-    coastline, countries = DATASETS.get(detail, DATASETS[DETAIL_110M])
+    coastline, countries, lakes = DATASETS.get(detail, DATASETS[DETAIL_110M])
     return Outline(
         coastline=_read(base / coastline),
         borders=_read(base / countries),
+        lakes=_read(base / lakes),
     )
 
 
@@ -114,7 +122,7 @@ def is_available(detail: str, root: Path | None = None) -> bool:
     stays on the coarse set instead of reading nothing and drawing nothing.
     """
     base = root if root is not None else repository_root()
-    coastline, _countries = DATASETS.get(detail, DATASETS[DETAIL_110M])
+    coastline, _countries, _lakes = DATASETS.get(detail, DATASETS[DETAIL_110M])
     return (base / coastline).is_file()
 
 
