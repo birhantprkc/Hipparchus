@@ -51,6 +51,10 @@ def describe(
         return edit
     if before.preset_name != after.preset_name:
         return Description("Change Preset")
+    # Below the preset on purpose: adopting a style brings its colours with it,
+    # and that one gesture is "Change Preset". Colour on its own is its own act.
+    if before.palette_name != after.palette_name:
+        return Description("Change Palette")
     if before.quality_key != after.quality_key:
         return Description("Change Quality")
     edit = _layer_edit(before.hidden_layers, after.hidden_layers)

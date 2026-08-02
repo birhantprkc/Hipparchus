@@ -1,0 +1,214 @@
+"""A whole map's worth of layers, derived from a palette's eight colours.
+
+Everything here is *derived* rather than chosen, which is the entire argument
+for palettes: a colour scheme picked layer by layer drifts, and one obtained by
+mixing from a small set cannot. The mixes are the macOS application's, which
+took them from the style-pack build script, and they are kept identical for the
+same reason — if two implementations of one derivation disagreed, there would
+be no way to tell which was wrong.
+"""
+
+from __future__ import annotations
+
+from hipparchus.application.palettes import BLUE, TURQUOISE, Palette, mix
+from hipparchus.application.presets import ArtisticPreset, StyleProfile
+from hipparchus.rendering.models import LayerStyle, RGBAColor
+
+
+#: The road classes, widest first. Every sheet draws all of them: one that
+#: styles ``roads`` but not ``roads_motorway`` loses its motorways silently,
+#: which reads as missing data rather than as a style.
+ROAD_WIDTHS: tuple[tuple[str, float], ...] = (
+    ("roads_motorway", 3.2),
+    ("roads_trunk", 2.8),
+    ("roads_primary", 2.3),
+    ("roads_secondary", 1.8),
+    ("roads_tertiary", 1.3),
+    ("roads_residential", 0.9),
+    ("roads_service", 0.6),
+    ("roads_other", 0.5),
+    ("roads", 1.0),
+)
+
+
+def _style(
+    *,
+    stroke: float = 0.0,
+    stroke_color: RGBAColor | None = None,
+    fill: RGBAColor | None = None,
+    fill_alpha: int = 255,
+    opacity: float = 1.0,
+    cap: str = "round",
+    casing: float = 0.0,
+    casing_color: RGBAColor | None = None,
+    halo: RGBAColor | None = None,
+) -> LayerStyle:
+    """One layer, with only what it needs stated."""
+    style = LayerStyle(
+        stroke_width=stroke,
+        # An unstated stroke falls back to the shared ink rather than to the
+        # sheet's own, because that is what the build script does and what the
+        # shipped packs carry. Matching it is not endorsing it; it is refusing
+        # to have two answers.
+        stroke_color=stroke_color if stroke_color is not None else _DEFAULT_INK,
+        opacity=opacity,
+        line_cap=cap,
+        casing_width=casing,
+        fill_enabled=fill is not None,
+    )
+    if fill is not None:
+        style.fill_color = RGBAColor(fill.r, fill.g, fill.b, fill_alpha)
+    if casing_color is not None:
+        style.casing_color = casing_color
+    if halo is not None:
+        style.label_halo_color = RGBAColor(halo.r, halo.g, halo.b, 225)
+        style.label_halo_width = 2.0
+    return style
+
+
+#: The build script's module-level ink, which an unstated stroke falls back to.
+_DEFAULT_INK = RGBAColor(17, 34, 51)
+
+
+def _luma(colour: RGBAColor) -> float:
+    """Rec. 601, the cheap standard answer to "is this light or dark"."""
+    return (299 * colour.r + 587 * colour.g + 114 * colour.b) / 255_000.0
+
+
+def _hillshade(palette: Palette) -> LayerStyle:
+    """Relief shading in this palette's own ink.
+
+    Shading is drawn *over* the ground rather than instead of it, so the
+    untouched end of the ramp has to be nothing at all — carried as zero alpha,
+    not as the paper colour, which would paint over whatever the map had
+    already put there and flatten the sheet.
+
+    Which end is untouched depends on the paper. Pale ground takes shadow: dark
+    where it turns away, nothing where it faces the sun. Dark ground takes
+    light, because its shadows are already dark. Getting that backwards does
+    not fail loudly — it produces a sheet where every colour is defensible and
+    the relief reads inside out.
+    """
+    ink = palette.ink
+    style = LayerStyle(
+        # Bands share their edges, so a stroke would draw every seam.
+        stroke_width=0.0,
+        stroke_color=RGBAColor(ink.r, ink.g, ink.b, 0),
+        fill_enabled=True,
+        # Under the linework, never over it: relief is what a map is drawn on.
+        opacity=0.55,
+        # Moot at zero width, and stated anyway so this sheet and the shipped
+        # style packs are the same object rather than nearly the same one.
+        line_cap="round",
+    )
+    if _luma(palette.ground) < 0.5:
+        style.fill_color = RGBAColor(ink.r, ink.g, ink.b, 0)
+        style.fill_color_high = RGBAColor(ink.r, ink.g, ink.b, 105)
+    else:
+        style.fill_color = RGBAColor(ink.r, ink.g, ink.b, 140)
+        style.fill_color_high = RGBAColor(ink.r, ink.g, ink.b, 0)
+    return style
+
+
+def style_profile(palette: Palette) -> StyleProfile:
+    """The style profile this palette makes on its own."""
+    ground = palette.ground
+    ink = palette.ink
+    water = palette.water
+    land = palette.land
+    contour = palette.contour
+    vegetation = palette.vegetation
+
+    styles: dict[str, LayerStyle] = {}
+
+    for layer, width in ROAD_WIDTHS:
+        scaled = width * palette.roadScale
+        styles[layer] = _style(
+            stroke=scaled,
+            stroke_color=palette.road,
+            casing=scaled + 1.1,
+            casing_color=palette.roadCasing,
+            halo=ground,
+        )
+
+    styles["water"] = _style(
+        stroke=0.6,
+        stroke_color=mix(water, ink, 0.25),
+        fill=water if palette.fillsSea else None,
+    )
+    styles["coastline"] = _style(stroke=1.6, stroke_color=mix(water, ink, 0.45))
+    styles["bathymetry"] = _style(
+        stroke=0.5 * palette.contourWeight,
+        stroke_color=mix(water, ground, 0.4),
+        opacity=0.9,
+    )
+    styles["buildings"] = _style(
+        stroke=0.35, stroke_color=mix(land, ink, 0.4), fill=land, opacity=0.95
+    )
+    styles["parks"] = _style(fill=mix(ground, vegetation, 0.30))
+    styles["forests"] = _style(fill=mix(ground, vegetation, 0.42))
+    styles["fields"] = _style(fill=mix(ground, vegetation, 0.16))
+    styles["natural"] = _style(fill=mix(ground, vegetation, 0.22))
+    styles["landuse"] = _style(fill=mix(ground, land, 0.08))
+    styles["railways"] = _style(stroke=0.7, stroke_color=mix(land, ink, 0.55), cap="butt")
+    styles["ferry_routes"] = _style(
+        stroke=0.6, stroke_color=mix(water, ink, 0.2), opacity=0.7, cap="butt"
+    )
+    styles["barriers"] = _style(
+        stroke=0.4, stroke_color=mix(ground, ink, 0.35), opacity=0.7
+    )
+    styles["power"] = _style(stroke=0.4, stroke_color=mix(ground, ink, 0.30), opacity=0.6)
+    styles["elevation_bands"] = _style(fill=mix(ground, contour, 0.18), opacity=0.6)
+    styles["terrain_hillshade"] = _hillshade(palette)
+    styles["terrain_contours"] = _style(
+        stroke=0.3 * palette.contourWeight, stroke_color=contour, opacity=0.7
+    )
+    styles["terrain_index_contours"] = _style(
+        stroke=0.7 * palette.contourWeight,
+        stroke_color=mix(contour, ink, 0.3),
+        opacity=0.9,
+    )
+    styles["summits"] = _style(stroke=0.5, stroke_color=ink, opacity=0.85)
+    styles["admin_boundaries"] = _style(
+        stroke=0.8, stroke_color=mix(land, ink, 0.15), opacity=0.55
+    )
+    styles["night_lights"] = _style(fill=TURQUOISE, fill_alpha=90, opacity=0.5)
+    styles["places"] = _style(stroke_color=ink, halo=ground)
+    styles["street_names"] = _style(stroke_color=mix(ink, ground, 0.25), halo=ground)
+    styles["amenities"] = _style(stroke_color=mix(land, ink, 0.2), halo=ground)
+    styles["shops"] = _style(stroke_color=mix(land, ink, 0.2), halo=ground)
+    styles["earthquakes_shallow"] = _style(stroke=1.0, stroke_color=TURQUOISE)
+    styles["earthquakes_intermediate"] = _style(
+        stroke=1.0, stroke_color=mix(TURQUOISE, BLUE, 0.5)
+    )
+    styles["earthquakes_deep"] = _style(stroke=1.0, stroke_color=BLUE)
+    styles["satellite_tracks"] = _style(
+        stroke=0.6, stroke_color=mix(ink, ground, 0.4), opacity=0.8
+    )
+    styles["satellite_footprints"] = _style(
+        stroke=0.4,
+        stroke_color=mix(ink, ground, 0.5),
+        fill=ink,
+        fill_alpha=30,
+        opacity=0.5,
+    )
+
+    return StyleProfile(layer_styles=styles, background=ground)
+
+
+def recoloured(preset: ArtisticPreset, palette: Palette | None) -> ArtisticPreset:
+    """This preset's geometry, in another palette's colours.
+
+    The preset keeps everything that is not colour — how much to simplify, how
+    much to smooth, how many features to draw — because that is what a preset
+    is once colour has been lifted out of it. No palette returns the preset
+    untouched, so "the preset's own colours" needs no special case anywhere
+    else.
+    """
+    if palette is None:
+        return preset
+    return ArtisticPreset(
+        name=preset.name,
+        geometry_profile=preset.geometry_profile,
+        style_profile=style_profile(palette),
+    )

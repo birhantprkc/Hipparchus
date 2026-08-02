@@ -21,6 +21,8 @@ from hipparchus.application.coordinate_import import parse as parse_coordinates
 from hipparchus.application.locator import describe_area
 from hipparchus.application.controller import ApplicationController
 from hipparchus.application.layer_inventory import fetch_layers
+from hipparchus.application.palette_sheet import recoloured
+from hipparchus.application.palettes import PRESET_OWN, named as palette_named, names as palette_names
 from hipparchus.core.fetch_progress import CancellationToken, FetchReporter
 from hipparchus.application.source_stack import SourceStack
 from hipparchus.ui import actions, icons, menubar, shortcuts, theme, tooltip
@@ -186,6 +188,9 @@ class MainWindow:
         )
         self._composition_var = tk.StringVar(value="OpenStreetMap")
         self._location_preset_var = tk.StringVar(value="London Center")
+        # Colour, separate from the style. A preset is a whole sheet, so "the
+        # same map in other colours" was not something that could be asked for.
+        self._palette_var = tk.StringVar(value=PRESET_OWN)
         device_scale = self._auto_device_scale()
         if hasattr(self.renderer, "device_scale"):
             setattr(self.renderer, "device_scale", device_scale)
@@ -511,13 +516,14 @@ class MainWindow:
     def _watch_for_changes(self) -> None:
         """Notice the choices that change through a variable rather than a call.
 
-        The preset, the quality and the four coordinates are all written from
-        several places — a saved place, a search result, a drawn area — and a
-        trace catches every one of them without each having to remember to say
-        so.
+        The preset, the palette, the quality and the four coordinates are all
+        written from several places — a saved place, a search result, a drawn
+        area — and a trace catches every one of them without each having to
+        remember to say so.
         """
         for var in (
             self._preset_var,
+            self._palette_var,
             self._quality_var,
             *self._aoi_vars.values(),
         ):
@@ -553,6 +559,7 @@ class MainWindow:
             source_settings=settings,
             source_choices=choices,
             preset_name=self._preset_var.get(),
+            palette_name=self._palette_var.get(),
             quality_key=quality_mode_key(self._quality_var.get()),
             hidden_layers=tuple(
                 layer_id
@@ -639,6 +646,7 @@ class MainWindow:
                 if source_id:
                     self.source_stack.set_setting(source_id, key, value)
             self._preset_var.set(session.preset_name)
+            self._palette_var.set(session.palette_name)
             self._quality_var.set(quality_label_for(session.quality_key))
             for layer_id, var in self._layer_visibility_vars.items():
                 var.set(layer_id not in session.hidden_layers)
@@ -892,6 +900,23 @@ class MainWindow:
         ttk.Label(row, text="All styles", font=theme.font("caption")).pack(side="left")
         self._preset_menu = ttk.OptionMenu(row, self._preset_var, self._preset_var.get(), *self._preset_options)
         self._preset_menu.pack(side="left", fill="x", expand=True, padx=(6, 0))
+
+        row = ttk.Frame(parent)
+        row.pack(fill="x", pady=(4, 0))
+        ttk.Label(row, text="Palette", font=theme.font("caption")).pack(side="left")
+        self._palette_menu = ttk.OptionMenu(
+            row, self._palette_var, self._palette_var.get(), *palette_names()
+        )
+        self._palette_menu.pack(side="left", fill="x", expand=True, padx=(6, 0))
+        tooltip.attach(
+            row,
+            "Colour, separate from the style. A preset is a whole sheet — "
+            "geometry, weights and colour together — so the same map in other "
+            "colours was not a thing you could ask for. A palette replaces the "
+            "colour and keeps the geometry. Takes effect on the next Render "
+            "map, as a preset does; the fetch behind it is cached, so it costs "
+            "no network.",
+        )
 
         # Quality belongs with Style, not in the toolbar: a preset says what the
         # map should look like, quality says how much work to spend getting
@@ -1268,11 +1293,16 @@ class MainWindow:
         )
 
     def _resolve_selected_preset(self) -> ArtisticPreset:
+        """The chosen style, in the chosen colours.
+
+        Recoloured here rather than at the render call, so that what is drawn,
+        what is exported and what "Save this style" keeps are one thing. A
+        palette of "the preset's own" resolves to nothing and leaves it alone.
+        """
         selected = self._preset_var.get().strip()
         custom = self._custom_presets.get(selected)
-        if custom is not None:
-            return custom
-        return default_preset(selected)
+        preset = custom if custom is not None else default_preset(selected)
+        return recoloured(preset, palette_named(self._palette_var.get()))
 
     def _cartographic_geometry_profile(self, profile: GeometryPipelineProfile) -> GeometryPipelineProfile:
         return replace(

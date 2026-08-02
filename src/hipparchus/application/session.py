@@ -22,6 +22,8 @@ import json
 from pathlib import Path
 from typing import Any, Mapping
 
+from hipparchus.application.palettes import PRESET_OWN
+
 DEFAULT_PRESET = "Hypsometric Relief"
 DEFAULT_QUALITY = "preview_fast"
 
@@ -78,6 +80,9 @@ class Session:
     #: The same for settings that are a choice from a list.
     source_choices: Mapping[str, str] = field(default_factory=dict)
     preset_name: str = DEFAULT_PRESET
+    #: Colour, separate from the style. ``PRESET_OWN`` means the preset keeps
+    #: its own, which is why it is a name here rather than a palette or None.
+    palette_name: str = PRESET_OWN
     quality_key: str = DEFAULT_QUALITY
     hidden_layers: tuple[str, ...] = ()
 
@@ -107,6 +112,7 @@ class Session:
             "source_settings": dict(self.source_settings),
             "source_choices": dict(self.source_choices),
             "preset_name": self.preset_name,
+            "palette_name": self.palette_name,
             "quality_key": self.quality_key,
             "hidden_layers": list(self.hidden_layers),
         }
@@ -145,6 +151,7 @@ class Session:
             source_settings=_float_map(data.get("source_settings")),
             source_choices=_str_map(data.get("source_choices")),
             preset_name=str(data.get("preset_name", defaults.preset_name)),
+            palette_name=str(data.get("palette_name", defaults.palette_name)),
             quality_key=str(data.get("quality_key", defaults.quality_key)),
             hidden_layers=tuple(str(item) for item in data.get("hidden_layers", ())),
         )

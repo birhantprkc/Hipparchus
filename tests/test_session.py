@@ -15,6 +15,7 @@ from pathlib import Path
 import tempfile
 import unittest
 
+from hipparchus.application.palettes import PRESET_OWN
 from hipparchus.application.session import Area, Session
 
 
@@ -148,3 +149,21 @@ class ViewStateTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PaletteTests(unittest.TestCase):
+    """Colour is a choice like the style and the quality, so it survives a
+    relaunch like them."""
+
+    def test_a_new_session_leaves_the_preset_s_own_colours_alone(self) -> None:
+        self.assertEqual(Session().palette_name, PRESET_OWN)
+
+    def test_the_chosen_palette_survives_a_round_trip(self) -> None:
+        session = Session().with_changes(palette_name="Admiralty")
+        self.assertEqual(Session.from_dict(session.to_dict()).palette_name, "Admiralty")
+
+    def test_a_file_written_before_palettes_existed_still_opens(self) -> None:
+        """It costs that field and nothing else."""
+        older = Session().to_dict()
+        del older["palette_name"]
+        self.assertEqual(Session.from_dict(older).palette_name, PRESET_OWN)

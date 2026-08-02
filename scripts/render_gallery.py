@@ -28,6 +28,8 @@ import sys
 import time
 
 from hipparchus.application.layer_inventory import BASE_FETCH_LAYERS
+from hipparchus.application.palette_sheet import recoloured
+from hipparchus.application.palettes import named as palette_named, names as palette_names
 from hipparchus.application.presets import ArtisticPreset, GeometryPipelineProfile, default_preset
 from hipparchus.application.scene_builder import RenderSceneBuilder
 from hipparchus.application.source_stack import FetchPlan, SourceStack
@@ -55,6 +57,8 @@ class Plate:
     max_lon: float
     max_lat: float
     preset: str
+    #: Colour, separate from the style. Empty means the preset's own.
+    palette: str = ""
     sources: tuple[str, ...] = ("overpass",)
     quality: str = "export_clean"
     #: Per-source overrides, keyed by source id then setting key.
@@ -162,7 +166,9 @@ def _reporter() -> FetchReporter:
 def build_scene(plate_spec: Plate) -> RenderScene:
     """Fetch the area and build the scene, exactly as a Render map would."""
     manager, plan = _prepare(plate_spec)
-    preset: ArtisticPreset = default_preset(plate_spec.preset)
+    preset: ArtisticPreset = recoloured(
+        default_preset(plate_spec.preset), palette_named(plate_spec.palette)
+    )
     query = BBoxQuery(
         min_lon=plate_spec.min_lon,
         min_lat=plate_spec.min_lat,
@@ -208,7 +214,8 @@ def plate_size(scene: RenderScene, longest_edge: int) -> tuple[int, int]:
 
 def render(plate_spec: Plate, destination: Path, longest_edge: int) -> Path:
     started = time.monotonic()
-    print(f"{plate_spec.slug}: {plate_spec.title}, {plate_spec.preset}", flush=True)
+    colours = plate_spec.palette or "the preset's own colours"
+    print(f"{plate_spec.slug}: {plate_spec.title}, {plate_spec.preset}, {colours}", flush=True)
     scene = build_scene(plate_spec)
     drawn = sum(len(layer.geometries) for layer in scene.layers)
     if drawn == 0:
@@ -229,6 +236,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--list", action="store_true", help="name the known plates and stop")
     parser.add_argument("--out-dir", type=Path, default=DEFAULT_OUTPUT_DIR)
     parser.add_argument("--size", type=int, default=DEFAULT_LONGEST_EDGE, help="longest edge in pixels")
+    parser.add_argument(
+        "--palette", default=None,
+        help=f"override the plate's colours. One of: {', '.join(palette_names())}",
+    )
     args = parser.parse_args(argv)
 
     if args.list:
@@ -242,8 +253,14 @@ def main(argv: list[str] | None = None) -> int:
         print(f"unknown plate {exc}; try --list", file=sys.stderr)
         return 2
 
+    if args.palette is not None and args.palette not in palette_names():
+        print(f"unknown palette {args.palette!r}; one of: {', '.join(palette_names())}", file=sys.stderr)
+        return 2
+
     failures = 0
     for candidate in wanted:
+        if args.palette is not None:
+            candidate = replace(candidate, palette=args.palette)
         try:
             render(candidate, args.out_dir / candidate.filename, args.size)
         except Exception as exc:  # noqa: BLE001 — a plate failing must not stop the rest

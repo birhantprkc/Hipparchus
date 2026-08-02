@@ -148,3 +148,30 @@ class SpecificityTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PaletteEditTests(unittest.TestCase):
+    """Colour is its own choice, so undo says so rather than "Change Settings"."""
+
+    def test_changing_the_palette_is_named(self) -> None:
+        before = Session()
+        after = before.with_changes(palette_name="Sepia")
+        described = describe(before, after)
+        assert described is not None
+        self.assertEqual(described.action, "Change Palette")
+
+    def test_it_is_told_apart_from_changing_the_style(self) -> None:
+        before = Session()
+        style = describe(before, before.with_changes(preset_name="Night"))
+        colour = describe(before, before.with_changes(palette_name="Sepia"))
+        assert style is not None and colour is not None
+        self.assertNotEqual(style.action, colour.action)
+
+    def test_adopting_a_style_and_its_colours_at_once_is_one_act(self) -> None:
+        """One gesture changes one thing; the preset is the more specific of
+        the two and names the entry."""
+        before = Session()
+        after = before.with_changes(preset_name="Night", palette_name="Slate")
+        described = describe(before, after)
+        assert described is not None
+        self.assertEqual(described.action, "Change Preset")
