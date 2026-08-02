@@ -1274,14 +1274,16 @@ the map was of. It does now, and `area_to_fetch` decides, in
 Locator leaves the area alone; a click chooses; draw mode turns itself off after
 one rectangle. All three behave as designed.
 
-**Also found, and not fixed:** the visible-area round trip is not a fixed point.
+**Also found, and since fixed:** the visible-area round trip was not a fixed point.
 `_apply_fit_transform` fits by the tighter axis and centres, so on the loose axis
 the real margin exceeds the uniform `fit_margin` — 70.8 px against an inset of 54
 on a 1180×900 canvas. `visible_bounds` insets the same number on both axes and
 therefore reads ground that was never drawn. Each press of Render map grows the
 area **3.2 %**; ten presses make it 71 % wider. The docstring in `viewport.py`
 says this was designed out. The inset removed most of it, not the part caused by
-the asymmetry.
+the asymmetry. It insets by the renderer's own `offset_x` and `offset_y` now —
+the only numbers that cannot disagree with what was drawn — and ten presses move
+the area not at all.
 
 ### Then: the splash, the palettes, the mark, the Locator's quality
 
@@ -1351,8 +1353,11 @@ sampling" — is a report of a decision already taken about a request already se
   `showerror` blocks the thread it is called on until somebody presses OK. The
   probe now replaces the message boxes with prints, which it should have done
   from the start.
-- **`_debug` reading a Tk variable from the render thread is still there.** Found,
-  reported, not fixed.
+- **`_debug` read a Tk variable from the render thread.** Found by walking back
+  from the dialogue above, reported, and since fixed: the menu still owns the
+  setting, a trace copies its answer into a plain bool on the UI thread, and
+  that is what the workers read. The gated suite has a test that calls `_debug`
+  from a thread and fails if it raises.
 - **My first "every layer has a colour" test checked the sheet against itself**
   and proved only that it equalled itself. It checks the layer panel's inventory
   and the fetch's own request now — two lists that module does not own.
@@ -1382,29 +1387,22 @@ Ranked by what it costs to leave.
    exercised — the Locator by driving its real widgets, the splash by measuring
    it, the palettes and the plates by rendering them — but the *layout* has been
    seen by nobody. Screenshots are not available on this machine.
-2. **Render map walks the area outwards 3.2 % a press.** The visible-area round
-   trip is not a fixed point: the fit margin is uniform and the fit is not, so
-   `visible_bounds` reads ground on the loose axis that was never drawn.
-   Understood, measured, and not fixed.
-3. **`_debug` reads a Tk variable from the render worker thread**, which raises
-   from that thread and surfaces as a modal error dialogue. Found by accident;
-   not fixed.
-4. **The elevation bands paint over the inferred sea.** `_ordered_layers` puts
+2. **The elevation bands paint over the inferred sea.** `_ordered_layers` puts
    `elevation_bands` after `water`, and an opaque band fill hides a harbour —
    visible in the Auckland plate.
-5. **Resizable and collapsible columns** (B1.2, B1.3) — still fixed at
+3. **Resizable and collapsible columns** (B1.2, B1.3) — still fixed at
    360 / flex / 300; the `ttk.PanedWindow` swap from D2 never happened.
-6. **Window size** (B1.5) — opens 1600×1080, minimum 1400×980. The Mac is
+4. **Window size** (B1.5) — opens 1600×1080, minimum 1400×980. The Mac is
    1100×800, minimum 960×620.
-7. **Toolbar polish** (B2.4, B2.5, B2.7) — no area readout, no Cancel beside
+5. **Toolbar polish** (B2.4, B2.5, B2.7) — no area readout, no Cancel beside
    Render map, and Export is a bare SVG button with PDF and PNG only in the menu.
-8. **Layers panel** (B6b.3, B6b.5, B6b.6) — `All`/`None` in the header, the
+6. **Layers panel** (B6b.3, B6b.5, B6b.6) — `All`/`None` in the header, the
    labels-versus-features tooltip, and hiding the group heading when there is
    one group.
-9. **SVG export does not reveal the file.** PDF and PNG do. Mine, and
+7. **SVG export does not reveal the file.** PDF and PNG do. Mine, and
    inconsistent.
-10. **No application icon** (B14.7).
-11. **`featured_names()`** survives in `style_previews.py` with no caller but its
+8. **No application icon** (B14.7).
+9. **`featured_names()`** survives in `style_previews.py` with no caller but its
    own default and its own tests. The "featured six" idea died in Phase 6.
 
 *Nothing pushed.*
