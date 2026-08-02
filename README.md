@@ -118,8 +118,13 @@ rendered through the same pipeline that writes the SVG.
 
 ## Gallery: the measured sources
 
-Eight maps of seven places, each from live data through the same pipeline that
+Eleven maps of nine places, each from live data through the same pipeline that
 produces the SVG export. Nothing here is drawn by hand or touched up.
+
+The two most recent were made headlessly, by
+[`scripts/render_gallery.py`](scripts/render_gallery.py), which records the
+bounding box, the sources and the style for each plate so any of them can be
+made again.
 
 <table>
   <tr>
@@ -156,10 +161,18 @@ produces the SVG export. Nothing here is drawn by hand or touched up.
   </tr>
   <tr>
     <td width="50%"><img src="docs/assets/gallery-miami-night-lights.png" width="100%" alt="South Florida at night"></td>
-    <td width="50%"></td>
+    <td width="50%"><img src="docs/assets/gallery-cartagena-coastal-survey.png" width="100%" alt="Cartagena de Indias, the walled city and Bocagrande between the Caribbean and the bay"></td>
   </tr>
   <tr>
     <td align="center"><em>South Florida — Homestead to Palm Beach<br><code>Night Lights Online (GIBS)</code></em></td>
+    <td align="center"><em>Cartagena de Indias — the sea inferred from the coastline alone<br><code>OpenStreetMap</code> + <code>Coastal Survey</code></em></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/assets/gallery-auckland-hypsometric.png" width="100%" alt="Auckland on its isthmus, volcanic cones raised as filled elevation bands"></td>
+    <td width="50%"></td>
+  </tr>
+  <tr>
+    <td align="center"><em>Auckland — the isthmus and its volcanic cones, Maungawhau at 186 m<br><code>OpenStreetMap</code> + <code>Elevation</code> + <code>Hypsometric Relief</code></em></td>
     <td align="center"></td>
   </tr>
 </table>

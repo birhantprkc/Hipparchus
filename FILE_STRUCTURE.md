@@ -206,6 +206,8 @@ scripts/
 ├── precache_presets.py       Warm the Overpass cache for built-in presets
 ├── python_env.sh             Shared PYTHONPATH / interpreter helper
 ├── release_preflight.sh      Compile, test, and dependency checks before release
+├── render_gallery.py         Make a named gallery plate from live data, no window
+├── smoke_render.py           Prove the preview reaches the canvas, end to end
 └── smoke_run.sh              Quick smoke launch
 ```
 
@@ -223,6 +225,8 @@ docs/
     ├── gallery-miami-terrain.png
     ├── gallery-miami-night-lights.png
     ├── gallery-shanghai-night-lights.png
+    ├── gallery-cartagena-coastal-survey.png
+    ├── gallery-auckland-hypsometric.png
     ├── hipparchus-santorini-light.png
     ├── hipparchus-sydney-dark.png
     └── gallery-*.png          Ten preset renders used by the README gallery
