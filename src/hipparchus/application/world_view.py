@@ -32,6 +32,11 @@ _PROFILE = ProjectionProfile.from_bbox(None)
 #: The world, in projected units, as a half-width from the meridian.
 WORLD_HALF = _PROFILE.project_point(180.0, 0.0)[0]
 
+#: And as a half-height from the equator. Web Mercator's y grows without bound
+#: towards the pole, so this is where the world stops rather than where the
+#: arithmetic does.
+_TOP = _PROFILE.project_point(0.0, MAX_LATITUDE)[1]
+
 #: The closest it will go, in projected units across the viewport. About a
 #: street's worth: past this the locator is a magnifier, not a locator.
 MIN_SPAN = 200.0
@@ -72,12 +77,84 @@ def graticule_step(span_degrees: float) -> float:
     return GRATICULE_STEPS[-1]
 
 
+#: The smallest a chosen area is drawn, in pixels. Athens is a tenth of a
+#: degree; on the whole world that is under one pixel, and a one-pixel
+#: rectangle reads as a speck of dust rather than as where you are.
+MIN_FRAME_PIXELS = 9.0
+
+
+def frame_on_screen(
+    view: "WorldView", bbox: object
+) -> tuple[float, float, float, float] | None:
+    """Where the chosen area goes on the canvas, or ``None`` if it is not there.
+
+    The Locator drew a graticule, a coastline and place names, and never the
+    one thing it exists to answer: *which area is loaded*. Over an inland city
+    that left a grid, a dot and a name, and no way to tell whether the frame
+    about to be fetched was the city or the county.
+
+    Never smaller than `MIN_FRAME_PIXELS`, and grown about its own centre, so
+    that zooming out turns the frame into a mark in the right place rather than
+    into nothing. Never *larger* than it really is: zoomed inside the area, its
+    edges belong off the canvas, because that is where they are.
+
+    The coordinate boxes are typed into, so mid-edit rubbish reaches here. It
+    is not drawn, rather than raising into a redraw.
+    """
+    corners = _corners(bbox)
+    if corners is None:
+        return None
+    west, south, east, north = corners
+
+    left, top = view.to_screen(west, north)
+    right, bottom = view.to_screen(east, south)
+    left, right = min(left, right), max(left, right)
+    top, bottom = min(top, bottom), max(top, bottom)
+
+    left, right = _at_least(left, right, MIN_FRAME_PIXELS)
+    top, bottom = _at_least(top, bottom, MIN_FRAME_PIXELS)
+
+    if right < 0 or left > view.width or bottom < 0 or top > view.height:
+        return None
+    return (left, top, right, bottom)
+
+
+def _corners(bbox: object) -> tuple[float, float, float, float] | None:
+    """Four real numbers, ordered west, south, east, north — or nothing."""
+    if not isinstance(bbox, (tuple, list)) or len(bbox) != 4:
+        return None
+    try:
+        values = [float(value) for value in bbox]
+    except (TypeError, ValueError):
+        return None
+    if any(value != value for value in values):  # NaN is not a coordinate
+        return None
+    west, south, east, north = values
+    return (min(west, east), min(south, north), max(west, east), max(south, north))
+
+
+def _at_least(low: float, high: float, minimum: float) -> tuple[float, float]:
+    """Widen about the centre, so growing it does not move it."""
+    short = minimum - (high - low)
+    if short <= 0:
+        return (low, high)
+    return (low - short / 2, high + short / 2)
+
+
 def project(lon: float, lat: float) -> tuple[float, float]:
     return _PROFILE.project_point(lon, _clamp_latitude(lat))
 
 
 def unproject(x: float, y: float) -> tuple[float, float]:
-    return _PROFILE.unproject_point(x, y)
+    """Projected units back to degrees, from anywhere at all.
+
+    There is no ground beyond the pole, so a y past it comes back *as* the
+    pole. Not fussiness: a canvas reports one pixel until it is laid out, and
+    the whole world fitted into one pixel puts the top-left corner eight
+    thousand million metres north — `math.exp` of which raises `OverflowError`,
+    out of a redraw, taking the window with it.
+    """
+    return _PROFILE.unproject_point(x, max(-_TOP, min(_TOP, y)))
 
 
 def _clamp_latitude(lat: float) -> float:
@@ -238,11 +315,10 @@ class WorldView:
         else:
             centre_x = max(-WORLD_HALF + half_x, min(WORLD_HALF - half_x, centre_x))
 
-        top = project(0.0, MAX_LATITUDE)[1]
         centre_y = self.centre_y
-        if half_y >= top:
+        if half_y >= _TOP:
             centre_y = 0.0
         else:
-            centre_y = max(-top + half_y, min(top - half_y, centre_y))
+            centre_y = max(-_TOP + half_y, min(_TOP - half_y, centre_y))
 
         return replace(self, centre_x=centre_x, centre_y=centre_y, scale=scale)

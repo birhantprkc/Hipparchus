@@ -39,7 +39,11 @@ from hipparchus.application.world_paths import (
     visible,
     window_of,
 )
-from hipparchus.application.world_view import WorldView, graticule_step
+from hipparchus.application.world_view import (
+    WorldView,
+    frame_on_screen,
+    graticule_step,
+)
 from hipparchus.ui import theme
 
 #: Redraw no faster than this. A drag delivers motion events far quicker than
@@ -88,6 +92,13 @@ class WorldMap:
         self._detail_poll: str | None = None
         #: An area asked for before the canvas had a size, applied once it has.
         self._pending_show: tuple[float, float, float, float] | None = None
+        #: The area that would be fetched, drawn over everything else.
+        #:
+        #: Only where looking and choosing are separate. In the rail the view
+        #: *is* the area, so a rectangle round it would be a rectangle round the
+        #: canvas — noise. In the panel you can pan and zoom away from what you
+        #: picked, and then nothing on screen says where it went.
+        self._frame: tuple[float, float, float, float] | None = None
 
         palette = theme.current()
         self.widget = tk.Canvas(
@@ -144,6 +155,7 @@ class WorldMap:
         """
         width = self.widget.winfo_width()
         height = self.widget.winfo_height()
+        self.set_frame(bbox, redraw=False)
         if width <= 1 or height <= 1:
             self._pending_show = bbox
             return
@@ -154,6 +166,22 @@ class WorldMap:
             self._draw()
         finally:
             self._settling = False
+
+    def set_frame(
+        self, bbox: tuple[float, float, float, float] | None, *, redraw: bool = True
+    ) -> None:
+        """Which area Render map would fetch, so it can be seen from anywhere.
+
+        Kept as ground rather than as pixels: the point is that it stays put
+        while the view moves over it.
+        """
+        self._frame = bbox
+        if redraw:
+            self._draw()
+
+    @property
+    def frame(self) -> tuple[float, float, float, float] | None:
+        return self._frame
 
     def show_whole_world(self) -> None:
         self._view = WorldView.whole_world(
@@ -333,6 +361,8 @@ class WorldMap:
         for marker in markers_within(paths.markers, window):
             self._draw_marker(marker, palette)
 
+        self._draw_frame(palette)
+
         if paths.is_empty:
             canvas.create_text(
                 max(1, canvas.winfo_width()) // 2,
@@ -341,6 +371,26 @@ class WorldMap:
                 fill=palette.muted,
                 font=theme.font("caption"),
             )
+
+    def _draw_frame(self, palette: theme.Palette) -> None:
+        """The chosen area, over everything, in the colour that means chosen.
+
+        Two strokes rather than one: a hairline in the accent colour vanishes
+        over a coastline drawn in the same weight, and this has to be findable
+        at a glance from a whole-world view.
+        """
+        if self._reports_view or self._frame is None:
+            return
+        placed = frame_on_screen(self._view, self._frame)
+        if placed is None:
+            return
+        left, top, right, bottom = placed
+        self.widget.create_rectangle(
+            left, top, right, bottom, outline=palette.canvas_bg, width=3
+        )
+        self.widget.create_rectangle(
+            left, top, right, bottom, outline=palette.accent, width=1
+        )
 
     def _draw_marker(self, marker, palette: theme.Palette) -> None:
         """A place, as a dot and its name."""

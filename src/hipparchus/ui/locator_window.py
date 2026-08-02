@@ -255,11 +255,17 @@ class LocatorWindow:
         self._chosen = (lon, lat)
         area = area_around(lon, lat, span_of(self._current_area()))
         self._on_area_chosen(area)
+        # Choosing moves the frame, and the frame is what says which area
+        # Render map would fetch — including after panning away from it.
+        if self._map is not None:
+            self._map.set_frame(area)
         self._show_chosen(lon, lat, area)
 
     def _on_area_drawn(self, area: tuple[float, float, float, float]) -> None:
         self._chosen = None
         self._on_area_chosen(area)
+        if self._map is not None:
+            self._map.set_frame(area)
         self._readout_var.set(
             f"{area[2] - area[0]:.3f}° × {area[3] - area[1]:.3f}° drawn"
             "  ·  Render map fetches this"

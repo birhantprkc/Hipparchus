@@ -13,7 +13,13 @@ from __future__ import annotations
 
 import unittest
 
-from hipparchus.application.world_view import MAX_LATITUDE, WorldView, graticule_step
+from hipparchus.application.world_view import (
+    MAX_LATITUDE,
+    MIN_FRAME_PIXELS,
+    WorldView,
+    frame_on_screen,
+    graticule_step,
+)
 
 WIDTH, HEIGHT = 400, 260
 ATHENS = (23.68, 37.94, 23.80, 38.03)
@@ -252,3 +258,106 @@ class GraticuleTests(unittest.TestCase):
         for span in (0.05, 0.2, 1.0, 5.0, 30.0, 360.0):
             with self.subTest(span=span):
                 self.assertIn(graticule_step(span), friendly)
+
+
+class OffTheEarthTests(unittest.TestCase):
+    """A view that has not been laid out yet, which is every view for a moment.
+
+    A canvas reports one pixel until it is laid out, and `whole_world(1, h)`
+    scales to fit that one pixel — so its top-left corner unprojects to a
+    latitude eight thousand million metres north. `math.exp` of that raises
+    `OverflowError`, and it came out of a redraw: the Locator was one badly
+    timed `_draw` away from taking the window down.
+    """
+
+    def test_a_corner_of_an_unlaid_canvas_does_not_raise(self) -> None:
+        view = WorldView.whole_world(1, 150)
+        self.assertEqual(len(view.bounds()), 4)
+
+    def test_the_ground_it_reports_is_still_on_the_earth(self) -> None:
+        west, south, east, north = WorldView.whole_world(1, 150).bounds()
+        self.assertGreaterEqual(south, -MAX_LATITUDE)
+        self.assertLessEqual(north, MAX_LATITUDE)
+        self.assertGreaterEqual(west, -180.0)
+        self.assertLessEqual(east, 180.0)
+
+    def test_a_point_far_above_the_pole_lands_on_the_pole(self) -> None:
+        view = whole()
+        self.assertAlmostEqual(view.to_world(0, -10_000_000)[1], MAX_LATITUDE, places=6)
+        self.assertAlmostEqual(view.to_world(0, 10_000_000)[1], -MAX_LATITUDE, places=6)
+
+
+class FrameTests(unittest.TestCase):
+    """Where the chosen area goes on the canvas.
+
+    The Locator drew a graticule, a coastline and place names, and never the
+    one thing it exists to answer: which area is loaded. Opening it over an
+    inland city gave a grid, a dot and a name, and no way to tell whether the
+    frame about to be fetched was the city or the county.
+    """
+
+    def raw_corners(self, view: WorldView, bbox) -> tuple[float, float, float, float]:
+        """The rectangle before any minimum is applied.
+
+        Not `to_screen` of the middle: Mercator stretches latitude, so the
+        pixel of the mean latitude is not the mean of the two edges' pixels.
+        """
+        left, top = view.to_screen(bbox[0], bbox[3])
+        right, bottom = view.to_screen(bbox[2], bbox[1])
+        return (left, top, right, bottom)
+
+    def test_an_area_in_view_becomes_the_rectangle_it_projects_to(self) -> None:
+        view = WorldView.fitted((23.0, 37.0, 24.5, 38.5), WIDTH, HEIGHT)
+        drawn = frame_on_screen(view, ATHENS)
+        raw = self.raw_corners(view, ATHENS)
+        self.assertLess(drawn[0], drawn[2])
+        self.assertLess(drawn[1], drawn[3])
+        for got, wanted in zip(drawn, raw):
+            self.assertAlmostEqual(got, wanted, places=6)
+
+    def test_a_city_seen_from_orbit_is_still_visible(self) -> None:
+        """Athens is a tenth of a degree. On the whole world that is under a
+        pixel, and a one-pixel rectangle reads as a speck of dust rather than
+        as where you are."""
+        view = WorldView.whole_world(WIDTH, HEIGHT)
+        left, top, right, bottom = frame_on_screen(view, ATHENS)
+        self.assertGreaterEqual(right - left, MIN_FRAME_PIXELS)
+        self.assertGreaterEqual(bottom - top, MIN_FRAME_PIXELS)
+
+    def test_growing_it_does_not_move_it(self) -> None:
+        """A mark that says "here" a few pixels off is worse than none."""
+        view = WorldView.whole_world(WIDTH, HEIGHT)
+        left, top, right, bottom = frame_on_screen(view, ATHENS)
+        raw_left, raw_top, raw_right, raw_bottom = self.raw_corners(view, ATHENS)
+        self.assertAlmostEqual((left + right) / 2, (raw_left + raw_right) / 2, places=9)
+        self.assertAlmostEqual((top + bottom) / 2, (raw_top + raw_bottom) / 2, places=9)
+
+    def test_an_area_larger_than_the_view_keeps_its_real_size(self) -> None:
+        """Zoomed inside the frame you are about to fetch, its edges are off
+        the canvas — which is the truth and reads as one."""
+        view = WorldView.fitted((23.70, 37.97, 23.72, 37.99), WIDTH, HEIGHT)
+        left, top, right, bottom = frame_on_screen(view, ATHENS)
+        self.assertLess(left, 0)
+        self.assertGreater(right, WIDTH)
+
+    def test_an_area_off_the_screen_is_not_drawn(self) -> None:
+        view = WorldView.fitted(ATHENS, WIDTH, HEIGHT)
+        self.assertIsNone(frame_on_screen(view, (-122.5, 37.7, -122.4, 37.8)))
+
+    def test_no_area_is_no_rectangle(self) -> None:
+        self.assertIsNone(frame_on_screen(whole(), None))
+
+    def test_a_nonsense_area_is_not_drawn_rather_than_raising(self) -> None:
+        """The coordinate boxes are typed into, so mid-edit rubbish reaches
+        here."""
+        for bad in ((), (1.0, 2.0), ("west", 1.0, 2.0, 3.0), (float("nan"),) * 4):
+            with self.subTest(bad=bad):
+                self.assertIsNone(frame_on_screen(whole(), bad))
+
+    def test_the_corners_are_taken_in_whichever_order_they_come(self) -> None:
+        view = WorldView.fitted((23.0, 37.0, 24.5, 38.5), WIDTH, HEIGHT)
+        west, south, east, north = ATHENS
+        self.assertEqual(
+            frame_on_screen(view, (east, north, west, south)),
+            frame_on_screen(view, ATHENS),
+        )
