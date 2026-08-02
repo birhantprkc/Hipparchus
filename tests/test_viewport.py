@@ -18,6 +18,7 @@ import math
 import unittest
 
 from hipparchus.application.viewport import (
+    area_to_fetch,
     fit_margin,
     projected_aspect,
     shaped_to_window,
@@ -196,3 +197,56 @@ class ShapingTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+LONDON = (-0.20, 51.45, -0.05, 51.55)
+
+
+class AreaToFetchTests(unittest.TestCase):
+    """Which area Render map acts on: the one on screen, or the one chosen.
+
+    Pressing Render map after panning must fetch the wider view. Pressing it
+    after choosing somewhere else must fetch the somewhere else. The two look
+    the same from inside the canvas, which is why this is decided here.
+    """
+
+    def test_with_nothing_drawn_yet_the_chosen_area_stands(self) -> None:
+        self.assertEqual(
+            area_to_fetch(requested=LONDON, visible=None, rendered=None),
+            LONDON,
+        )
+
+    def test_panning_the_map_and_pressing_it_fetches_the_new_view(self) -> None:
+        # Nobody chose anywhere: what is on screen is the request, moved.
+        moved = (23.60, 37.90, 23.88, 38.07)
+        self.assertEqual(
+            area_to_fetch(requested=ATHENS, visible=moved, rendered=ATHENS),
+            moved,
+        )
+
+    def test_choosing_a_new_area_survives_the_map_still_showing_the_old_one(self) -> None:
+        # The Locator, a search result, a saved place, or four typed numbers:
+        # all of them land in the request, and none of them redraw the canvas.
+        # The view is stale, and staleness must not win.
+        self.assertEqual(
+            area_to_fetch(requested=LONDON, visible=ATHENS, rendered=ATHENS),
+            LONDON,
+        )
+
+    def test_a_request_that_only_looks_different_is_the_same_request(self) -> None:
+        # The coordinate boxes hold five decimals, so a round trip through them
+        # is not bit-exact and must not read as a deliberate move.
+        rounded = tuple(round(value, 5) for value in ATHENS)
+        moved = (23.60, 37.90, 23.88, 38.07)
+        self.assertEqual(
+            area_to_fetch(requested=rounded, visible=moved, rendered=ATHENS),
+            moved,
+        )
+
+    def test_without_a_record_of_what_is_drawn_the_request_wins(self) -> None:
+        # Nothing is known about what the canvas is showing, so the only
+        # trustworthy answer is the one somebody typed.
+        self.assertEqual(
+            area_to_fetch(requested=LONDON, visible=ATHENS, rendered=None),
+            LONDON,
+        )

@@ -49,7 +49,7 @@ from hipparchus.application.quality import (
 )
 from hipparchus.application.session import Area, Session
 from hipparchus.application.session_history import SessionHistory
-from hipparchus.application.viewport import shaped_to_window
+from hipparchus.application.viewport import area_to_fetch, shaped_to_window
 from hipparchus.application.preset_store import PresetStore
 from hipparchus.application.style_catalogue import Catalogue, seeded_name, validate_name
 from hipparchus.core.config import AppConfig
@@ -119,6 +119,9 @@ class MainWindow:
         self._root = tk.Tk()
         self._theme_mode = self.config.theme_mode
         self._current_scene: RenderScene | None = None
+        #: The area the map on screen was drawn for. What tells a pan apart
+        #: from a choice when Render map is pressed — see `area_to_fetch`.
+        self._rendered_area: tuple[float, float, float, float] | None = None
         self._canvas_image: tk.PhotoImage | None = None
         self._canvas_image_tempfile: Path | None = None
         self._pending_queue: queue.Queue[tuple[str, object]] = queue.Queue()
@@ -1121,35 +1124,43 @@ class MainWindow:
         )
 
     def _sync_area_to_what_is_on_screen(self) -> None:
-        """Make the request match the view, then square it to the window.
+        """Settle what Render map is about to fetch, then square it to the window.
 
         The one place pan, zoom and rotation are allowed to reach the requested
-        area. Everywhere else they frame the screen and nothing more — but
-        pressing Render map is asking the app to act on what it is *showing*,
-        and without this, zooming out and pressing it re-fetches the same old
-        area while the screen still shows the wider one, which looks exactly
-        like nothing happening.
+        area — but only when the request is still the one the map on screen was
+        drawn for. Choosing somewhere else does not redraw the canvas, so a
+        moment after choosing there is a stale view and a fresh choice, and
+        `area_to_fetch` is what keeps the choice. That rule lives in
+        `application/viewport.py`; this reads the widgets for it.
 
         Then shaped to the window — always, whatever the area came from and
         whether or not anything is drawn yet. It only ever grows the area, and
-        an area already the right shape comes back untouched, so pressing the
-        button twice does not walk the map outwards.
+        an area already the right shape comes back untouched.
         """
+        try:
+            requested = self._current_aoi_values()
+        except (ValueError, KeyError):
+            # Mid-edit coordinates are not an error; the fetch below will say so.
+            return
+
         visible = self._map.visible_area()
+        wanted = area_to_fetch(
+            requested=requested, visible=visible, rendered=self._rendered_area
+        )
+        if wanted != requested:
+            self._set_aoi(*wanted)
         if visible is not None:
-            self._set_aoi(*visible)
+            # The pan and the turn have either been folded into the request or
+            # are about to be replaced; either way the viewport goes back to
+            # identity, so the bearing readout does not outlive the map it
+            # described.
             self._map.reset_view()
 
         aspect = self._map.aspect()
         if aspect is None:
             return
-        try:
-            current = self._current_aoi_values()
-        except ValueError:
-            # Mid-edit coordinates are not an error; the fetch below will say so.
-            return
-        shaped = shaped_to_window(current, aspect)
-        if shaped != current:
+        shaped = shaped_to_window(wanted, aspect)
+        if shaped != wanted:
             self._set_aoi(*shaped)
 
     def _on_fetch_clicked(self) -> None:
@@ -1731,6 +1742,10 @@ class MainWindow:
 
     def _apply_scene(self, scene: RenderScene, cache_state: str) -> None:
         self._current_scene = scene
+        # What this map is *of*, kept so the next Render map can tell a pan
+        # apart from a choice. The scene's own bounds rather than the
+        # coordinate boxes: the boxes can be edited, and the map cannot.
+        self._rendered_area = scene.source_bbox
         self._status.set_provenance(provenance.for_sources(self.source_stack.enabled_ids()))
         if cache_state != "undo" and not self._restoring:
             # Undo of a fetch must never cost another fetch, so the map itself

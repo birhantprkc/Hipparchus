@@ -74,6 +74,60 @@ def visible_bounds(
     return (min(lons), min(lats), max(lons), max(lats))
 
 
+# -- which area Render map acts on --------------------------------------------
+
+#: How far two areas may differ and still be the same area. The coordinate
+#: boxes hold five decimals, so a value that has been through them and back is
+#: not bit-exact; a tenth of that is far below anything anybody chose on
+#: purpose, and far above the rounding.
+SAME_AREA_TOLERANCE = 1e-6
+
+
+def area_to_fetch(
+    *,
+    requested: tuple[float, float, float, float],
+    visible: tuple[float, float, float, float] | None,
+    rendered: tuple[float, float, float, float] | None,
+) -> tuple[float, float, float, float]:
+    """The area Render map should fetch.
+
+    Pressing Render map is asking the app to act on what it is showing, so
+    panning or zooming out and pressing it has to fetch the wider view —
+    otherwise it re-fetches the old area while the screen shows a new one,
+    which looks exactly like nothing happening.
+
+    But *choosing* somewhere else — the Locator, a search result, a saved
+    place, four typed numbers — does not redraw the canvas. There is nothing to
+    draw yet. So a moment after choosing Auckland, the canvas is still showing
+    Athens, and taking the view at its word fetches Athens again and throws the
+    choice away. The Locator then works exactly once, on the first map of the
+    session, and never again.
+
+    What separates the two cases is whether the request still describes the map
+    on screen. If it does, nobody has chosen anything since it was drawn and
+    the view is the only new information there is. If it does not, somebody
+    chose, and the choice is newer than the view.
+
+    ``rendered`` is the area the drawn map was drawn for; ``None`` means
+    nothing is known about it, and then the request is the only trustworthy
+    answer.
+    """
+    if visible is None or rendered is None:
+        return requested
+    if not same_area(requested, rendered):
+        return requested
+    return visible
+
+
+def same_area(
+    first: tuple[float, float, float, float],
+    second: tuple[float, float, float, float],
+    tolerance: float = SAME_AREA_TOLERANCE,
+) -> bool:
+    """Whether two areas are the same one, allowing for rounding."""
+    return all(abs(a - b) <= tolerance for a, b in zip(first, second))
+
+
 # -- shaping ------------------------------------------------------------------
 
 
