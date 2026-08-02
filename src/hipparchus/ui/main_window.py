@@ -2110,8 +2110,17 @@ class MainWindow:
         return f"({minx:.5f},{miny:.5f})..({maxx:.5f},{maxy:.5f})"
 
     def _on_export_clicked(self) -> None:
+        """The SVG, which is what this application is for.
+
+        It was the least careful of the three exports: no busy indicator while
+        it wrote fourteen megabytes, no error handling — a failure went to Tk's
+        own traceback dialogue rather than to the status bar — and it revealed
+        nothing, so the only sign it had worked was a line in the status bar
+        that the next redraw overwrote a few milliseconds later. It goes through
+        the same ending as PDF and PNG now.
+        """
         if self._current_scene is None:
-            messagebox.showinfo("Export", "No scene to export yet.")
+            self._status.set_message("There is no map to export yet.", error=True)
             return
 
         target = filedialog.asksaveasfilename(
@@ -2137,8 +2146,17 @@ class MainWindow:
             width=export_width,
             height=export_height,
         )
-        diagnostics = exporter.export_with_profile(Path(target), profile=profile)
-        self._status.set_message(f"Exported {diagnostics.total_paths} paths")
+
+        self._set_busy("Writing SVG…")
+        try:
+            diagnostics = exporter.export_with_profile(Path(target), profile=profile)
+        except Exception as exc:  # noqa: BLE001
+            self._status.set_message(f"SVG export failed: {exc}", error=True)
+            return
+        finally:
+            self._set_idle("Idle")
+
+        self._finish_export(Path(target), f"{diagnostics.total_paths} paths")
 
     def _on_export_pdf(self) -> None:
         """The map as vector paths, at the paper size the Page section names."""
@@ -2172,8 +2190,17 @@ class MainWindow:
         finally:
             self._set_idle("Idle")
 
-        self._status.set_message(f"Exported {Path(target).name} · {width}×{height}")
-        reveal(Path(target))
+        self._finish_export(Path(target), f"{width}×{height}")
+
+    def _finish_export(self, target: Path, detail: str) -> None:
+        """How every export ends, so no one of them can end differently.
+
+        The three used to diverge: PDF and PNG revealed the written file and
+        named it, SVG did neither. One place now, because "did that work?" is
+        the same question whichever button was pressed.
+        """
+        self._status.set_message(f"Exported {target.name} · {detail}")
+        reveal(target)
 
     def _export_composition(self) -> MapComposition:
         return MapComposition(
