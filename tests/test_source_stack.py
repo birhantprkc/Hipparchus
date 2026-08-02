@@ -214,3 +214,37 @@ class SummaryTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class OverpassSettingsTests(unittest.TestCase):
+    """The two knobs that change a fetch belong on the source they belong to,
+    not in a Provider section at the foot of an unrelated rail."""
+
+    def test_the_endpoint_and_the_timeout_are_settings_of_the_source(self) -> None:
+        stack = SourceStack()
+        keys = {setting.key for setting in stack.settings_for("overpass")}
+        self.assertIn("endpoint", keys)
+        self.assertIn("timeout", keys)
+
+    def test_the_endpoint_is_chosen_from_known_answers(self) -> None:
+        """A mistyped endpoint fails minutes later, from a network call."""
+        stack = SourceStack()
+        endpoint = next(s for s in stack.settings_for("overpass") if s.key == "endpoint")
+        self.assertEqual(endpoint.kind, "choice")
+        self.assertGreaterEqual(len(endpoint.choices), 2)
+        for choice in endpoint.choices:
+            self.assertTrue(str(choice).startswith("https://"))
+
+    def test_they_reach_the_provider(self) -> None:
+        stack = SourceStack()
+        stack.set_setting("overpass", "timeout", 90.0)
+        self.assertEqual(stack.provider_overrides("overpass").get("timeout_seconds"), 90.0)
+
+    def test_changing_the_endpoint_reaches_the_provider(self) -> None:
+        from hipparchus.application.source_stack import OVERPASS_MIRRORS
+
+        stack = SourceStack()
+        stack.set_setting("overpass", "endpoint", OVERPASS_MIRRORS[1])
+        self.assertEqual(
+            stack.provider_overrides("overpass").get("endpoint"), OVERPASS_MIRRORS[1]
+        )

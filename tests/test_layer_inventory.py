@@ -7,7 +7,9 @@ import unittest
 from shapely.geometry import LineString
 
 from hipparchus.application.layer_inventory import (
+    BASE_FETCH_LAYERS,
     GROUP_ORDER,
+    fetch_layers,
     grouped,
     inventory,
     layer_group,
@@ -147,3 +149,25 @@ class SummaryTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class FetchLayerTests(unittest.TestCase):
+    """Which layers a fetch asks for, decided away from the checkbox."""
+
+    def test_every_base_layer_is_requested_when_nothing_is_hidden(self) -> None:
+        self.assertEqual(fetch_layers(lambda _layer_id: True), BASE_FETCH_LAYERS)
+
+    def test_a_hidden_layer_is_not_fetched(self) -> None:
+        requested = fetch_layers(lambda layer_id: layer_id != "buildings")
+        self.assertNotIn("buildings", requested)
+        self.assertIn("roads", requested)
+
+    def test_the_request_keeps_the_declared_order(self) -> None:
+        requested = fetch_layers(lambda layer_id: layer_id in {"water", "roads_motorway", "places"})
+        self.assertEqual(requested, ("roads_motorway", "water", "places"))
+
+    def test_the_road_hierarchy_is_asked_for_in_full(self) -> None:
+        # A missing class is not a missing style: it is a road that never
+        # arrives, and the map draws a hole where a motorway should be.
+        for layer_id in ("roads_motorway", "roads_trunk", "roads_primary", "roads_service"):
+            self.assertIn(layer_id, BASE_FETCH_LAYERS)

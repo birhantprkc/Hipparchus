@@ -102,6 +102,16 @@ class FetchPlan:
         return (self.map_model_id, *self.extra_provider_ids)
 
 
+#: The public Overpass instances, in the order the project has found them
+#: reliable. Offered as a list because a mistyped endpoint fails minutes later,
+#: from a network call, rather than at the moment of typing it.
+OVERPASS_MIRRORS: tuple[str, ...] = (
+    "https://overpass-api.de/api/interpreter",
+    "https://overpass.kumi.systems/api/interpreter",
+    "https://overpass.openstreetmap.ru/api/interpreter",
+)
+
+
 def default_sources() -> tuple[SourceDefinition, ...]:
     """The stack as it appears in the sidebar, top to bottom."""
     return (
@@ -110,6 +120,21 @@ def default_sources() -> tuple[SourceDefinition, ...]:
             label="OpenStreetMap",
             subtitle="streets · places · water",
             provenance="live",
+            # The two knobs that actually change a fetch live on the source they
+            # belong to, beside the rest of its settings, rather than in a
+            # Provider section at the foot of an unrelated rail. The endpoint is
+            # a list of known answers rather than a box to mistype into: a typo
+            # there fails minutes later, from a network call.
+            settings=(
+                SourceSetting(
+                    "endpoint", "Endpoint", "choice", OVERPASS_MIRRORS[0],
+                    choices=OVERPASS_MIRRORS, attribute="endpoint",
+                ),
+                SourceSetting(
+                    "timeout", "Timeout", "number", 180.0, suffix="s",
+                    attribute="timeout_seconds",
+                ),
+            ),
             default_enabled=True,
         ),
         SourceDefinition(

@@ -75,6 +75,16 @@ class SourceProgress:
         return f"{self.source_id} failed"
 
 
+@dataclass(frozen=True, slots=True)
+class SourceSnapshot:
+    """One source's state at one moment, safe to hand to another thread."""
+
+    source_id: str
+    state: str
+    elapsed: float
+    detail: str
+
+
 @dataclass(slots=True)
 class FetchReporter:
     """Collects per-source progress and notifies a listener.
@@ -122,6 +132,25 @@ class FetchReporter:
     def _notify(self) -> None:
         if self.on_change is not None:
             self.on_change(self)
+
+    def snapshot(self) -> tuple["SourceSnapshot", ...]:
+        """A still of every source, taken under the lock.
+
+        The reporter is written from the fetch thread and read by the window, so
+        the window must never walk the live dictionaries: it would be reading a
+        state that is being rewritten underneath it. This is the whole record,
+        copied once, as plain values.
+        """
+        with self._lock:
+            return tuple(
+                SourceSnapshot(
+                    source_id=source_id,
+                    state=self.sources[source_id].state,
+                    elapsed=self.sources[source_id].elapsed,
+                    detail=self.sources[source_id].detail,
+                )
+                for source_id in self.order
+            )
 
     def summary(self) -> str:
         """One line for the status bar, in the order sources were asked for."""

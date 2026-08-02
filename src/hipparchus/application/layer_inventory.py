@@ -11,9 +11,50 @@ nothing in it says so rather than sitting there ticked and blank.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 
 from hipparchus.rendering.models import RenderScene
+
+
+# What a full fetch asks the providers for, in the order the request carries.
+# Kept here rather than in the panel that ticks them: a headless render has to
+# ask for the same layers the window does, and a list only the widget knows is
+# a list nothing else can agree with.
+BASE_FETCH_LAYERS: tuple[str, ...] = (
+    "roads_motorway",
+    "roads_trunk",
+    "roads_primary",
+    "roads_secondary",
+    "roads_tertiary",
+    "roads_residential",
+    "roads_service",
+    "roads_other",
+    "roads",
+    "buildings",
+    "water",
+    "parks",
+    "railways",
+    "forests",
+    "fields",
+    "natural",
+    "coastline",
+    "places",
+    "shops",
+    "amenities",
+    "landuse",
+    "barriers",
+    "power",
+)
+
+
+def fetch_layers(is_visible: Callable[[str], bool]) -> tuple[str, ...]:
+    """The base layers to request, minus the ones switched off.
+
+    Hiding a layer stops it being fetched as well as drawn, because the cost of
+    a layer is mostly the asking.
+    """
+    return tuple(layer_id for layer_id in BASE_FETCH_LAYERS if is_visible(layer_id))
 
 
 # Display names for layers whose id is not presentable, and grouping for the

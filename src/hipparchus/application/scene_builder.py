@@ -651,8 +651,6 @@ def _label_anchor(geometry: BaseGeometry) -> tuple[float, float] | None:
 def _ordered_layers(layer_names: set[str] | list[str] | tuple[str, ...]) -> list[str]:
     preferred = [
         # Background layers (large areas)
-        "coastline",
-        "water",
         "fields",
         "forests",
         "natural",
@@ -662,6 +660,15 @@ def _ordered_layers(layer_names: set[str] | list[str] | tuple[str, ...]) -> list
         # a printed topographic sheet stacks it.
         "elevation_bands",
         "terrain_hillshade",
+        # The sea goes *over* the relief, not under it. Elevation bands cover
+        # the sea as well as the land — the tiles carry the sea floor in the
+        # same band as the ground — and a hypsometric band fill is opaque, so
+        # drawing them afterwards paints the water out. The Auckland plate
+        # infers the Waitematā correctly from the coastline and then hides it
+        # under a land tint, which is what this ordering is for.
+        "coastline",
+        "water",
+        # Depth and contours describe the water, so they are drawn on it.
         "bathymetry",
         "terrain_contours",
         "terrain_index_contours",

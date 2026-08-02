@@ -97,3 +97,13 @@ def quality_mode_key(value: str | None) -> str:
 def quality_menu_labels() -> tuple[str, ...]:
     """Return user-facing quality labels in preferred UI order."""
     return tuple(profile.label for profile in QUALITY_PROFILES.values())
+
+
+def quality_label_for(value: str | None) -> str:
+    """The label the dropdown shows, for a key the session stores.
+
+    The inverse of ``quality_mode_key``. The session keeps the key, because a
+    key survives a label being reworded; the menu shows the label, because a
+    person does not read keys. Something has to turn one back into the other.
+    """
+    return quality_profile(value).label

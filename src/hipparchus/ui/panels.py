@@ -11,26 +11,25 @@ The host is expected to provide: ``source_stack``, ``_theme_palette()``,
 
 from __future__ import annotations
 
+from pathlib import Path
 import tkinter as tk
 from tkinter import ttk
 from typing import Any, Callable
 
 from hipparchus.application.layer_inventory import LayerEntry, grouped, summarise
 from hipparchus.application.source_stack import SourceDefinition, SourceStack
+from hipparchus.application.style_catalogue import grid_columns
 from hipparchus.application.style_previews import Swatch, ring_geometry, swatch_for
 from hipparchus.rendering.models import RGBAColor, RenderScene
+from hipparchus.ui import theme
 from hipparchus.ui.icons import IconButton
 
 
 # Provenance is shown on every source, in the source's own row, because what a
-# map is made of should not require opening a dialogue to discover.
-PROVENANCE_COLORS: dict[str, tuple[str, str]] = {
-    "live": ("#2f6f4f", "#e3f2e9"),
-    "measured": ("#2f6f4f", "#e3f2e9"),
-    "synthetic": ("#8a6212", "#faf1e0"),
-    "uncalibrated": ("#8a6212", "#faf1e0"),
-    "approximate": ("#8a6212", "#faf1e0"),
-}
+# map is made of should not require opening a dialogue to discover. The colours
+# are in `ui/theme.py`, one per kind — they used to be three shared between
+# five, so `measured` and `live`, which is the distinction the badge exists to
+# make, were the same green.
 
 SWATCH_W, SWATCH_H = 62, 46
 
@@ -39,9 +38,9 @@ def section_heading(parent: tk.Widget, text: str, hint: str = "") -> ttk.Frame:
     """A small-caps heading with an optional right-aligned hint."""
     row = ttk.Frame(parent)
     row.pack(fill="x", pady=(12, 6))
-    ttk.Label(row, text=text.upper(), font=("SF Pro Text", 10, "bold")).pack(side="left")
+    ttk.Label(row, text=text.upper(), font=theme.font("section")).pack(side="left")
     if hint:
-        ttk.Label(row, text=hint, font=("SF Pro Text", 9)).pack(side="right")
+        ttk.Label(row, text=hint, font=theme.font("caption")).pack(side="right")
     return row
 
 
@@ -56,12 +55,15 @@ class SourcesPanel:
         on_toggle: Callable[[str, bool], None],
         on_setting: Callable[[str, str, Any], None],
         on_choose_path: Callable[[str], None],
+        file_reason: Callable[[str], str] | None = None,
     ) -> None:
         self.parent = parent
         self.stack = stack
         self.on_toggle = on_toggle
         self.on_setting = on_setting
         self.on_choose_path = on_choose_path
+        #: Why a chosen file cannot be read, asked of the host per source.
+        self.file_reason = file_reason
         self._vars: dict[str, tk.BooleanVar] = {}
         self._expanded: set[str] = set()
         self._show_offline = False
@@ -82,22 +84,48 @@ class SourcesPanel:
         for definition in online:
             self._source_row(definition)
 
-        if not offline:
+        if offline:
+            configured = sum(1 for item in offline if self.stack.is_available(item.source_id))
+            row = ttk.Frame(self._body)
+            row.pack(fill="x", pady=(4, 0))
+            suffix = f" ({configured} ready)" if configured else ""
+            ttk.Button(
+                row,
+                text=("Hide file sources" if self._show_offline else f"File sources{suffix}"),
+                command=self._toggle_offline,
+            ).pack(fill="x")
+
+            if self._show_offline:
+                for definition in offline:
+                    self._source_row(definition)
+
+        # Last, and never behind an early return: a stack with no file-backed
+        # sources at all is exactly the case where nothing being ticked is
+        # easiest to arrive at.
+        self._nothing_ticked_warning()
+
+    def _nothing_ticked_warning(self) -> None:
+        """Say it here, where a source can be ticked, not after Render map.
+
+        The answer used to be a modal dialogue raised by a click that could
+        never have worked — which is the reason arriving after the cost."""
+        if self.stack.plan() is not None:
             return
-
-        configured = sum(1 for item in offline if self.stack.is_available(item.source_id))
         row = ttk.Frame(self._body)
-        row.pack(fill="x", pady=(4, 0))
-        suffix = f" ({configured} ready)" if configured else ""
-        ttk.Button(
+        row.pack(fill="x", pady=(6, 2))
+        IconButton(
+            row, "warning", command=lambda: None, size=16,
+            colour=theme.current().warning,
+            background=theme.current().bg,
+            hover=theme.current().bg,
+        ).pack(side="left", padx=(0, 6), anchor="n")
+        ttk.Label(
             row,
-            text=("Hide file sources" if self._show_offline else f"File sources{suffix}"),
-            command=self._toggle_offline,
-        ).pack(fill="x")
-
-        if self._show_offline:
-            for definition in offline:
-                self._source_row(definition)
+            text="Nothing is ticked, so there is nothing to draw. Choose a source above.",
+            font=theme.font("caption"),
+            wraplength=230,
+            justify="left",
+        ).pack(side="left", fill="x", expand=True)
 
     def _toggle_offline(self) -> None:
         self._show_offline = not self._show_offline
@@ -129,15 +157,16 @@ class SourcesPanel:
 
         text = ttk.Frame(header)
         text.pack(side="left", fill="x", expand=True, padx=(4, 0))
-        ttk.Label(text, text=definition.label, font=("SF Pro Text", 11, "bold")).pack(anchor="w")
+        ttk.Label(text, text=definition.label, font=theme.font("heading")).pack(anchor="w")
         subtitle = definition.subtitle if available else f"{definition.subtitle} — needs a file"
-        ttk.Label(text, text=subtitle, font=("SF Pro Text", 9)).pack(anchor="w")
+        ttk.Label(text, text=subtitle, font=theme.font("caption")).pack(anchor="w")
 
-        fg, bg = PROVENANCE_COLORS.get(definition.provenance, ("#5a5a5a", "#eeeeee"))
+        tint = theme.provenance_tint(definition.provenance)
+        fg, bg = tint.foreground, tint.background
         tag = tk.Label(
             header,
             text=definition.provenance,
-            font=("SF Pro Text", 9),
+            font=theme.font("caption"),
             fg=fg,
             bg=bg,
             padx=6,
@@ -145,7 +174,7 @@ class SourcesPanel:
         )
         tag.pack(side="right", anchor="n")
 
-        if definition.settings or definition.needs_path:
+        if definition.settings:
             IconButton(
                 header,
                 "chevron-up" if source_id in self._expanded else "chevron-down",
@@ -154,8 +183,64 @@ class SourcesPanel:
                 tooltip="Settings for this source",
             ).pack(side="right", padx=(0, 6))
 
+        # A file-backed source shows its file, and the way to choose one,
+        # without being expanded first.
+        #
+        # Behind the chevron, the only control that makes the row usable was
+        # invisible: four permanently greyed rows with no stated reason and no
+        # visible way out read as four broken features. The row is greyed
+        # because it has no file — so the row should say so, where the greying
+        # is.
+        if definition.needs_path:
+            self._file_picker(card, definition)
+
         if source_id in self._expanded:
             self._settings_body(card, definition)
+
+    def _file_picker(self, card: ttk.Frame, definition: SourceDefinition) -> None:
+        """The chosen file, why it is or is not usable, and the way to change it."""
+        row = ttk.Frame(card)
+        row.pack(fill="x", padx=(22, 0), pady=(4, 0))
+
+        path = self.stack.path(definition.source_id)
+        text = ttk.Frame(row)
+        text.pack(side="left", fill="x", expand=True)
+        ttk.Label(
+            text,
+            text=Path(path).name if path else "No file chosen",
+            font=theme.font("caption"),
+        ).pack(anchor="w")
+
+        # The reason, when there is one worth giving. It was computed all along
+        # and shown only as a paragraph at the foot of the rail, which left the
+        # one format this cannot read looking like a format it silently ignored.
+        reason = self.file_reason(definition.source_id) if self.file_reason else ""
+        if reason and path:
+            note = tk.Text(
+                text,
+                height=_wrapped_lines(reason),
+                wrap="word",
+                font=theme.font("caption2"),
+                fg=theme.current().warning,
+                bg=theme.current().bg,
+                relief="flat",
+                highlightthickness=0,
+                bd=0,
+                width=30,
+            )
+            note.insert("1.0", reason)
+            # Readable and copyable — a conversion command nobody can copy is a
+            # command nobody will run — but not an input.
+            note.configure(state="disabled")
+            note.pack(anchor="w", fill="x", pady=(1, 0))
+
+        # Never dimmed with the row: this is the control that undims it.
+        ttk.Button(
+            row,
+            text="Change…" if path else "Choose…",
+            width=9,
+            command=lambda sid=definition.source_id: self.on_choose_path(sid),
+        ).pack(side="right")
 
     def _toggle_expanded(self, source_id: str) -> None:
         if source_id in self._expanded:
@@ -169,27 +254,33 @@ class SourcesPanel:
         body = ttk.Frame(card)
         body.pack(fill="x")
 
-        if definition.needs_path:
-            row = ttk.Frame(body)
-            row.pack(fill="x", pady=2)
-            path = self.stack.path(definition.source_id)
-            ttk.Label(row, text=path or "No file chosen", font=("SF Pro Text", 9)).pack(side="left")
-            ttk.Button(
-                row,
-                text="Choose…",
-                width=9,
-                command=lambda sid=definition.source_id: self.on_choose_path(sid),
-            ).pack(side="right")
-
         for setting in self.stack.settings_for(definition.source_id):
             row = ttk.Frame(body)
             row.pack(fill="x", pady=2)
-            ttk.Label(row, text=setting.label, width=10, font=("SF Pro Text", 9)).pack(side="left")
+            ttk.Label(row, text=setting.label, width=10, font=theme.font("caption")).pack(side="left")
+
+            if setting.choices:
+                # A list of known answers is not a thing to type. Offering a box
+                # invites a value the source will refuse, and the refusal would
+                # arrive minutes later from a network call.
+                choice_var = tk.StringVar(value=str(setting.value))
+                ttk.OptionMenu(
+                    row,
+                    choice_var,
+                    str(setting.value),
+                    *[str(option) for option in setting.choices],
+                    command=(
+                        lambda value, sid=definition.source_id, key=setting.key:
+                        self.on_setting(sid, key, value)
+                    ),
+                ).pack(side="left", fill="x", expand=True)
+                continue
+
             entry_var = tk.StringVar(value=str(setting.display().split(" ")[0]))
             entry = ttk.Entry(row, textvariable=entry_var, width=8)
             entry.pack(side="left")
             if setting.suffix:
-                ttk.Label(row, text=setting.suffix, font=("SF Pro Text", 9)).pack(side="left", padx=(4, 0))
+                ttk.Label(row, text=setting.suffix, font=theme.font("caption")).pack(side="left", padx=(4, 0))
 
             def commit(_event=None, sid=definition.source_id, key=setting.key, holder=entry_var) -> None:
                 raw = holder.get().strip()
@@ -206,7 +297,7 @@ class SourcesPanel:
             ttk.Label(
                 body,
                 text="Interval 0 chooses a readable step from the relief in view.",
-                font=("SF Pro Text", 9),
+                font=theme.font("caption"),
                 wraplength=250,
             ).pack(anchor="w", pady=(4, 0))
 
@@ -241,7 +332,7 @@ class LayersPanel:
         self._empty = ttk.Label(
             self._body,
             text="Fetch an area to see what it contains.",
-            font=("SF Pro Text", 9),
+            font=theme.font("caption"),
             wraplength=260,
         )
         self._empty.pack(anchor="w", pady=4)
@@ -269,7 +360,7 @@ class LayersPanel:
             ttk.Label(
                 self._body,
                 text="Fetch an area to see what it contains.",
-                font=("SF Pro Text", 9),
+                font=theme.font("caption"),
                 wraplength=260,
             ).pack(anchor="w", pady=4)
             return "Nothing to draw"
@@ -278,7 +369,7 @@ class LayersPanel:
             entry.layer_id for group, rows in grouped(scene) for entry in rows if not entry.has_data
         }
         for group, rows in grouped(scene):
-            ttk.Label(self._body, text=group, font=("SF Pro Text", 9, "bold")).pack(anchor="w", pady=(8, 2))
+            ttk.Label(self._body, text=group, font=theme.font("group")).pack(anchor="w", pady=(8, 2))
             for entry in rows:
                 self._layer_row(entry)
         return summarise(scene)
@@ -303,11 +394,18 @@ class LayersPanel:
         # say the fetch found nothing, not to offer a switch that does nothing.
         if not entry.has_data:
             check.state(["disabled"])
-        ttk.Label(row, text=entry.count_text(), font=("SF Pro Text", 9)).pack(side="right")
+        ttk.Label(row, text=entry.count_text(), font=theme.font("caption")).pack(side="right")
 
 
 class StylePicker:
-    """Preset thumbnails drawn from the presets themselves."""
+    """Preset thumbnails drawn from the presets themselves.
+
+    **A grid that wraps, not a strip that scrolls, and every style in it.** The
+    panel's claim is *see it, don't read it*, and showing six of sixteen with
+    the rest behind a dropdown means reading names for ten of them. The columns
+    follow the rail's width, because the rail is resizable and the right number
+    is whatever fits.
+    """
 
     def __init__(
         self,
@@ -315,34 +413,65 @@ class StylePicker:
         names: tuple[str, ...],
         *,
         on_select: Callable[[str], None],
-        columns: int = 3,
+        columns: int | None = None,
     ) -> None:
         self.parent = parent
         self.names = names
         self.on_select = on_select
+        #: None means "as many as fit"; a number pins it, for tests.
         self.columns = columns
         self._canvases: dict[str, tk.Canvas] = {}
         self._selected: str = names[0] if names else ""
+        self._laid_out_for = 0
         self._grid = ttk.Frame(parent)
         self._grid.pack(fill="x")
         self._build()
+        if columns is None:
+            self._grid.bind("<Configure>", self._reflow)
 
-    def _build(self) -> None:
+    def _column_count(self, width: int | None = None) -> int:
+        if self.columns is not None:
+            return self.columns
+        available = width if width is not None else self._grid.winfo_width()
+        # Before the rail has a width, four: the number the sixteen fall into
+        # as a square block.
+        if available <= 1:
+            return 4
+        return grid_columns(available, cell=SWATCH_W + 8)
+
+    def _reflow(self, event: "tk.Event") -> None:
+        """Re-lay the grid when the rail is resized, and not otherwise.
+
+        A `<Configure>` arrives for every pixel of a drag; rebuilding sixteen
+        canvases each time would make resizing the window crawl.
+        """
+        columns = grid_columns(event.width, cell=SWATCH_W + 8)
+        if columns == self._laid_out_for:
+            return
+        self._build(columns)
+
+    def _build(self, columns: int | None = None) -> None:
+        for child in self._grid.winfo_children():
+            child.destroy()
+        self._canvases.clear()
+
+        count = columns if columns is not None else self._column_count()
+        self._laid_out_for = count
         for index, name in enumerate(self.names):
             cell = ttk.Frame(self._grid)
-            cell.grid(row=index // self.columns, column=index % self.columns, padx=3, pady=3, sticky="w")
+            cell.grid(row=index // count, column=index % count, padx=3, pady=3, sticky="w")
             canvas = tk.Canvas(
                 cell,
                 width=SWATCH_W,
                 height=SWATCH_H,
                 highlightthickness=2,
-                highlightbackground="#d0cfca",
+                highlightbackground=theme.current().border,
                 bd=0,
             )
             canvas.pack()
             canvas.bind("<Button-1>", lambda _e, n=name: self.select(n))
             self._canvases[name] = canvas
-            label = ttk.Label(cell, text=_short_name(name), font=("SF Pro Text", 9))
+            label = ttk.Label(cell, text=_short_name(name), font=theme.font("caption"))
             label.pack()
             label.bind("<Button-1>", lambda _e, n=name: self.select(n))
             draw_swatch(canvas, swatch_for(name), SWATCH_W, SWATCH_H)
@@ -359,7 +488,13 @@ class StylePicker:
 
     def _mark_selection(self) -> None:
         for name, canvas in self._canvases.items():
-            canvas.configure(highlightbackground="#2e6bb8" if name == self._selected else "#d0cfca")
+            canvas.configure(
+                highlightbackground=(
+                    theme.current().accent
+                    if name == self._selected
+                    else theme.current().border
+                )
+            )
 
 
 def draw_swatch(canvas: tk.Canvas, swatch: Swatch, width: int, height: int) -> None:
@@ -399,3 +534,8 @@ def _hex(color: RGBAColor) -> str:
 def _short_name(name: str) -> str:
     """Thumbnails are narrow; the first word identifies the preset."""
     return name.split(" ")[0]
+
+
+def _wrapped_lines(text: str, width: int = 34) -> int:
+    """How many lines a reason needs, so the box is neither cropped nor a gap."""
+    return max(1, min(4, -(-len(text) // width)))

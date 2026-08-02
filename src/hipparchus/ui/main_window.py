@@ -5,7 +5,6 @@ from __future__ import annotations
 import base64
 from copy import deepcopy
 from dataclasses import dataclass, field, replace
-import json
 import logging
 import os
 import platform
@@ -15,17 +14,27 @@ import tempfile
 import threading
 import time
 import tkinter as tk
-from tkinter import filedialog, messagebox, ttk
-from urllib.parse import urlencode
-from urllib.request import Request, urlopen
+from tkinter import filedialog, messagebox, simpledialog, ttk
 
+from hipparchus.application import geocoding, places, provenance, session_edit
+from hipparchus.application.coordinate_import import parse as parse_coordinates
+from hipparchus.application.locator import describe_area
 from hipparchus.application.controller import ApplicationController
+from hipparchus.application import fetch_cost
+from hipparchus.application.layer_inventory import fetch_layers
+from hipparchus.application.palette_sheet import recoloured
+from hipparchus.application.palettes import PRESET_OWN, named as palette_named, names as palette_names
 from hipparchus.core.fetch_progress import CancellationToken, FetchReporter
 from hipparchus.application.source_stack import SourceStack
-from hipparchus.application.style_previews import featured_names
-from hipparchus.ui import minimap
-from hipparchus.ui import icons, shortcuts
+from hipparchus.ui import actions, icons, menubar, shortcuts, theme, tooltip
+from hipparchus.ui.about_window import AboutWindow
 from hipparchus.ui.icons import IconButton
+from hipparchus.ui.search_field import SearchField
+from hipparchus.ui.settings_window import SettingsWindow, reveal
+from hipparchus.ui.locator_window import LocatorWindow
+from hipparchus.ui.map_canvas import MapCanvas
+from hipparchus.ui.world_map import WorldMap
+from hipparchus.ui.status_bar import StatusBar
 from hipparchus.ui.panels import LayersPanel, SourcesPanel, StylePicker, section_heading
 from hipparchus.application.presets import (
     ArtisticPreset,
@@ -34,37 +43,30 @@ from hipparchus.application.presets import (
     preset_names,
     resolve_preset_name,
 )
-from hipparchus.application.quality import quality_menu_labels, quality_mode_key, quality_profile
+from hipparchus.application.readiness import why_cannot_render
+from hipparchus.application.quality import (
+    quality_label_for,
+    quality_menu_labels,
+    quality_mode_key,
+    quality_profile,
+)
+from hipparchus.application.session import Area, Session
+from hipparchus.application.session_history import SessionHistory
+from hipparchus.application.viewport import area_to_fetch, shaped_to_window
 from hipparchus.application.preset_store import PresetStore
+from hipparchus.application.style_catalogue import Catalogue, seeded_name, validate_name
 from hipparchus.core.config import AppConfig
+from hipparchus.core.settings_store import SettingsStore, UserSettings
 from hipparchus.data_sources.provider import BBoxQuery
 from hipparchus.export.profiles import MapComposition, SVGExportProfile
-from hipparchus.export.service import SVGExporter
+from hipparchus.export.service import PDFExporter, PNGExporter, SVGExporter
 from hipparchus.plugins.interfaces import LoadedPlugin
 from hipparchus.rendering.engine import Renderer
 from hipparchus.rendering.models import RenderScene, ViewportState
 
-LOCATION_PRESETS: dict[str, tuple[float, float, float, float]] = {
-    "London Center": (-0.15, 51.48, -0.02, 51.56),
-    "Athens Center": (23.68, 37.94, 23.80, 38.03),
-    "New York Midtown": (-74.02, 40.72, -73.94, 40.79),
-    "Paris Core": (2.26, 48.83, 2.38, 48.89),
-    "Tokyo Central": (139.68, 35.65, 139.79, 35.73),
-    "Kyoto Center": (135.73, 34.98, 135.79, 35.03),
-    "San Francisco Downtown": (-122.44, 37.76, -122.39, 37.80),
-    "Venice Historic": (12.31, 45.42, 12.36, 45.45),
-    # Places chosen because they show what the new sources can do: a drowned
-    # caldera, a coastal shelf, a fault zone, a delta at sea level, a monsoon
-    # coast, a highland capital, and an estuary city.
-    "Santorini Caldera": (25.32, 36.33, 25.50, 36.48),
-    "Paphos Coast": (32.36, 34.72, 32.50, 34.83),
-    "San Francisco Bay": (-122.53, 37.70, -122.35, 37.84),
-    "Miami Beach": (-80.32, 25.70, -80.11, 25.86),
-    "Goa Coast": (73.74, 15.38, 74.00, 15.60),
-    "Addis Ababa": (38.65, 8.90, 38.88, 9.10),
-    "Shanghai Bund": (121.35, 31.15, 121.60, 31.33),
-    "Sydney Harbour": (151.14, -33.90, 151.30, -33.80),
-}
+# The saved places live in `application/places.py`, where the bounding
+# boxes are checked and where the ⌘1…⌘9 run is derived from the same list
+# the sidebar shows — two literals could not drift apart if they are one.
 
 LEFT_SIDEBAR_WIDTH = 360
 RIGHT_SIDEBAR_WIDTH = 300
@@ -86,98 +88,9 @@ SAMPLE_SOURCE_PATHS: dict[str, str] = {
 }
 
 
-@dataclass(slots=True, frozen=True)
-class SourceLibraryPreset:
-    """Friendly source preset layered over model/path/AOI settings."""
-
-    label: str
-    model_id: str
-    paths: dict[str, str] = field(default_factory=dict)
-    aoi: tuple[float, float, float, float] | None = None
-    quality_label: str | None = None
-    note: str = ""
-
-
-SOURCE_LIBRARY_PRESETS: tuple[SourceLibraryPreset, ...] = (
-    SourceLibraryPreset(
-        label="OSM Live",
-        model_id="osm_live",
-        note="Online Overpass source. Use any AOI.",
-    ),
-    SourceLibraryPreset(
-        label="Florence PMTiles",
-        model_id="vector_tiles",
-        paths={"vector_tiles": "datasets/pmtiles/firenze.pmtiles"},
-        aoi=(11.20, 43.73, 11.33, 43.82),
-        quality_label="High Preview",
-        note="Offline PMTiles vector sample.",
-    ),
-    SourceLibraryPreset(
-        label="Natural Earth World",
-        model_id="natural_earth_atlas",
-        paths={"natural_earth": "datasets/natural_earth"},
-        aoi=(-180.0, -85.0, 180.0, 85.0),
-        quality_label="High Preview",
-        note="Offline Natural Earth atlas-scale source.",
-    ),
-    SourceLibraryPreset(
-        label="Athens DEM",
-        model_id="terrain_relief",
-        paths={"terrain_dem": "datasets/dem/athens_z11_1158_790.tif"},
-        aoi=(23.5547, 37.8575, 23.7305, 37.9962),
-        quality_label="High Preview",
-        note="Offline GeoTIFF DEM contour source.",
-    ),
-    SourceLibraryPreset(
-        label="Athens Overture",
-        model_id="overture",
-        paths={"overture": "datasets/overture/demo_overture_places_buildings.parquet"},
-        aoi=(23.70, 37.96, 23.76, 38.01),
-        quality_label="High Preview",
-        note="Offline GeoParquet buildings/places fixture.",
-    ),
-    SourceLibraryPreset(
-        label="Simulated Terrain",
-        model_id="simulated_terrain",
-        aoi=(23.5547, 37.8575, 23.7305, 37.9962),
-        quality_label="High Preview",
-        note="Generated relief - synthetic, needs no data file. Any AOI works.",
-    ),
-    SourceLibraryPreset(
-        label="Real Terrain",
-        model_id="terrain_online",
-        aoi=(23.57, 37.81, 23.89, 38.13),
-        quality_label="High Preview",
-        note="Real measured elevation for any area, from public terrain tiles.",
-    ),
-    SourceLibraryPreset(
-        label="Terrain Atlas",
-        model_id="terrain_atlas",
-        aoi=(23.70, 37.95, 23.80, 38.02),
-        quality_label="High Preview",
-        note="Real streets, names and elevation together. Keep the AOI small.",
-    ),
-    SourceLibraryPreset(
-        label="Relief Sheet",
-        model_id="relief_sheet",
-        aoi=(23.5547, 37.8575, 23.7305, 37.9962),
-        quality_label="High Preview",
-        note="Dense synthetic relief. Pair with the Relief Sheet preset. Slower to fetch.",
-    ),
-    SourceLibraryPreset(
-        label="Installed Samples",
-        model_id="hybrid_atlas",
-        paths=SAMPLE_SOURCE_PATHS,
-        aoi=(23.5547, 37.8575, 23.7305, 37.9962),
-        quality_label="High Preview",
-        note="Loads every installed local sample path.",
-    ),
-    SourceLibraryPreset(
-        label="Custom",
-        model_id="osm_live",
-        note="Use the model dropdown and path fields manually.",
-    ),
-)
+# `SourceLibraryPreset` and its eleven bundles are gone: they were the
+# vocabulary the composing source stack replaced, and the last code that
+# reached them went with the settings rail.
 
 PAPER_PRESETS: dict[str, tuple[int, int]] = {
     "Canvas": (0, 0),
@@ -187,40 +100,9 @@ PAPER_PRESETS: dict[str, tuple[int, int]] = {
     "Poster": (5400, 7200),
 }
 
-THEME_PALETTES: dict[str, dict[str, str]] = {
-    "light": {
-        "bg": "#f2f2f2",
-        "panel": "#f7f7f7",
-        "panel_alt": "#ffffff",
-        "text": "#151515",
-        "muted": "#555555",
-        "border": "#d0d0d0",
-        "button": "#ffffff",
-        "button_active": "#e7eef8",
-        "field": "#ffffff",
-        "field_text": "#151515",
-        "select": "#d7e8ff",
-        "select_text": "#111111",
-        "canvas_bg": "#f5f5f5",
-        "canvas_border": "#d0d0d0",
-    },
-    "dark": {
-        "bg": "#17191f",
-        "panel": "#20232b",
-        "panel_alt": "#252936",
-        "text": "#f2f5f8",
-        "muted": "#b7beca",
-        "border": "#3d4350",
-        "button": "#2f3543",
-        "button_active": "#3c465a",
-        "field": "#11141b",
-        "field_text": "#f8fafc",
-        "select": "#44648f",
-        "select_text": "#ffffff",
-        "canvas_bg": "#f3f3f1",
-        "canvas_border": "#636b78",
-    },
-}
+# The palette, the accent and the type scale live in `ui/theme.py`, where they
+# can be checked: that body text clears a contrast floor on its own ground, and
+# that the accent drawn on the map is chosen against the map.
 
 
 @dataclass
@@ -232,11 +114,17 @@ class MainWindow:
     controller: ApplicationController
     renderer: Renderer
     default_preset: ArtisticPreset = field(default_factory=default_preset)
+    #: What the plugin loader could not load, and why. Recorded since the
+    #: loader was written and never once shown.
+    plugin_load_errors: list[str] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         self._root = tk.Tk()
         self._theme_mode = self.config.theme_mode
         self._current_scene: RenderScene | None = None
+        #: The area the map on screen was drawn for. What tells a pan apart
+        #: from a choice when Render map is pressed — see `area_to_fetch`.
+        self._rendered_area: tuple[float, float, float, float] | None = None
         self._canvas_image: tk.PhotoImage | None = None
         self._canvas_image_tempfile: Path | None = None
         self._pending_queue: queue.Queue[tuple[str, object]] = queue.Queue()
@@ -245,29 +133,28 @@ class MainWindow:
         self._select_rect: int | None = None
         self._select_armed = False
         self._redraw_job: str | None = None
+        self._queue_job: str | None = None
         self._render_request_id = 0
         self._render_inflight = False
         self._busy_counter = 0
-        self._scroll_x = 0.5
-        self._scroll_y = 0.5
-        self._scroll_step = 0.06
-        self._scroll_span_pixels = 1800.0
         self._fetch_started_at: float | None = None
         self._debug_enabled_var = tk.BooleanVar(value=True)
+        #: The same answer, readable from any thread. Kept in step by a trace
+        #: on the variable, which runs on the UI thread where it is safe.
+        self._debug_enabled = True
+        self._debug_enabled_var.trace_add(
+            "write", lambda *_args: self._follow_debug_setting()
+        )
         self._perf_summary_var = tk.StringVar(value="No diagnostics yet.")
         self._debug_log_file = self.config.cache_dir / "hipparchus_debug.log"
 
         self._layer_visibility_vars: dict[str, tk.BooleanVar] = {}
+        self._settings_store = SettingsStore(self.config.settings_file)
+        self._settings = self._settings_store.load()
         self._preset_store = PresetStore(self.config.presets_file)
         self._custom_presets = self._load_custom_presets()
         self._preset_options = sorted({*preset_names(), *self._custom_presets.keys()})
-        self._status_var = tk.StringVar(value="Ready")
-        self._cache_status_var = tk.StringVar(value="Cache: n/a")
-        self._progress_label_var = tk.StringVar(value="Idle")
-        self._provider_status_var = tk.StringVar(value="")
         self._quality_var = tk.StringVar(value="Fast Preview")
-        self._source_library_var = tk.StringVar(value=SOURCE_LIBRARY_PRESETS[0].label)
-        self._source_library_note_var = tk.StringVar(value=SOURCE_LIBRARY_PRESETS[0].note)
         self._paper_preset_var = tk.StringVar(value="Canvas")
         self._paper_orientation_var = tk.StringVar(value="Landscape")
         self._map_title_var = tk.StringVar(value="")
@@ -283,8 +170,6 @@ class MainWindow:
         self._map_model_label_to_id = {str(model["label"]): str(model["id"]) for model in self._map_models}
         self._map_model_id_to_label = {str(model["id"]): str(model["label"]) for model in self._map_models}
         self._map_models_by_id = {str(model["id"]): tuple(model["providers"]) for model in self._map_models}
-        active_model = self.controller.data_source_manager.get_active_map_model()
-        self._map_model_var = tk.StringVar(value=self._map_model_id_to_label.get(active_model, "OSM Live"))
         # A map is built from sources, and sources stack. This replaces the
         # model dropdown, the source library and the relief toggle, which were
         # three vocabularies for one idea.
@@ -310,25 +195,12 @@ class MainWindow:
         )
         self._composition_var = tk.StringVar(value="OpenStreetMap")
         self._location_preset_var = tk.StringVar(value="London Center")
-        self._location_query_var = tk.StringVar(value="")
-        self._new_preset_name_var = tk.StringVar(value="")
-        # Get Overpass settings from data source manager
-        overpass_settings = self.controller.data_source_manager.get_overpass_settings()
-        self._provider_endpoint_var = tk.StringVar(value=overpass_settings["endpoint"])
-        self._provider_rps_var = tk.DoubleVar(value=overpass_settings["requests_per_second"])
-        self._provider_timeout_var = tk.DoubleVar(value=overpass_settings["timeout_seconds"])
-        optional_paths = self.controller.data_source_manager.get_optional_source_paths()
-        self._optional_source_vars = {
-            "local_osm_pbf": tk.StringVar(value=optional_paths.get("local_osm_pbf", "")),
-            "vector_tiles": tk.StringVar(value=optional_paths.get("vector_tiles", "")),
-            "natural_earth": tk.StringVar(value=optional_paths.get("natural_earth", "")),
-            "overture": tk.StringVar(value=optional_paths.get("overture", "")),
-            "terrain_dem": tk.StringVar(value=optional_paths.get("terrain_dem", "")),
-        }
+        # Colour, separate from the style. A preset is a whole sheet, so "the
+        # same map in other colours" was not something that could be asked for.
+        self._palette_var = tk.StringVar(value=PRESET_OWN)
         device_scale = self._auto_device_scale()
         if hasattr(self.renderer, "device_scale"):
             setattr(self.renderer, "device_scale", device_scale)
-        self._device_scale_var = tk.DoubleVar(value=float(device_scale))
 
         self._aoi_vars = {
             "min_lon": tk.StringVar(value="-0.15"),
@@ -339,13 +211,29 @@ class MainWindow:
 
         self._logger = self._configure_diagnostics_logger()
 
+        # Undo, and what it is allowed to take back. `_restoring` guards the
+        # write-back: putting a remembered session on screen fires the very
+        # traces that record changes, and a restore is not an edit.
+        self._restoring = False
+        self._menubar = None
+        self._render_tip = None
+        self._locator_window = None
+        self._settings_window = None
+        self._about = None
+        self._history = SessionHistory(Session())
+
         self._build_window()
         self._build_layout()
         self._apply_theme()
         self._refresh_minimap()
-        self._sync_label_font_to_renderer()
-        self._bind_shortcuts()
-        self._root.after(50, self._drain_callback_queue)
+        self._build_menus()
+        self._restore_session()
+        self._watch_for_changes()
+        self._refresh_render_button()
+        # Closing the window is the last chance to remember what it was doing.
+        self._root.protocol("WM_DELETE_WINDOW", self._on_close)
+        self._root.after(120, self._show_about_at_launch)
+        self._queue_job = self._root.after(50, self._drain_callback_queue)
         if self.config.start_area or self.config.fetch_on_start:
             self._root.after(300, self._maybe_fetch_on_start)
 
@@ -442,8 +330,24 @@ class MainWindow:
             logger.addHandler(file_handler)
         return logger
 
+    def _follow_debug_setting(self) -> None:
+        """Copy the menu's answer somewhere the worker threads may read it."""
+        try:
+            self._debug_enabled = bool(self._debug_enabled_var.get())
+        except tk.TclError:  # pragma: no cover - the window is going away
+            self._debug_enabled = False
+
     def _debug(self, message: str, *args: object) -> None:
-        if not self._debug_enabled_var.get():
+        """Log a line, if debug logging is on.
+
+        Reads a plain bool rather than the Tk variable behind it, because this
+        is called from the fetch and render threads. Asking a `BooleanVar` for
+        its value calls into the Tcl interpreter, and doing that from any thread
+        but the one that made it raises "main thread is not in main loop" —
+        which the render worker then caught and turned into a modal error
+        dialogue, on top of whatever the person was doing.
+        """
+        if not self._debug_enabled:
             return
         self._logger.info(message, *args)
 
@@ -460,7 +364,7 @@ class MainWindow:
         top.grid_columnconfigure(0, weight=1)
         top.grid_columnconfigure(1, weight=0)
 
-        ttk.Label(top, text="Hipparchus", font=("SF Pro Text", 15, "bold")).grid(row=0, column=0, sticky="w")
+        ttk.Label(top, text="Hipparchus", font=theme.font("title")).grid(row=0, column=0, sticky="w")
         ttk.Button(top, text="Dark/Light", command=self._toggle_theme).grid(row=0, column=1, sticky="e")
 
         # Controls using pack for reliable layout
@@ -468,32 +372,37 @@ class MainWindow:
         controls.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(8, 0))
 
         # Left side - Location and Fetch
-        ttk.Label(controls, text="Location:").pack(side="left", padx=(0, 4))
-        self._location_entry = ttk.Entry(controls, textvariable=self._location_query_var, width=18)
-        self._location_entry.pack(side="left", padx=(0, 6))
-        self._location_entry.bind("<Return>", lambda _e: self._on_location_lookup_clicked())
-        ttk.Button(controls, text="Find", command=self._on_location_lookup_clicked).pack(side="left", padx=(0, 4))
-        ttk.Button(
+        # Results are offered, not applied. The field used to take the first
+        # answer and silently move the frame, so searching for Athens and
+        # getting Athens, Georgia looked like the application misbehaving.
+        self._search = SearchField(
+            controls,
+            on_search=self._on_search,
+            on_chosen=self._on_search_result_chosen,
+            on_saved_place=self._use_saved_place,
+        )
+        self._search.pack(side="left", padx=(0, 8))
+        self._render_button = ttk.Button(
             controls,
             text=shortcuts.with_accelerator("Render map"),
             command=self._on_fetch_clicked,
-        ).pack(side="left", padx=(0, 4))
+        )
+        self._render_button.pack(side="left", padx=(0, 4))
+        # The reason is on the button that will not work, so hovering it answers
+        # the question instead of a click having to.
+        self._render_tip = tooltip.attach(self._render_button, "Fetch and draw the chosen area.")
+        IconButton(controls, "map", command=self._open_locator, size=26,
+                   tooltip="Open the Locator in its own floating window").pack(side="left", padx=(0, 4))
         IconButton(controls, "marquee", command=self._arm_area_selection, size=26,
                    tooltip="Draw a new area on the map").pack(side="left", padx=(0, 4))
         ttk.Button(controls, text="Draw area", command=self._arm_area_selection).pack(side="left", padx=(0, 12))
 
-        # Middle - Preset
-        ttk.Label(controls, text="Preset:").pack(side="left", padx=(0, 4))
-        self._preset_menu = ttk.OptionMenu(controls, self._preset_var, self._preset_var.get(), *self._preset_options)
-        self._preset_menu.pack(side="left", padx=(0, 8))
+        # Preset and Quality are not here. They belong beside the swatches
+        # that show what a preset looks like, and a second copy of a control is
+        # a second place for it to be wrong: this one held its own stale list,
+        # because _refresh_preset_menu only ever reached the other.
 
-        # Middle - Quality
-        ttk.Label(controls, text="Quality:").pack(side="left", padx=(0, 4))
-        quality_labels = quality_menu_labels()
-        self._quality_menu = ttk.OptionMenu(controls, self._quality_var, quality_labels[0], *quality_labels)
-        self._quality_menu.pack(side="left", padx=(0, 8))
-
-        ttk.Label(controls, textvariable=self._composition_var, font=("SF Pro Text", 10)).pack(side="left", padx=(4, 8))
+        ttk.Label(controls, textvariable=self._composition_var, font=theme.font("label")).pack(side="left", padx=(4, 8))
 
         # Right side - Export
         ttk.Button(controls, text="Export SVG", command=self._on_export_clicked).pack(side="right")
@@ -509,34 +418,58 @@ class MainWindow:
         right_outer, self._right_sidebar_canvas, right = self._create_scrollable_frame(root, RIGHT_SIDEBAR_WIDTH)
         right_outer.grid(row=1, column=2, sticky="ns")
 
+        # One row per source rather than one line for the lot: a fetch can take
+        # five minutes while a single line says "Idle", and a failure that looks
+        # like a wait is a five-minute lie.
+        self._status = StatusBar(
+            root, on_cancel=self._on_cancel_fetch, mark_path=self.config.makers_mark
+        )
+        self._status.grid(row=2, column=0, columnspan=3, sticky="ew")
+
         self._build_left_sidebar(left)
         self._build_center_canvas(center)
         self._build_right_sidebar(right)
-        self._provider_status_var.set(self._format_provider_status())
 
-        statusbar = ttk.Frame(root, padding=(12, 6, 12, 8))
-        statusbar.grid(row=2, column=0, columnspan=3, sticky="ew")
-        statusbar.grid_columnconfigure(0, weight=1)
-        ttk.Label(statusbar, textvariable=self._status_var).grid(row=0, column=0, sticky="w")
-        right = ttk.Frame(statusbar)
-        right.grid(row=0, column=1, sticky="e")
-        self._progress = ttk.Progressbar(right, mode="indeterminate", length=120)
-        self._progress.pack(side="left", padx=(0, 8))
-        ttk.Label(right, textvariable=self._progress_label_var, font=("SF Pro Text", 10)).pack(side="left", padx=(0, 8))
-        self._cancel_button = ttk.Button(right, text="Cancel", width=8, command=self._on_cancel_fetch)
-        self._cancel_button.pack(side="left", padx=(0, 8))
-        self._cancel_button.state(["disabled"])
-        ttk.Label(right, textvariable=self._cache_status_var).pack(side="left")
 
     def _build_left_sidebar(self, parent: ttk.Frame) -> None:
         # FRAME: where you are, and how big the frame is. The eight nudge
         # buttons that used to describe an area without ever showing it are
         # replaced by the locator plus Draw area on the map itself.
-        ttk.Label(parent, text="FRAME", font=("SF Pro Text", 10, "bold")).pack(anchor="w", pady=(0, 6))
-        self._minimap = tk.Canvas(parent, width=200, height=104, highlightthickness=1, bd=0)
-        self._minimap.pack(fill="x", pady=(0, 2))
+        ttk.Label(parent, text="FRAME", font=theme.font("section")).pack(anchor="w", pady=(0, 6))
+        # A real map rather than a graticule with a rectangle on it. Before
+        # anything has been fetched the main canvas is blank, so this is the
+        # only place an area can be chosen by looking at the world rather than
+        # by naming it or typing four numbers.
+        #
+        # In a strip this narrow there is no room to aim at anything, so what
+        # is shown *is* the area: panning and zooming choose.
+        self._locator = WorldMap(
+            parent, on_area_changed=self._on_locator_moved, height=150
+        )
+        self._locator.pack(fill="x", pady=(0, 2))
+
+        row = ttk.Frame(parent)
+        row.pack(fill="x", pady=(0, 8))
         self._minimap_caption = tk.StringVar(value="")
-        ttk.Label(parent, textvariable=self._minimap_caption, font=("SF Pro Text", 9)).pack(anchor="w", pady=(0, 8))
+        ttk.Label(
+            row, textvariable=self._minimap_caption, font=theme.font("caption")
+        ).pack(side="left")
+        IconButton(
+            row, "globe", command=self._locator.show_whole_world, size=18,
+            tooltip="Back to the whole world",
+        ).pack(side="right")
+        IconButton(
+            row, "map", command=self._open_locator, size=18,
+            tooltip="Open the Locator in its own window, big enough to click a place on",
+        ).pack(side="right", padx=(0, 6))
+        IconButton(
+            row, "plus", command=lambda: self._locator.zoom(1.6), size=18,
+            tooltip="Zoom in",
+        ).pack(side="right", padx=(0, 2))
+        IconButton(
+            row, "minus", command=lambda: self._locator.zoom(1 / 1.6), size=18,
+            tooltip="Zoom out",
+        ).pack(side="right", padx=(0, 2))
 
         readout = ttk.Frame(parent)
         readout.pack(fill="x")
@@ -544,16 +477,30 @@ class MainWindow:
         for row, (label, key) in enumerate(
             (("North", "max_lat"), ("South", "min_lat"), ("West", "min_lon"), ("East", "max_lon"))
         ):
-            ttk.Label(readout, text=label, font=("SF Pro Text", 10)).grid(row=row, column=0, sticky="w", pady=1)
+            ttk.Label(readout, text=label, font=theme.font("label")).grid(row=row, column=0, sticky="w", pady=1)
             ttk.Label(
                 readout,
                 textvariable=self._aoi_vars[key],
-                font=("SF Pro Text", 10),
+                font=theme.font("label"),
                 anchor="e",
             ).grid(row=row, column=1, sticky="e", pady=1)
 
         self._coords_expanded = tk.BooleanVar(value=False)
-        ttk.Button(parent, text="Edit coordinates", command=self._toggle_coordinate_editor).pack(fill="x", pady=(8, 0))
+        row = ttk.Frame(parent)
+        row.pack(fill="x", pady=(8, 0))
+        ttk.Button(
+            row, text="Edit coordinates", command=self._toggle_coordinate_editor
+        ).pack(side="left", fill="x", expand=True)
+        # ⇧⌘V drives a control that is also on screen, which is the rule the
+        # whole keyboard map is held to.
+        IconButton(
+            row, "clipboard", command=self._paste_coordinates, size=22,
+            tooltip=(
+                "Read the clipboard for an area: a bounding box in this app's own "
+                "west, south, east, north order, two corners, a single point, or a "
+                "Google or Apple Maps link."
+            ),
+        ).pack(side="left", padx=(4, 0))
 
         # Built once and shown on demand, so the exact numbers stay reachable
         # without occupying the rail by default.
@@ -561,52 +508,314 @@ class MainWindow:
         for row, (label, key) in enumerate(
             (("North", "max_lat"), ("South", "min_lat"), ("West", "min_lon"), ("East", "max_lon"))
         ):
-            ttk.Label(self._coord_editor, text=label, width=6, font=("SF Pro Text", 9)).grid(row=row, column=0, sticky="w", pady=2)
+            ttk.Label(self._coord_editor, text=label, width=6, font=theme.font("caption")).grid(row=row, column=0, sticky="w", pady=2)
             ttk.Entry(self._coord_editor, textvariable=self._aoi_vars[key], width=12).grid(row=row, column=1, sticky="ew", pady=2)
         self._coord_editor.grid_columnconfigure(1, weight=1)
 
         ttk.Separator(parent, orient="horizontal").pack(fill="x", pady=12)
-        ttk.Label(parent, text="SAVED PLACES", font=("SF Pro Text", 10, "bold")).pack(anchor="w", pady=(0, 6))
+        ttk.Label(parent, text="SAVED PLACES", font=theme.font("section")).pack(anchor="w", pady=(0, 6))
         self._places_body = ttk.Frame(parent)
         self._places_body.pack(fill="x")
         self._rebuild_saved_places()
 
-        ttk.Separator(parent, orient="horizontal").pack(fill="x", pady=12)
-        ttk.Label(parent, text="VIEW", font=("SF Pro Text", 10, "bold")).pack(anchor="w", pady=(0, 6))
-        rotation_frame = ttk.Frame(parent)
-        rotation_frame.pack(fill="x", pady=(0, 8))
-        rotation_frame.grid_columnconfigure(1, weight=1)
-        ttk.Label(rotation_frame, text="Rotation", font=("SF Pro Text", 10)).grid(row=0, column=0, sticky="w", padx=(0, 4))
-        self._rotation_var = tk.DoubleVar(value=0.0)
-        ttk.Scale(
-            rotation_frame,
-            from_=-180,
-            to=180,
-            variable=self._rotation_var,
-            orient="horizontal",
-            command=self._on_rotation_changed,
-        ).grid(row=0, column=1, sticky="ew", padx=(0, 4))
-        IconButton(rotation_frame, "rotate-left", command=lambda: self._rotate_view(-15), size=22,
-                   tooltip="Rotate anticlockwise").grid(row=0, column=2, padx=(0, 2))
-        IconButton(rotation_frame, "rotate-right", command=lambda: self._rotate_view(15), size=22,
-                   tooltip="Rotate clockwise").grid(row=0, column=3, padx=(0, 2))
-        ttk.Button(rotation_frame, text="0°", width=3, command=self._reset_rotation).grid(row=0, column=4)
+        # No VIEW section: turning the view is a control for the map, and it
+        # lives on the map now, in the same stack as the zooming. Two halves of
+        # "look at this differently" in two different places was one too many.
 
-    def _bind_shortcuts(self) -> None:
-        """Register the keyboard accelerators.
+    # -- the session, and undo ------------------------------------------------
 
-        ``bind_all`` rather than ``bind``: the shortcut has to work while the
-        focus sits in the location field or a coordinate entry, which is
-        precisely when someone reaches for it.
+    def _restore_session(self) -> None:
+        """Open where you left off.
+
+        A saved session is adopted before the history starts, so the state it
+        restores is the beginning rather than something ⌘Z can undo into.
         """
-        for sequence in shortcuts.update_map_sequences():
-            self._root.bind_all(sequence, self._on_update_map_shortcut)
+        saved = Session.load(self.config.session_file)
+        if saved != Session():
+            self._apply_session(saved)
+        self._history = SessionHistory(self.current_session())
+        self._refresh_undo_menu()
 
-    def _on_update_map_shortcut(self, _event: "tk.Event | None" = None) -> str:
-        """Update the map from the keyboard, as if the button were pressed."""
-        self._on_fetch_clicked()
-        # Stop the plain Return binding on the focused widget firing as well.
-        return "break"
+    def _watch_for_changes(self) -> None:
+        """Notice the choices that change through a variable rather than a call.
+
+        The preset, the palette, the quality and the four coordinates are all
+        written from several places — a saved place, a search result, a drawn
+        area — and a trace catches every one of them without each having to
+        remember to say so.
+        """
+        for var in (
+            self._preset_var,
+            self._palette_var,
+            self._quality_var,
+            *self._aoi_vars.values(),
+        ):
+            var.trace_add("write", lambda *_: self._record())
+
+
+    def current_session(self) -> Session:
+        """Every choice the window holds, as one value.
+
+        Read rather than tracked, so it cannot drift from what is on screen.
+        Pan, zoom and rotation are deliberately absent: they frame the screen,
+        never the file.
+        """
+        settings: dict[str, float] = {}
+        choices: dict[str, str] = {}
+        for definition in self.source_stack.definitions:
+            for setting in self.source_stack.settings_for(definition.source_id):
+                field = f"{definition.source_id}.{setting.key}"
+                if isinstance(setting.value, (int, float)) and not isinstance(setting.value, bool):
+                    settings[field] = float(setting.value)
+                else:
+                    choices[field] = str(setting.value)
+
+        return Session(
+            area=Area(*self._current_aoi_values()),
+            place_name=self._location_preset_var.get(),
+            enabled_sources=self.source_stack.enabled_ids(),
+            source_paths={
+                definition.source_id: self.source_stack.path(definition.source_id)
+                for definition in self.source_stack.definitions
+                if self.source_stack.path(definition.source_id)
+            },
+            source_settings=settings,
+            source_choices=choices,
+            preset_name=self._preset_var.get(),
+            palette_name=self._palette_var.get(),
+            quality_key=quality_mode_key(self._quality_var.get()),
+            hidden_layers=tuple(
+                layer_id
+                for layer_id, var in self._layer_visibility_vars.items()
+                if not bool(var.get())
+            ),
+        )
+
+    def _record(self) -> None:
+        """Note whatever just changed, if anything did.
+
+        One place rather than a call at every change point that has to remember
+        what to call itself: the name comes from comparing two sessions, which
+        is a rule that can be checked without a window.
+        """
+        if self._restoring:
+            return
+        after = self.current_session()
+        described = session_edit.describe(self._history.current.session, after)
+        if described is None:
+            return
+        self._history.record(
+            after, described.action, coalescing_key=described.coalescing_key
+        )
+        self._refresh_undo_menu()
+        self._refresh_render_button()
+
+    def _refresh_undo_menu(self) -> None:
+        """Say what ⌘Z would take back, rather than only that it exists."""
+        if self._menubar is None:
+            return
+        undo_name = self._history.undo_action_name
+        redo_name = self._history.redo_action_name
+        menubar.set_label(
+            self._menubar, "undo",
+            f"Undo {undo_name}" if undo_name else "Undo",
+            enabled=self._history.can_undo,
+        )
+        menubar.set_label(
+            self._menubar, "redo",
+            f"Redo {redo_name}" if redo_name else "Redo",
+            enabled=self._history.can_redo,
+        )
+
+    def _on_undo(self) -> None:
+        self._travel(self._history.undo())
+
+    def _on_redo(self) -> None:
+        self._travel(self._history.redo())
+
+    def _travel(self, snapshot) -> None:
+        if snapshot is None:
+            return
+        self._apply_session(snapshot.session)
+        scene = self._history.scene(snapshot.scene_token)
+        if scene is not None:
+            self._apply_scene(scene, "undo")
+        elif snapshot.scene_token is not None:
+            # Honest rather than silent: undo never re-fetches, so a map that
+            # has been let go stays gone until Render map draws it again.
+            self._status.set_message("That map is no longer held — press Render map to draw it again.")
+        self._refresh_undo_menu()
+
+    def _apply_session(self, session: Session) -> None:
+        """Put a remembered set of choices back on screen.
+
+        Guarded, because writing to the variables fires the very traces that
+        record changes, and a restore is not an edit.
+        """
+        self._restoring = True
+        try:
+            if session.area.bbox is not None:
+                self._set_aoi(*session.area.bbox)
+            self._location_preset_var.set(session.place_name)
+            for definition in self.source_stack.definitions:
+                self.source_stack.set_enabled(
+                    definition.source_id, definition.source_id in session.enabled_sources
+                )
+                path = session.source_paths.get(definition.source_id, "")
+                if path:
+                    self.source_stack.set_path(definition.source_id, path)
+            for field, value in {**session.source_settings, **session.source_choices}.items():
+                source_id, _, key = field.rpartition(".")
+                if source_id:
+                    self.source_stack.set_setting(source_id, key, value)
+            self._preset_var.set(session.preset_name)
+            self._palette_var.set(session.palette_name)
+            self._quality_var.set(quality_label_for(session.quality_key))
+            for layer_id, var in self._layer_visibility_vars.items():
+                var.set(layer_id not in session.hidden_layers)
+
+            if self._sources_panel is not None:
+                self._sources_panel.rebuild()
+            if self._style_picker is not None:
+                self._style_picker.set_selected(session.preset_name)
+            self._rebuild_saved_places()
+            self._refresh_minimap()
+            self._on_visibility_changed()
+        finally:
+            self._restoring = False
+
+    def _save_session(self) -> None:
+        try:
+            self.current_session().save(self.config.session_file)
+        except OSError as exc:  # noqa: BLE001
+            self._logger.warning("could not save the session: %s", exc)
+
+    def _on_close(self) -> None:
+        self._save_session()
+        # The callback pump reschedules itself every 60 ms; destroying the
+        # interpreter with a tick pending prints a Tcl error at the moment of
+        # quitting, which is the worst moment to look broken.
+        for job in (self._queue_job, self._redraw_job):
+            if job is not None:
+                try:
+                    self._root.after_cancel(job)
+                except tk.TclError:
+                    pass
+        self._queue_job = None
+        self._redraw_job = None
+        self._root.destroy()
+
+    def _build_menus(self) -> None:
+        """Hand the menu bar the window's verbs.
+
+        Every one of them is a control that also exists on screen: a shortcut
+        for something with no button is a secret, not a feature. The menu and
+        the button call the same function rather than each doing it themselves
+        — two copies of an action become two behaviours within a release.
+
+        The menu also owns the key bindings, so an item cannot advertise ⌘E and
+        bind nothing: Tk's ``accelerator=`` draws the shortcut and binds
+        nothing at all.
+        """
+        self._actions = actions.Actions()
+        for key, handler in (
+            ("undo", self._on_undo),
+            ("redo", self._on_redo),
+            ("render_map", self._on_fetch_clicked),
+            ("cancel_fetch", self._on_cancel_fetch),
+            ("open_locator", self._open_locator),
+            ("search_place", self._focus_place_search),
+            ("draw_area", self._arm_area_selection),
+            ("paste_coordinates", self._paste_coordinates),
+            ("export_svg", self._on_export_clicked),
+            ("export_pdf", self._on_export_pdf),
+            ("export_png", self._on_export_png),
+            ("zoom_in", lambda: self._zoom_view(1.5)),
+            ("zoom_out", lambda: self._zoom_view(0.67)),
+            ("fit_window", self._reset_view),
+            ("rotate_left", lambda: self._rotate_view(-15)),
+            ("rotate_right", lambda: self._rotate_view(15)),
+            ("reset_rotation", self._reset_rotation),
+            ("toggle_theme", self._toggle_theme),
+            ("settings", self._open_settings),
+            ("about", self._open_about),
+        ):
+            self._actions.register(key, handler)
+
+        self._menubar = menubar.build(
+            self._root, self._actions, on_place=self._use_saved_place
+        )
+        self._refresh_undo_menu()
+
+    def _open_locator(self) -> None:
+        """The Locator, in a window big enough to click a place on.
+
+        Built on first use and kept afterwards, so a second press brings the
+        same window back still showing wherever it was left — rebuilding it
+        would start over at the whole world every time, which is the opposite
+        of a locator.
+        """
+        if self._locator_window is None:
+            self._locator_window = LocatorWindow(
+                self._root,
+                on_area_chosen=self._on_locator_chose,
+                on_render=self._on_fetch_clicked,
+                current_area=self._area_or_none,
+            )
+        self._locator_window.show()
+
+    def _area_or_none(self) -> tuple[float, float, float, float] | None:
+        try:
+            return self._current_aoi_values()
+        except (ValueError, KeyError):
+            return None
+
+    def _on_locator_chose(self, bounds: tuple[float, float, float, float]) -> None:
+        """A place clicked, or a rectangle drawn, in the floating window."""
+        self._set_aoi(*bounds)
+        self._location_preset_var.set("")
+        self._minimap_caption.set(describe_area(bounds))
+        if self._locator is not None:
+            self._locator.show(bounds)
+
+    def _paste_coordinates(self) -> None:
+        """Read the clipboard for an area.
+
+        Nobody has four numbers ready to type into four separate boxes; they
+        have a bbox, two corners, a point, or a map link. Anything that is not
+        clearly a coordinate leaves the frame alone — moving it somewhere
+        arbitrary on a sentence that happened to contain numbers would be worse
+        than doing nothing.
+        """
+        try:
+            text = self._root.clipboard_get()
+        except tk.TclError:
+            self._status.set_message("There is nothing on the clipboard.", error=True)
+            return
+
+        area = parse_coordinates(text)
+        if area is None:
+            self._status.set_message(
+                "That does not look like a coordinate. A bounding box, two "
+                "corners, a point, or a map link will all work.",
+                error=True,
+            )
+            return
+
+        self._set_aoi(*area)
+        self._location_preset_var.set("")
+        self._minimap_caption.set(describe_area(area))
+        if self._locator is not None:
+            self._locator.show(area)
+        self._status.set_message(f"Frame set from the clipboard · {describe_area(area)}")
+
+    def _focus_place_search(self) -> None:
+        """Put the cursor in the search box, ready to type over what is there.
+
+        ⌘F has somewhere to land only because the box is on screen; that is the
+        rule, not a coincidence.
+        """
+        self._search.focus()
 
     def _toggle_coordinate_editor(self) -> None:
         """Show or hide the exact coordinates.
@@ -626,7 +835,8 @@ class MainWindow:
         for child in self._places_body.winfo_children():
             child.destroy()
         current = self._location_preset_var.get()
-        for name, bounds in LOCATION_PRESETS.items():
+        for place in places.PLACES:
+            name, bounds = place.name, place.bbox
             row = ttk.Frame(self._places_body)
             row.pack(fill="x", pady=1)
             marker = "•  " if name == current else "    "
@@ -636,7 +846,7 @@ class MainWindow:
                 command=lambda n=name: self._use_saved_place(n),
             ).pack(side="left", fill="x", expand=True)
             span = abs(bounds[2] - bounds[0])
-            ttk.Label(row, text=f"{span:.2f}°", font=("SF Pro Text", 9)).pack(side="right", padx=(4, 0))
+            ttk.Label(row, text=f"{span:.2f}°", font=theme.font("caption")).pack(side="right", padx=(4, 0))
 
     def _use_saved_place(self, name: str) -> None:
         self._location_preset_var.set(name)
@@ -645,69 +855,42 @@ class MainWindow:
 
 
     def _build_center_canvas(self, parent: ttk.Frame) -> None:
-        ttk.Label(parent, text="Map Preview", font=("SF Pro Text", 12, "bold")).grid(row=0, column=0, sticky="w", pady=(0, 8))
-        canvas_wrap = ttk.Frame(parent)
-        canvas_wrap.grid(row=1, column=0, sticky="nsew")
-        canvas_wrap.grid_rowconfigure(0, weight=1)
-        canvas_wrap.grid_columnconfigure(0, weight=1)
+        """The map, which owns its own viewport and its own pointing.
 
-        self._canvas = tk.Canvas(
-            canvas_wrap,
-            background=self._canvas_surround_color(),
-            highlightthickness=1,
-            highlightbackground="#d0d0d0",
+        Everything that was here — pan, zoom, the marquee, the control stack,
+        the keyboard — lives in `ui/map_canvas.py` now, where it can be tested
+        against a real canvas without a render pipeline behind it.
+        """
+        ttk.Label(parent, text="Map Preview", font=theme.font("heading")).grid(
+            row=0, column=0, sticky="w", pady=(0, 8)
         )
-        self._canvas.grid(row=0, column=0, sticky="nsew")
-        self._v_scroll = ttk.Scrollbar(canvas_wrap, orient="vertical", command=self._on_vscroll)
-        self._v_scroll.grid(row=0, column=1, sticky="ns")
-        self._h_scroll = ttk.Scrollbar(canvas_wrap, orient="horizontal", command=self._on_hscroll)
-        self._h_scroll.grid(row=1, column=0, sticky="ew")
-        self._sync_scrollbars()
+
+        self._map = MapCanvas(
+            parent,
+            renderer=self.renderer,
+            scene=lambda: self._current_scene,
+            background=self._canvas_surround_color,
+            on_redraw=self._schedule_redraw,
+            on_area_drawn=self._on_area_drawn,
+            on_status=self._status.set_message,
+        )
+        self._map.grid(row=1, column=0, sticky="nsew")
+        self._canvas = self._map.widget
+
         self._canvas.create_text(
             450,
             280,
             text="Fetch an area to render artistic map structures",
-            fill="#555555",
-            font=("SF Pro Text", 13),
+            fill=theme.current().muted,
+            font=theme.font("lead"),
             justify="center",
             tags=("placeholder",),
         )
 
-        # Drawing an area: Option-drag, Shift-drag, or arm the toolbar button.
-        # Three ways in, because modifier handling differs across platforms and
-        # a feature nobody can find is a feature nobody has.
-        for sequence in ("<Alt-ButtonPress-1>", "<Option-ButtonPress-1>", "<Shift-ButtonPress-1>"):
-            self._canvas.bind(sequence, self._on_select_start)
-        for sequence in ("<Alt-B1-Motion>", "<Option-B1-Motion>", "<Shift-B1-Motion>"):
-            self._canvas.bind(sequence, self._on_select_move)
-        for sequence in ("<Alt-ButtonRelease-1>", "<Option-ButtonRelease-1>", "<Shift-ButtonRelease-1>"):
-            self._canvas.bind(sequence, self._on_select_end)
-
-        self._canvas.bind("<ButtonPress-1>", self._on_drag_start)
-        self._canvas.bind("<B1-Motion>", self._on_drag_move)
-        self._canvas.bind("<ButtonRelease-1>", self._on_drag_end)
-        self._canvas.bind("<MouseWheel>", self._on_mouse_wheel)
-        self._canvas.bind("<Button-4>", self._on_mouse_wheel_linux)
-        self._canvas.bind("<Button-5>", self._on_mouse_wheel_linux)
-        # Keyboard shortcuts for zoom
-        # Zoom lives on the map, where the mockup puts it.
-        controls = tk.Frame(canvas_wrap, bg="#ffffff", highlightthickness=1, highlightbackground="#d5d4cf")
-        controls.place(relx=1.0, rely=0.0, anchor="ne", x=-16, y=16)
-        for icon, action, tip in (
-            ("plus", lambda: self._zoom_view(1.5), "Zoom in"),
-            ("minus", lambda: self._zoom_view(0.67), "Zoom out"),
-            ("fit", self._reset_view, "Fit the map to the window"),
-        ):
-            IconButton(controls, icon, command=action, size=26, tooltip=tip).pack(padx=3, pady=3)
-
-        self._canvas.bind("<plus>", lambda e: self._zoom_view(1.5))
-        self._canvas.bind("<minus>", lambda e: self._zoom_view(0.67))
-        self._canvas.bind("<KP_Add>", lambda e: self._zoom_view(1.5))
-        self._canvas.bind("<KP_Subtract>", lambda e: self._zoom_view(0.67))
-        self._canvas.bind("<0>", lambda e: self._reset_view())
-        self._canvas.bind("<KeyPress-r>", lambda e: self._reset_view())
-        # Focus the canvas so it can receive keyboard events
-        self._canvas.focus_set()
+    def _on_area_drawn(self, bounds: tuple[float, float, float, float]) -> None:
+        """A box drawn on the map becomes the area to fetch."""
+        self._set_aoi(*bounds)
+        self._status.set_message("Area set from the map — Render map to fetch it")
 
     def _build_right_sidebar(self, parent: ttk.Frame) -> None:
         section_heading(parent, "Sources", "they stack")
@@ -717,6 +900,7 @@ class MainWindow:
             on_toggle=self._on_source_toggled,
             on_setting=self._on_source_setting_changed,
             on_choose_path=self._choose_source_path,
+            file_reason=self._file_reason,
         )
 
         section_heading(parent, "Layers in this map")
@@ -725,17 +909,214 @@ class MainWindow:
         self._layer_visibility_vars = self._layers_panel.visibility_vars()
 
         section_heading(parent, "Style", "see it, don't read it")
-        self._style_picker = StylePicker(parent, featured_names(), on_select=self._on_style_selected)
+        # All sixteen. With nothing to scroll there is no reason to decide for
+        # someone which looks they are allowed to see.
+        self._style_picker = StylePicker(
+            parent, tuple(preset_names()), on_select=self._on_style_selected
+        )
         self._style_picker.set_selected(self._preset_var.get())
 
+        # Still here, because a name is the faster way in when you already know
+        # which one you want — and because a saved style has no swatch.
         row = ttk.Frame(parent)
         row.pack(fill="x", pady=(6, 0))
-        ttk.Label(row, text="All styles", font=("SF Pro Text", 9)).pack(side="left")
+        ttk.Label(row, text="All styles", font=theme.font("caption")).pack(side="left")
         self._preset_menu = ttk.OptionMenu(row, self._preset_var, self._preset_var.get(), *self._preset_options)
         self._preset_menu.pack(side="left", fill="x", expand=True, padx=(6, 0))
 
+        row = ttk.Frame(parent)
+        row.pack(fill="x", pady=(4, 0))
+        ttk.Label(row, text="Palette", font=theme.font("caption")).pack(side="left")
+        self._palette_menu = ttk.OptionMenu(
+            row, self._palette_var, self._palette_var.get(), *palette_names()
+        )
+        self._palette_menu.pack(side="left", fill="x", expand=True, padx=(6, 0))
+        tooltip.attach(
+            row,
+            "Colour, separate from the style. A preset is a whole sheet — "
+            "geometry, weights and colour together — so the same map in other "
+            "colours was not a thing you could ask for. A palette replaces the "
+            "colour and keeps the geometry. Takes effect on the next Render "
+            "map, as a preset does; the fetch behind it is cached, so it costs "
+            "no network.",
+        )
+
+        # Quality belongs with Style, not in the toolbar: a preset says what the
+        # map should look like, quality says how much work to spend getting
+        # there, and the second question only arises once the first is answered.
+        row = ttk.Frame(parent)
+        row.pack(fill="x", pady=(4, 0))
+        ttk.Label(row, text="Quality", font=theme.font("caption")).pack(side="left")
+        quality_labels = quality_menu_labels()
+        self._quality_menu = ttk.OptionMenu(row, self._quality_var, self._quality_var.get(), *quality_labels)
+        self._quality_menu.pack(side="left", fill="x", expand=True, padx=(6, 0))
+        tooltip.attach(
+            row,
+            "A preset says what the map should look like; quality says how much "
+            "work to spend getting there.",
+        )
+
+        self._build_saved_styles(parent)
+
         ttk.Separator(parent, orient="horizontal").pack(fill="x", pady=12)
-        self._build_settings_tab(parent)
+        self._build_page_panel(parent)
+        self._build_diagnostics(parent)
+
+    def _build_saved_styles(self, parent: ttk.Frame) -> None:
+        """Keeping a tuned style, and letting go of one.
+
+        The sixteen built-ins are code and cannot be edited. Everything the eye
+        is actually for — nudging a colour, turning the illumination up — was
+        lost at the next launch, which made the tuning pointless.
+        """
+        row = ttk.Frame(parent)
+        row.pack(fill="x", pady=(6, 0))
+        IconButton(
+            row, "save", command=self._save_current_as_preset, size=20,
+            tooltip="Keep the current style, with its derivation sizes, under a name of your own.",
+        ).pack(side="left", padx=(0, 4))
+        ttk.Button(row, text="Save this style…", command=self._save_current_as_preset).pack(
+            side="left", fill="x", expand=True
+        )
+
+        self._delete_row = ttk.Frame(parent)
+        IconButton(
+            self._delete_row, "trash", command=self._delete_current_preset, size=20,
+            tooltip="Remove this saved style from presets.json.",
+        ).pack(side="left", padx=(0, 4))
+        self._delete_button = ttk.Button(
+            self._delete_row, text="Delete", command=self._delete_current_preset
+        )
+        self._delete_button.pack(side="left", fill="x", expand=True)
+        self._refresh_delete_button()
+
+        self._build_plugin_summary(parent)
+
+    def _catalogue(self) -> Catalogue:
+        """Which styles exist, and where each came from."""
+        return Catalogue(
+            builtin=tuple(preset_names()),
+            plugin=(),
+            custom=tuple(sorted(self._custom_presets)),
+        )
+
+    def _refresh_delete_button(self) -> None:
+        """Offered only for a style of your own — a delete that cannot work is
+        worse than no delete at all."""
+        name = self._preset_var.get()
+        if self._catalogue().can_delete(name):
+            self._delete_button.configure(text=f"Delete “{name}”")
+            self._delete_row.pack(fill="x", pady=(4, 0))
+        else:
+            self._delete_row.pack_forget()
+
+    def _delete_current_preset(self) -> None:
+        """Asked before, not regretted after.
+
+        Deleting a saved style rewrites `presets.json`. There is no undo for a
+        file, and the only copy of a style someone spent an evening tuning can
+        go on one stray click.
+        """
+        name = self._preset_var.get()
+        if not self._catalogue().can_delete(name):
+            return
+        if not messagebox.askyesno(
+            "Delete this style?",
+            f"Delete “{name}”?\n\nThis removes it from presets.json. It cannot be undone.",
+            icon="warning",
+            default="no",
+        ):
+            return
+
+        self._custom_presets.pop(name, None)
+        try:
+            self._preset_store.save(self._custom_presets)
+        except OSError as exc:
+            messagebox.showerror("Could not delete", f"presets.json could not be written:\n{exc}")
+            return
+
+        self._preset_options = sorted({*preset_names(), *self._custom_presets})
+        self._refresh_preset_menu()
+        self._preset_var.set(self.default_preset.name)
+        self._status.set_message(f"Deleted the style “{name}”")
+
+    def _build_plugin_summary(self, parent: ttk.Frame) -> None:
+        """What loaded, and what did not.
+
+        A plugin that failed silently is indistinguishable from one that was
+        never installed. The loader has recorded both since it was written and
+        the window has never shown either.
+        """
+        loader_errors = self.plugin_load_errors
+        if not self.loaded_plugins and not loader_errors:
+            return
+
+        ttk.Label(
+            parent,
+            text=f"Plugins ({len(self.loaded_plugins)})",
+            font=theme.font("caption"),
+        ).pack(anchor="w", pady=(10, 2))
+
+        for plugin in self.loaded_plugins:
+            row = ttk.Frame(parent)
+            row.pack(fill="x")
+            IconButton(
+                row, "tick-circle", command=lambda: None, size=14,
+                colour=theme.current().success,
+                background=theme.current().bg, hover=theme.current().bg,
+            ).pack(side="left", padx=(0, 4))
+            ttk.Label(row, text=plugin.name, font=theme.font("caption")).pack(side="left")
+
+        for note in loader_errors:
+            row = ttk.Frame(parent)
+            row.pack(fill="x")
+            IconButton(
+                row, "warning", command=lambda: None, size=14,
+                colour=theme.current().warning,
+                background=theme.current().bg, hover=theme.current().bg,
+            ).pack(side="left", padx=(0, 4), anchor="n")
+            ttk.Label(
+                row, text=note, font=theme.font("caption2"), wraplength=210, justify="left"
+            ).pack(side="left", fill="x", expand=True)
+
+        folder = ttk.Frame(parent)
+        folder.pack(fill="x", pady=(4, 0))
+        IconButton(
+            folder, "folder", command=self._reveal_plugin_folder, size=18,
+            tooltip=str(self.config.plugins_dir),
+        ).pack(side="left", padx=(0, 4))
+        ttk.Button(
+            folder, text="Show plugins folder", command=self._reveal_plugin_folder
+        ).pack(side="left", fill="x", expand=True)
+
+    def _reveal_plugin_folder(self) -> None:
+        """Open the folder, creating it the first time so there is one to open."""
+        import subprocess
+
+        path = self.config.plugins_dir
+        try:
+            path.mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            self._status.set_message(f"Could not create {path}: {exc}", error=True)
+            return
+        opener = {"Darwin": "open", "Windows": "explorer"}.get(platform.system(), "xdg-open")
+        try:
+            subprocess.run([opener, str(path)], check=False)  # noqa: S603
+        except OSError as exc:
+            self._status.set_message(f"Could not open {path}: {exc}", error=True)
+
+    def _file_reason(self, source_id: str) -> str:
+        """Why a chosen file cannot be read, in the source's own row.
+
+        The manager has computed this all along and the window showed it only
+        as a paragraph at the foot of the rail — which left the one format this
+        cannot read looking like a format it silently ignored.
+        """
+        statuses = self.controller.data_source_manager.get_provider_statuses()
+        status = statuses.get(source_id)
+        if status is None or status.available:
+            return ""
+        return status.detail or "This file cannot be read."
 
     # -- source stack callbacks ---------------------------------------------
     def _on_source_toggled(self, source_id: str, enabled: bool) -> None:
@@ -745,23 +1126,93 @@ class MainWindow:
             # from the stack rather than trusting the click.
             self._sources_panel.rebuild()
         self._composition_var.set(self.source_stack.summary())
-        self._status_var.set(f"Sources: {self.source_stack.summary()}")
+        self._status.set_message(f"Sources: {self.source_stack.summary()}")
+        self._record()
+        self._refresh_render_button()
 
     def _on_source_setting_changed(self, source_id: str, key: str, value: object) -> None:
         self.source_stack.set_setting(source_id, key, value)
         self.controller.data_source_manager.apply_source_settings(
             source_id, self.source_stack.provider_overrides(source_id)
         )
-        self._status_var.set(f"{source_id}: {key} = {value}")
+        self._status.set_message(f"{source_id}: {key} = {value}")
+        self._record()
 
     def _on_layer_visibility_changed(self, layer_id: str, visible: bool) -> None:
         self.renderer.set_layer_visibility(layer_id, visible)
         self._schedule_redraw()
+        self._record()
 
     def _on_style_selected(self, name: str) -> None:
         self._preset_var.set(name)
+        self._refresh_delete_button()
+
+    def _refresh_render_button(self) -> None:
+        """Say why before the click, not after.
+
+        A dead button with no stated reason is indistinguishable from a broken
+        one, so the reason travels with it — and the same sentence is what the
+        sources panel shows in the place where it can be acted on.
+        """
+        button = getattr(self, "_render_button", None)
+        if button is None:
+            return
+        reason = why_cannot_render(self.source_stack, self._raw_aoi_values())
+        button.state(["disabled"] if reason else ["!disabled"])
+        if self._render_tip is not None:
+            self._render_tip.set_text(reason or "Fetch and draw the chosen area.")
+
+    def _raw_aoi_values(self) -> tuple[str, str, str, str]:
+        """The coordinate boxes as typed, mid-edit and all."""
+        return (
+            self._aoi_vars["min_lon"].get(),
+            self._aoi_vars["min_lat"].get(),
+            self._aoi_vars["max_lon"].get(),
+            self._aoi_vars["max_lat"].get(),
+        )
+
+    def _sync_area_to_what_is_on_screen(self) -> None:
+        """Settle what Render map is about to fetch, then square it to the window.
+
+        The one place pan, zoom and rotation are allowed to reach the requested
+        area — but only when the request is still the one the map on screen was
+        drawn for. Choosing somewhere else does not redraw the canvas, so a
+        moment after choosing there is a stale view and a fresh choice, and
+        `area_to_fetch` is what keeps the choice. That rule lives in
+        `application/viewport.py`; this reads the widgets for it.
+
+        Then shaped to the window — always, whatever the area came from and
+        whether or not anything is drawn yet. It only ever grows the area, and
+        an area already the right shape comes back untouched.
+        """
+        try:
+            requested = self._current_aoi_values()
+        except (ValueError, KeyError):
+            # Mid-edit coordinates are not an error; the fetch below will say so.
+            return
+
+        visible = self._map.visible_area()
+        wanted = area_to_fetch(
+            requested=requested, visible=visible, rendered=self._rendered_area
+        )
+        if wanted != requested:
+            self._set_aoi(*wanted)
+        if visible is not None:
+            # The pan and the turn have either been folded into the request or
+            # are about to be replaced; either way the viewport goes back to
+            # identity, so the bearing readout does not outlive the map it
+            # described.
+            self._map.reset_view()
+
+        aspect = self._map.aspect()
+        if aspect is None:
+            return
+        shaped = shaped_to_window(wanted, aspect)
+        if shaped != wanted:
+            self._set_aoi(*shaped)
 
     def _on_fetch_clicked(self) -> None:
+        self._sync_area_to_what_is_on_screen()
         try:
             # Validate and parse coordinates
             min_lon_str = self._aoi_vars["min_lon"].get().strip()
@@ -803,6 +1254,22 @@ class MainWindow:
             messagebox.showerror("Invalid AOI", "Coordinates must be valid numbers.")
             return
 
+        # What this will cost, before it is spent. The Locator makes a whole
+        # sea one drag away, and an area that size never returns; discovering
+        # that by waiting is the worst way to find out.
+        cost = fetch_cost.estimate(
+            (aoi.min_lon, aoi.min_lat, aoi.max_lon, aoi.max_lat),
+            self.source_stack.enabled_ids(),
+        )
+        if cost.worth_asking and not messagebox.askokcancel(
+            "This is a large area", cost.message, default=messagebox.CANCEL
+        ):
+            self._status.set_message(
+                f"Not fetched — {fetch_cost.readable_area(cost.square_km)} km²"
+                " is more than this will draw quickly."
+            )
+            return
+
         preset = self._resolve_selected_preset()
         preset_profile = preset.geometry_profile
 
@@ -816,9 +1283,9 @@ class MainWindow:
                 preset_profile,
                 max_on_screen_features_per_layer=min(preset_profile.max_on_screen_features_per_layer, 1500),
             )
-            self._status_var.set("Large area detected: applying preview sampling")
+            self._status.set_message("Large area detected: applying preview sampling")
         else:
-            self._status_var.set("Fetching map data...")
+            self._status.set_message("Fetching map data...")
         preset_profile = self._cartographic_geometry_profile(preset_profile)
         self._set_busy("Fetching map data...")
         self._fetch_started_at = time.perf_counter()
@@ -837,14 +1304,15 @@ class MainWindow:
         # the next.
         self._fetch_cancel = CancellationToken()
         self._fetch_reporter = FetchReporter(on_change=self._queue_progress)
-        if hasattr(self, "_cancel_button"):
-            self._cancel_button.state(["!disabled"])
+
 
         plan = self.source_stack.plan()
         if plan is None:
-            messagebox.showinfo(
-                "No sources selected",
-                "Tick at least one source in the Sources list to build a map.",
+            # Should be unreachable: the button is dead when this is true, and
+            # says why. Kept as a guard rather than a dialogue, because the
+            # keyboard can still reach a verb the button has withdrawn.
+            self._status.set_message(
+                "Nothing is ticked, so there is nothing to draw.", error=True
             )
             self._set_idle("Idle")
             return
@@ -864,11 +1332,16 @@ class MainWindow:
         )
 
     def _resolve_selected_preset(self) -> ArtisticPreset:
+        """The chosen style, in the chosen colours.
+
+        Recoloured here rather than at the render call, so that what is drawn,
+        what is exported and what "Save this style" keeps are one thing. A
+        palette of "the preset's own" resolves to nothing and leaves it alone.
+        """
         selected = self._preset_var.get().strip()
         custom = self._custom_presets.get(selected)
-        if custom is not None:
-            return custom
-        return default_preset(selected)
+        preset = custom if custom is not None else default_preset(selected)
+        return recoloured(preset, palette_named(self._palette_var.get()))
 
     def _cartographic_geometry_profile(self, profile: GeometryPipelineProfile) -> GeometryPipelineProfile:
         return replace(
@@ -883,123 +1356,177 @@ class MainWindow:
         try:
             return self._preset_store.load()
         except Exception as exc:  # noqa: BLE001
-            self._status_var.set(f"Could not load presets: {exc}")
+            self._status.set_message(f"Could not load presets: {exc}")
             return {}
 
-    def _build_settings_tab(self, parent: ttk.Frame) -> None:
-        # Label Settings Section
-        ttk.Label(parent, text="Label Settings", font=("SF Pro Text", 11, "bold")).pack(anchor="w", pady=(0, 6))
+    def _build_page_panel(self, parent: ttk.Frame) -> None:
+        """Page composition for the SVG export: paper, margins, furniture.
 
-        # Font family
-        row = ttk.Frame(parent)
-        row.pack(fill="x", pady=2)
-        ttk.Label(row, text="Font Family", width=13).pack(side="left")
-        self._label_font_var = tk.StringVar(value="Arial")
-        font_combo = ttk.Combobox(row, textvariable=self._label_font_var, values=["Arial", "Helvetica", "Times", "Courier", "Verdana"], width=15)
-        font_combo.pack(side="left")
-
-        # Font size
-        row = ttk.Frame(parent)
-        row.pack(fill="x", pady=2)
-        ttk.Label(row, text="Font Size", width=13).pack(side="left")
-        self._label_size_var = tk.IntVar(value=12)
-        ttk.Spinbox(row, from_=8, to=24, textvariable=self._label_size_var, width=10).pack(side="left")
-
-        # Label visibility lives in the left sidebar's "Labels" group, which
-        # toggles the places, shops, and amenities layers for real. A second set
-        # of "Show Labels" checkboxes used to sit here wired to nothing, which
-        # left two identically labelled Place Names controls in one window.
-
-        ttk.Separator(parent, orient="horizontal").pack(fill="x", pady=10)
-        ttk.Label(parent, text="Renderer", font=("SF Pro Text", 11, "bold")).pack(anchor="w", pady=(0, 6))
+        All of it off by default and asked for per export rather than
+        remembered as map state — the map is the product, and nothing here
+        changes it, which is why none of it lands in the session or in undo.
+        """
+        section_heading(parent, "Page", "SVG export")
 
         row = ttk.Frame(parent)
         row.pack(fill="x", pady=2)
-        ttk.Label(row, text="Device Scale", width=13).pack(side="left")
-        ttk.Entry(row, textvariable=self._device_scale_var, width=10).pack(side="left")
-
-        ttk.Separator(parent, orient="horizontal").pack(fill="x", pady=10)
-        ttk.Label(parent, text="Provider", font=("SF Pro Text", 11, "bold")).pack(anchor="w", pady=(0, 6))
-        ttk.Label(parent, text="Online-only mode using Overpass API", font=("SF Pro Text", 9)).pack(anchor="w", pady=(0, 4))
+        ttk.Label(row, text="Paper", width=11, font=theme.font("caption")).pack(side="left")
+        ttk.OptionMenu(
+            row, self._paper_preset_var, self._paper_preset_var.get(), *PAPER_PRESETS
+        ).pack(side="left", fill="x", expand=True)
 
         row = ttk.Frame(parent)
         row.pack(fill="x", pady=2)
-        ttk.Label(row, text="Endpoint", width=13).pack(side="left")
-        ttk.Entry(row, textvariable=self._provider_endpoint_var).pack(side="left", fill="x", expand=True)
+        ttk.Label(row, text="Orientation", width=11, font=theme.font("caption")).pack(side="left")
+        ttk.OptionMenu(
+            row, self._paper_orientation_var, self._paper_orientation_var.get(),
+            "Landscape", "Portrait",
+        ).pack(side="left", fill="x", expand=True)
 
-        row = ttk.Frame(parent)
-        row.pack(fill="x", pady=2)
-        ttk.Label(row, text="Req/sec", width=13).pack(side="left")
-        ttk.Entry(row, textvariable=self._provider_rps_var, width=10).pack(side="left")
+        ttk.Checkbutton(
+            parent, text="Title block", variable=self._include_title_var,
+            command=self._refresh_title_fields,
+        ).pack(anchor="w", pady=1)
 
-        row = ttk.Frame(parent)
-        row.pack(fill="x", pady=2)
-        ttk.Label(row, text="Timeout (s)", width=13).pack(side="left")
-        ttk.Entry(row, textvariable=self._provider_timeout_var, width=10).pack(side="left")
+        # The title fields appear with the title block, because two empty boxes
+        # for a block that is switched off are two questions nobody asked.
+        self._title_fields = ttk.Frame(parent)
+        for label, var in (("Title", self._map_title_var), ("Subtitle", self._map_subtitle_var)):
+            row = ttk.Frame(self._title_fields)
+            row.pack(fill="x", pady=1)
+            ttk.Label(row, text=label, width=11, font=theme.font("caption")).pack(side="left")
+            ttk.Entry(row, textvariable=var).pack(side="left", fill="x", expand=True)
+        self._refresh_title_fields()
 
-        ttk.Button(parent, text="Apply Settings", command=self._apply_runtime_settings).pack(fill="x", pady=(8, 0))
+        for text, var, why in (
+            ("Scale bar", self._include_scale_bar_var,
+             "A bar of known ground length, labelled in the projection's own units."),
+            ("North arrow", self._include_north_arrow_var, ""),
+            ("Legend", self._include_legend_var,
+             "The first ten visible layers, named as the layer panel names them."),
+            ("Background", self._include_background_var,
+             "Off exports a transparent SVG for compositing. Dark presets need it on."),
+        ):
+            check = ttk.Checkbutton(parent, text=text, variable=var)
+            check.pack(anchor="w", pady=1)
+            if why:
+                tooltip.attach(check, why)
 
+    def _refresh_title_fields(self) -> None:
+        if bool(self._include_title_var.get()):
+            self._title_fields.pack(fill="x", pady=(2, 0))
+        else:
+            self._title_fields.pack_forget()
+
+    def _build_diagnostics(self, parent: ttk.Frame) -> None:
+        """Put away, behind a disclosure.
+
+        Genuinely useful and genuinely not part of making a map, so it stops
+        occupying the rail between the styles and the export.
+        """
+        self._diagnostics_shown = tk.BooleanVar(value=False)
+        ttk.Button(parent, text="Diagnostics", command=self._toggle_diagnostics).pack(
+            fill="x", pady=(10, 0)
+        )
+        self._diagnostics = ttk.Frame(parent)
+        ttk.Checkbutton(
+            self._diagnostics, text="Enable diagnostics logging",
+            variable=self._debug_enabled_var,
+        ).pack(anchor="w", pady=(4, 2))
         ttk.Label(
-            parent,
-            text="Sources and their files are chosen in the Sources list above.",
-            font=("SF Pro Text", 9),
-            wraplength=280,
-        ).pack(anchor="w", pady=(6, 6))
-        ttk.Label(parent, text="Apply Settings after changing source paths.", font=("SF Pro Text", 9), wraplength=280).pack(anchor="w", pady=(4, 0))
-        ttk.Label(parent, textvariable=self._provider_status_var, justify="left", wraplength=280).pack(anchor="w", pady=(4, 0))
+            self._diagnostics, text=f"Log: {self._debug_log_file}",
+            font=theme.font("caption2"), wraplength=250, justify="left",
+        ).pack(anchor="w")
+        row = ttk.Frame(self._diagnostics)
+        row.pack(fill="x", pady=(4, 0))
+        ttk.Button(row, text="Copy", command=self._copy_diagnostics).pack(
+            side="left", fill="x", expand=True, padx=(0, 3)
+        )
+        ttk.Button(row, text="Save…", command=self._save_diagnostics).pack(
+            side="left", fill="x", expand=True, padx=(3, 0)
+        )
+        ttk.Label(
+            self._diagnostics, textvariable=self._perf_summary_var, justify="left",
+            wraplength=250, font=theme.font("caption2"),
+        ).pack(anchor="w", pady=(4, 0))
 
-        ttk.Separator(parent, orient="horizontal").pack(fill="x", pady=10)
-        ttk.Label(parent, text="Export Composition", font=("SF Pro Text", 11, "bold")).pack(anchor="w", pady=(0, 6))
+    def _toggle_diagnostics(self) -> None:
+        if self._diagnostics_shown.get():
+            self._diagnostics.pack_forget()
+        else:
+            self._diagnostics.pack(fill="x")
+        self._diagnostics_shown.set(not self._diagnostics_shown.get())
 
-        row = ttk.Frame(parent)
-        row.pack(fill="x", pady=2)
-        ttk.Label(row, text="Paper", width=13).pack(side="left")
-        ttk.OptionMenu(row, self._paper_preset_var, self._paper_preset_var.get(), *PAPER_PRESETS.keys()).pack(side="left", fill="x", expand=True)
+    def _open_about(self) -> None:
+        """What this is, and what it owes. Reachable whenever it is wanted."""
+        self._about_window().show()
 
-        row = ttk.Frame(parent)
-        row.pack(fill="x", pady=2)
-        ttk.Label(row, text="Orientation", width=13).pack(side="left")
-        ttk.OptionMenu(row, self._paper_orientation_var, self._paper_orientation_var.get(), "Landscape", "Portrait").pack(side="left", fill="x", expand=True)
+    def _about_window(self) -> AboutWindow:
+        if self._about is None:
+            self._about = AboutWindow(
+                self._root,
+                show_on_launch=lambda: self._settings.show_about_on_launch,
+            )
+        return self._about
 
-        row = ttk.Frame(parent)
-        row.pack(fill="x", pady=2)
-        ttk.Label(row, text="Title", width=13).pack(side="left")
-        ttk.Entry(row, textvariable=self._map_title_var).pack(side="left", fill="x", expand=True)
+    def _show_about_at_launch(self) -> None:
+        """The splash, once, before anything else asks for attention."""
+        self._about_window().show_on_launch_if_wanted()
 
-        row = ttk.Frame(parent)
-        row.pack(fill="x", pady=2)
-        ttk.Label(row, text="Subtitle", width=13).pack(side="left")
-        ttk.Entry(row, textvariable=self._map_subtitle_var).pack(side="left", fill="x", expand=True)
+    def _open_settings(self) -> None:
+        """Preferences, at ⌘, where they belong."""
+        if self._settings_window is None:
+            self._settings_window = SettingsWindow(
+                self._root,
+                config=self.config,
+                settings=lambda: self._settings,
+                on_change=self._apply_settings,
+                on_clear_cache=self._clear_cache,
+                cache_summary=lambda: self._status.cache,
+            )
+        self._settings_window.show()
 
-        ttk.Checkbutton(parent, text="Include title block", variable=self._include_title_var).pack(anchor="w", pady=1)
-        ttk.Checkbutton(parent, text="Include scale bar", variable=self._include_scale_bar_var).pack(anchor="w", pady=1)
-        ttk.Checkbutton(parent, text="Include north arrow", variable=self._include_north_arrow_var).pack(anchor="w", pady=1)
-        ttk.Checkbutton(parent, text="Include simple legend", variable=self._include_legend_var).pack(anchor="w", pady=1)
-        ttk.Checkbutton(parent, text="Include background", variable=self._include_background_var).pack(anchor="w", pady=1)
+    def _apply_settings(self, settings: UserSettings) -> None:
+        """Adopt a preference the moment it changes, and write it down.
 
-        ttk.Separator(parent, orient="horizontal").pack(fill="x", pady=10)
-        ttk.Label(parent, text="Presets", font=("SF Pro Text", 11, "bold")).pack(anchor="w", pady=(0, 6))
+        No Apply button: a preferences window with a commit step invites the
+        state where what you see and what the application is using are
+        different things.
+        """
+        previous, self._settings = self._settings, settings
+        try:
+            self._settings_store.save(settings)
+        except OSError as exc:  # noqa: BLE001
+            self._logger.warning("could not save settings: %s", exc)
 
-        row = ttk.Frame(parent)
-        row.pack(fill="x", pady=2)
-        ttk.Label(row, text="New Name", width=13).pack(side="left")
-        ttk.Entry(row, textvariable=self._new_preset_name_var).pack(side="left", fill="x", expand=True)
-        ttk.Button(parent, text="Add Current To Presets", command=self._save_current_as_preset).pack(fill="x", pady=(8, 0))
+        self.controller.data_source_manager.set_overpass_settings(
+            requests_per_second=settings.provider_rps_limit
+        )
+        if hasattr(self.renderer, "device_scale"):
+            self.renderer.device_scale = settings.device_scale
+        if hasattr(self.renderer, "set_label_font_family"):
+            self.renderer.set_label_font_family(settings.label_font_family)
+        if hasattr(self.renderer, "set_label_font_size"):
+            self.renderer.set_label_font_size(settings.label_font_size)
 
-        ttk.Separator(parent, orient="horizontal").pack(fill="x", pady=10)
-        ttk.Label(parent, text=f"Cache: {self.config.cache_dir}").pack(anchor="w")
+        if settings.theme_mode != previous.theme_mode:
+            self._theme_mode = settings.theme_mode
+            self._apply_theme()
+        # The label setters only mark the picture cache dirty, so without this a
+        # font change sits invisible until the next fetch.
+        self._schedule_redraw()
 
-        ttk.Separator(parent, orient="horizontal").pack(fill="x", pady=10)
-        ttk.Label(parent, text="Diagnostics", font=("SF Pro Text", 11, "bold")).pack(anchor="w", pady=(0, 6))
-        ttk.Checkbutton(parent, text="Enable diagnostics logging", variable=self._debug_enabled_var).pack(anchor="w", pady=(0, 4))
-        ttk.Label(parent, text=f"Log: {self._debug_log_file}").pack(anchor="w")
-        diag_actions = ttk.Frame(parent)
-        diag_actions.pack(fill="x", pady=(4, 0))
-        diag_actions.grid_columnconfigure(0, weight=1)
-        diag_actions.grid_columnconfigure(1, weight=1)
-        ttk.Button(diag_actions, text="Copy Diagnostics", command=self._copy_diagnostics).grid(row=0, column=0, sticky="ew", padx=(0, 3))
-        ttk.Button(diag_actions, text="Save Diagnostics", command=self._save_diagnostics).grid(row=0, column=1, sticky="ew", padx=(3, 0))
-        ttk.Label(parent, textvariable=self._perf_summary_var, justify="left", wraplength=280).pack(anchor="w", pady=(4, 0))
+    def _clear_cache(self) -> None:
+        """Empty the cache, and say what that came to."""
+        try:
+            removed = self.controller.data_source_manager.clear_cache()
+        except Exception as exc:  # noqa: BLE001
+            self._status.set_message(f"Could not clear the cache: {exc}", error=True)
+            return
+        self._status.set_cache("empty")
+        self._status.set_message(
+            f"Cache cleared ({removed} entries)" if removed else "Cache cleared"
+        )
 
     def _canvas_surround_color(self) -> str:
         """Colour for the preview canvas outside the rendered image.
@@ -1014,52 +1541,34 @@ class MainWindow:
             return scene.background.to_hex()
         return "#2b2b2b" if self._theme_mode == "dark" else "#f5f5f5"
 
-    def _sync_label_font_to_renderer(self) -> None:
-        """Push the panel's label font onto the renderer at startup.
-
-        The panel opens showing Arial at 12pt while the renderer defaults to
-        its own face at 10pt, so without this the first render disagrees with
-        what the sidebar says until Apply Settings is pressed once.
-        """
-        if hasattr(self.renderer, "set_label_font_family"):
-            self.renderer.set_label_font_family(self._label_font_var.get().strip())
-        if hasattr(self.renderer, "set_label_font_size"):
-            self.renderer.set_label_font_size(max(6, min(24, int(self._label_size_var.get()))))
-
-    def _apply_runtime_settings(self) -> None:
-        endpoint = self._provider_endpoint_var.get().strip()
-        rps = max(0.05, float(self._provider_rps_var.get()))
-        timeout_seconds = max(5.0, float(self._provider_timeout_var.get()))
-        device_scale = max(1.0, min(4.0, float(self._device_scale_var.get())))
-        label_font_size = max(6, min(24, int(self._label_size_var.get())))
-        label_font_family = self._label_font_var.get().strip()
-
-        self.controller.data_source_manager.set_overpass_settings(
-            endpoint=endpoint,
-            timeout_seconds=timeout_seconds,
-            requests_per_second=rps,
-        )
-        self.controller.data_source_manager.set_active_map_model(self._selected_map_model_id())
-        for provider_id, var in self._optional_source_vars.items():
-            self.controller.data_source_manager.set_optional_source_path(provider_id, var.get().strip() or None)
-        self._provider_status_var.set(self._format_provider_status())
-        if hasattr(self.renderer, "device_scale"):
-            setattr(self.renderer, "device_scale", device_scale)
-        if hasattr(self.renderer, "set_label_font_size"):
-            self.renderer.set_label_font_size(label_font_size)
-        if hasattr(self.renderer, "set_label_font_family"):
-            self.renderer.set_label_font_family(label_font_family)
-
-        # The label setters only mark the picture cache dirty, so without a
-        # redraw a font change sat invisible until the next fetch.
-        self._schedule_redraw()
-        self._status_var.set(f"Settings applied - Model: {self._map_model_var.get()}")
-
     def _save_current_as_preset(self) -> None:
-        name = self._new_preset_name_var.get().strip()
-        if not name:
-            messagebox.showinfo("Preset name", "Please enter a preset name.")
+        """Ask for a name, seeded with the likely one, and refuse a bad one.
+
+        The commonest save is a variation on the style being looked at, so the
+        box already contains it; saving over your own keeps its name, because
+        that is how a style gets tuned.
+        """
+        catalogue = self._catalogue()
+        current = self._preset_var.get()
+        suggested = seeded_name(current, is_custom=catalogue.kind_of(current) == "custom")
+
+        name = simpledialog.askstring(
+            "Save this style",
+            "It will appear in All styles, and in the Mac app — the two share this file.",
+            initialvalue=suggested,
+            parent=self._root,
+        )
+        if name is None:
             return
+
+        refusal = validate_name(
+            name, builtin=tuple(preset_names()), existing=tuple(self._custom_presets)
+        )
+        if refusal is not None:
+            messagebox.showinfo("That name will not do", refusal)
+            return
+
+        name = name.strip()
         source = self._resolve_selected_preset()
         self._custom_presets[name] = ArtisticPreset(
             name=name,
@@ -1076,63 +1585,77 @@ class MainWindow:
             self._preset_options.sort()
             self._refresh_preset_menu()
         self._preset_var.set(name)
-        self._new_preset_name_var.set("")
-        self._status_var.set(f"Preset saved: {name}")
+        self._status.set_message(f"Saved the style “{name}”")
 
     def _refresh_preset_menu(self) -> None:
+        """Built-in, then anything plugins brought, then your own — separated,
+        because "which of these can I delete?" is a question the list should
+        answer without being asked."""
+        catalogue = self._catalogue()
         menu = self._preset_menu["menu"]
         menu.delete(0, "end")
-        for name in self._preset_options:
-            menu.add_command(label=name, command=tk._setit(self._preset_var, name))
+        first = True
+        for group in (catalogue.builtin, catalogue.plugin, catalogue.custom):
+            if not group:
+                continue
+            if not first:
+                menu.add_separator()
+            for name in group:
+                menu.add_command(label=name, command=tk._setit(self._preset_var, name))
+            first = False
 
-    def _on_location_lookup_clicked(self) -> None:
-        query = self._location_query_var.get().strip()
-        if not query:
-            messagebox.showinfo("Location", "Type a location in plain English first.")
-            return
+    def _on_search(self, query: str) -> None:
+        """Ask for places by name, off the UI thread."""
+        self._search.set_searching(True)
+        self._set_busy("Searching…")
 
-        self._set_busy("Finding coordinates...")
-
-        def _worker() -> None:
+        def worker() -> None:
             try:
-                aoi = self._lookup_location_aoi(query)
-                self._pending_queue.put(("aoi", aoi))
-            except Exception as exc:  # noqa: BLE001
-                self._pending_queue.put(("error", exc))
+                self._pending_queue.put(("places", (query, geocoding.search(query))))
+            except Exception as exc:  # noqa: BLE001 - any failure is the same answer
+                self._pending_queue.put(("search_failed", (query, exc)))
 
-        threading.Thread(target=_worker, daemon=True).start()
+        threading.Thread(target=worker, daemon=True).start()
 
-    def _lookup_location_aoi(self, query: str) -> tuple[float, float, float, float]:
-        t0 = time.perf_counter()
-        params = urlencode({"q": query, "format": "jsonv2", "limit": 1})
-        request = Request(
-            f"https://nominatim.openstreetmap.org/search?{params}",
-            headers={"User-Agent": "Hipparchus/0.1"},
+    def _show_search_results(self, payload: object) -> None:
+        if not isinstance(payload, tuple) or len(payload) != 2:
+            return
+        query, results = payload
+        self._search.set_searching(False)
+        self._set_idle("Idle")
+        message = None if results else geocoding.nothing_found_message(str(query))
+        self._search.show_results(results, message)
+        self._status.set_message(
+            f"{len(results)} places found" if results else f"Nothing found for “{query}”"
         )
-        try:
-            with urlopen(request, timeout=10.0) as response:  # noqa: S310
-                payload = json.loads(response.read().decode("utf-8"))
-        except Exception as exc:
-            raise RuntimeError(f"Location lookup failed: {exc}")
 
-        self._debug("location_lookup query=%s elapsed_ms=%.1f", query, (time.perf_counter() - t0) * 1000.0)
-        if not payload:
-            raise RuntimeError(f"No match found for '{query}'")
-        bbox = payload[0].get("boundingbox")
-        if not bbox or len(bbox) != 4:
-            raise RuntimeError("Location lookup did not return a bounding box")
+    def _search_failed(self, payload: object) -> None:
+        """A geocoder that will not answer is news, not a dialogue."""
+        if not isinstance(payload, tuple) or len(payload) != 2:
+            return
+        query, exc = payload
+        self._search.set_searching(False)
+        self._set_idle("Idle")
+        self._search.show_results((), f"Could not reach the geocoder: {exc}")
+        self._status.set_message(f"Search for “{query}” failed: {exc}", error=True)
 
-        min_lat = float(bbox[0])
-        max_lat = float(bbox[1])
-        min_lon = float(bbox[2])
-        max_lon = float(bbox[3])
-        return (min_lon, min_lat, max_lon, max_lat)
+    def _on_search_result_chosen(self, place: object) -> None:
+        """Adopt the frame the chosen result would give."""
+        bbox = getattr(place, "bbox", None)
+        if bbox is None:
+            return
+        self._set_aoi(*bbox)
+        self._location_preset_var.set("")
+        self._minimap_caption.set(describe_area(bbox))
+        if self._locator is not None:
+            self._locator.show(bbox)
+        self._status.set_message(f"Frame set from “{getattr(place, 'name', '')}”")
 
     def _apply_location_preset(self) -> None:
-        preset = LOCATION_PRESETS.get(self._location_preset_var.get())
-        if preset is None:
+        place = places.by_name(self._location_preset_var.get())
+        if place is None:
             return
-        min_lon, min_lat, max_lon, max_lat = preset
+        min_lon, min_lat, max_lon, max_lat = place.bbox
         self._aoi_vars["min_lon"].set(f"{min_lon:.5f}")
         self._aoi_vars["min_lat"].set(f"{min_lat:.5f}")
         self._aoi_vars["max_lon"].set(f"{max_lon:.5f}")
@@ -1143,14 +1666,14 @@ class MainWindow:
         """Preselect a start area and/or auto-fetch on launch (screenshot workflow)."""
         area = self.config.start_area
         if area:
-            if area in LOCATION_PRESETS:
+            if places.by_name(area) is not None:
                 self._location_preset_var.set(area)
                 self._apply_location_preset()
             else:
                 self._logger.warning(
                     "HIPPARCHUS_START_AREA '%s' is not a known area preset; ignoring. Known: %s",
                     area,
-                    ", ".join(LOCATION_PRESETS.keys()),
+                    ", ".join(places.names()),
                 )
         if self.config.fetch_on_start:
             self._on_fetch_clicked()
@@ -1179,49 +1702,35 @@ class MainWindow:
             float(self._aoi_vars["max_lat"].get()),
         )
 
+    def _on_locator_moved(self, bounds: tuple[float, float, float, float]) -> None:
+        """What the locator shows becomes the area to fetch.
+
+        Browsing and choosing are the same act in a strip this size: there is
+        nothing to aim at, so the view is the choice. The floating panel — where
+        there *is* room — is where the two come apart.
+        """
+        self._set_aoi(*bounds)
+        # Hand-chosen, so it is no longer one of the saved places.
+        self._location_preset_var.set("")
+        self._minimap_caption.set(describe_area(bounds))
+
     def _refresh_minimap(self) -> None:
-        """Redraw the locator from the coordinate fields."""
-        canvas = getattr(self, "_minimap", None)
-        if canvas is None:
+        """Point the locator at whatever the coordinates now say.
+
+        The graticule this replaces was drawn from the same numbers; the
+        difference is that the locator can be dragged, so this is the one
+        direction — coordinates to view — rather than the only one.
+        """
+        locator = getattr(self, "_locator", None)
+        if locator is None:
             return
         try:
-            bounds = (
-                float(self._aoi_vars["min_lon"].get()),
-                float(self._aoi_vars["min_lat"].get()),
-                float(self._aoi_vars["max_lon"].get()),
-                float(self._aoi_vars["max_lat"].get()),
-            )
+            bounds = self._current_aoi_values()
         except (ValueError, KeyError):
             # Mid-edit coordinates are not an error; the locator just waits.
             return
-
-        palette = THEME_PALETTES[self._theme_mode]
-        width = int(canvas.cget("width"))
-        height = int(canvas.cget("height"))
-        layout = minimap.geometry(bounds, width, height)
-
-        canvas.delete("all")
-        canvas.configure(bg=palette["panel_alt"], highlightbackground=palette["border"])
-        for x in layout.meridians:
-            canvas.create_line(x, 0, x, height, fill=palette["border"])
-        for y in layout.parallels:
-            canvas.create_line(0, y, width, y, fill=palette["border"])
-        # Equator and prime meridian carry the orientation a coastline would.
-        canvas.create_line(0, layout.equator, width, layout.equator, fill=palette["muted"])
-        canvas.create_line(layout.prime_meridian, 0, layout.prime_meridian, height, fill=palette["muted"])
-        for text, lx, ly in minimap.hemisphere_labels(width, height):
-            canvas.create_text(lx, ly, text=text, fill=palette["muted"], font=("SF Pro Text", 8))
-
-        canvas.create_rectangle(*layout.box, outline=palette["select_text"], width=2)
-        if layout.marker is not None:
-            mx, my = layout.marker
-            canvas.create_oval(mx - 6, my - 6, mx + 6, my + 6, outline=palette["select_text"], width=2)
-            # A crosshair reads at a glance where a small ring alone does not.
-            for dx, dy in ((-11, 0), (7, 0)):
-                canvas.create_line(mx + dx, my, mx + dx + 4, my, fill=palette["select_text"], width=2)
-            for dy in (-11, 7):
-                canvas.create_line(mx, my + dy, mx, my + dy + 4, fill=palette["select_text"], width=2)
-        self._minimap_caption.set(minimap.describe(bounds))
+        locator.show(bounds)
+        self._minimap_caption.set(describe_area(bounds))
 
     def _set_aoi(self, min_lon: float, min_lat: float, max_lon: float, max_lat: float) -> None:
         self._aoi_vars["min_lon"].set(f"{min_lon:.5f}")
@@ -1230,15 +1739,12 @@ class MainWindow:
         self._aoi_vars["max_lat"].set(f"{max_lat:.5f}")
 
     def _active_base_layers(self) -> list[str]:
-        # All possible base layers including road types, natural features, places, and detailed info
-        base = [
-            "roads_motorway", "roads_trunk", "roads_primary", "roads_secondary",
-            "roads_tertiary", "roads_residential", "roads_service", "roads_other",
-            "roads", "buildings", "water", "parks", "railways",
-            "forests", "fields", "natural", "coastline",
-            "places", "shops", "amenities", "landuse", "barriers", "power"
-        ]
-        return [name for name in base if self._layer_visibility_vars.get(name, tk.BooleanVar(value=True)).get()]
+        """The layers to fetch: the standard set, minus anything unticked."""
+        def visible(layer_id: str) -> bool:
+            variable = self._layer_visibility_vars.get(layer_id)
+            return True if variable is None else bool(variable.get())
+
+        return list(fetch_layers(visible))
 
     def _on_cancel_fetch(self) -> None:
         """Stop waiting for the current fetch.
@@ -1249,14 +1755,13 @@ class MainWindow:
         if self._fetch_cancel is None:
             return
         self._fetch_cancel.cancel()
-        self._status_var.set("Fetch cancelled")
+        self._status.set_message("Fetch cancelled")
         self._set_idle("Idle")
-        if hasattr(self, "_cancel_button"):
-            self._cancel_button.state(["disabled"])
+
 
     def _queue_progress(self, reporter: FetchReporter) -> None:
         """Called from the fetch thread; hand it to the UI thread to display."""
-        self._pending_queue.put(("progress", reporter.summary()))
+        self._pending_queue.put(("progress", reporter.snapshot()))
 
     def _queue_scene(self, scene: RenderScene, cache_state: str) -> None:
         self._pending_queue.put(("scene", (scene, cache_state)))
@@ -1271,12 +1776,14 @@ class MainWindow:
                 if kind == "scene":
                     scene, cache_state = payload
                     self._apply_scene(scene, cache_state)
-                elif kind == "aoi":
-                    self._apply_location_aoi(payload)
+                elif kind == "places":
+                    self._show_search_results(payload)
+                elif kind == "search_failed":
+                    self._search_failed(payload)
                 elif kind == "image":
                     self._apply_canvas_png(payload)
                 elif kind == "progress":
-                    self._progress_label_var.set(str(payload))
+                    self._status.show_progress(payload)
                 elif kind == "error":
                     error_msg = str(payload)
                     if "No match" in error_msg:
@@ -1287,7 +1794,7 @@ class MainWindow:
                         messagebox.showerror("Data Not Available", error_msg)
                     else:
                         messagebox.showerror("Error", error_msg)
-                    self._status_var.set(f"Error: {error_msg[:80]}")
+                    self._status.set_message(f"Error: {error_msg[:80]}")
                     self._set_idle("Error")
         except queue.Empty:
             pass
@@ -1297,10 +1804,20 @@ class MainWindow:
             # every future scene, image and progress update.
             self._logger.exception("callback queue handler failed")
         finally:
-            self._root.after(60, self._drain_callback_queue)
+            self._queue_job = self._root.after(60, self._drain_callback_queue)
 
     def _apply_scene(self, scene: RenderScene, cache_state: str) -> None:
         self._current_scene = scene
+        # What this map is *of*, kept so the next Render map can tell a pan
+        # apart from a choice. The scene's own bounds rather than the
+        # coordinate boxes: the boxes can be edited, and the map cannot.
+        self._rendered_area = scene.source_bbox
+        self._status.set_provenance(provenance.for_sources(self.source_stack.enabled_ids()))
+        if cache_state != "undo" and not self._restoring:
+            # Undo of a fetch must never cost another fetch, so the map itself
+            # is kept with the entry rather than the recipe for making it.
+            self._history.record_fetch(self.current_session(), scene)
+            self._refresh_undo_menu()
         if self._layers_panel is not None:
             self._layer_summary = self._layers_panel.update(scene)
             self._layer_visibility_vars = self._layers_panel.visibility_vars()
@@ -1310,11 +1827,8 @@ class MainWindow:
         self._sync_layer_visibility_to_scene()
         self.renderer.set_scene(scene)
         self.renderer.set_viewport(ViewportState())
-        self._scroll_x = 0.5
-        self._scroll_y = 0.5
-        self._sync_scrollbars()
-        self._status_var.set("Rendering preview...")
-        self._cache_status_var.set(f"Cache: {cache_state}")
+        self._status.set_message("Rendering preview...")
+        self._status.set_cache(cache_state)
         geometry_count = sum(len(layer.geometries) for layer in scene.layers)
         bounds_text = self._scene_bounds_text(scene)
         if self._fetch_started_at is not None:
@@ -1384,7 +1898,7 @@ class MainWindow:
             return
         self._root.clipboard_clear()
         self._root.clipboard_append(text)
-        self._status_var.set("Diagnostics copied")
+        self._status.set_message("Diagnostics copied")
 
     def _save_diagnostics(self) -> None:
         text = self._perf_summary_var.get().strip()
@@ -1399,16 +1913,7 @@ class MainWindow:
         if not target:
             return
         Path(target).write_text(text + "\n", encoding="utf-8")
-        self._status_var.set("Diagnostics saved")
-
-    def _apply_location_aoi(self, payload: object) -> None:
-        if not isinstance(payload, tuple) or len(payload) != 4:
-            self._set_idle("Lookup failed")
-            return
-        min_lon, min_lat, max_lon, max_lat = payload
-        self._set_aoi(float(min_lon), float(min_lat), float(max_lon), float(max_lat))
-        self._status_var.set("Coordinates updated from location")
-        self._set_idle("Location ready")
+        self._status.set_message("Diagnostics saved")
 
     def _sync_layer_visibility_to_scene(self) -> None:
         if self._current_scene is None:
@@ -1436,7 +1941,7 @@ class MainWindow:
         self._render_inflight = True
         self._render_request_id += 1
         request_id = self._render_request_id
-        self._status_var.set("Rendering preview...")
+        self._status.set_message("Rendering preview...")
         self._set_busy("Rendering preview...")
 
         def _worker() -> None:
@@ -1484,10 +1989,10 @@ class MainWindow:
                 height // 2,
                 text="Renderer fallback active (Skia unavailable)\nScene generated successfully",
                 fill="#555555",
-                font=("SF Pro Text", 13),
+                font=theme.font("lead"),
                 justify="center",
             )
-            self._status_var.set("Renderer fallback active")
+            self._status.set_message("Renderer fallback active")
             self._finish_render("Renderer fallback")
             return
 
@@ -1495,7 +2000,7 @@ class MainWindow:
         self._canvas.delete("all")
         self._canvas.create_image(0, 0, anchor="nw", image=self._canvas_image)
         self._canvas.configure(scrollregion=(0, 0, width, height))
-        self._status_var.set(f"Rendered · {getattr(self, '_layer_summary', '')}".rstrip(" ·"))
+        self._status.set_message(f"Rendered · {getattr(self, '_layer_summary', '')}".rstrip(" ·"))
         png_bytes = len(png)
         if isinstance(render_ms, (int, float)):
             drawn_paths = getattr(self.renderer, "_last_drawn_paths", -1)
@@ -1515,8 +2020,7 @@ class MainWindow:
 
     def _finish_render(self, label: str) -> None:
         """Common end of a render: stop the spinner and disarm Cancel."""
-        if hasattr(self, "_cancel_button"):
-            self._cancel_button.state(["disabled"])
+
         self._set_idle(label)
 
     def _photo_image_from_png(self, png_bytes: bytes) -> tk.PhotoImage:
@@ -1544,228 +2048,37 @@ class MainWindow:
             self.renderer.set_layer_visibility(name, bool(var.get()))
         self._schedule_redraw()
 
-    def _on_mouse_wheel(self, event: tk.Event) -> None:
-        factor = 1.12 if event.delta > 0 else 0.89
-        self.renderer.zoom(factor)
-        self._schedule_redraw()
-
-    def _on_mouse_wheel_linux(self, event: tk.Event) -> None:
-        factor = 1.12 if getattr(event, "num", 0) == 4 else 0.89
-        self.renderer.zoom(factor)
-        self._schedule_redraw()
+    # Pan, zoom, turning and drawing an area all live in `ui/map_canvas.py`
+    # now. The verbs below are what the menu bar and the toolbar call; each is
+    # one line, because the canvas already knows how to do the thing.
 
     def _zoom_view(self, factor: float) -> None:
-        """Zoom in or out by the given factor."""
-        self.renderer.zoom(factor)
-        self._schedule_redraw()
-        # Ensure canvas has focus for keyboard shortcuts
-        self._canvas.focus_set()
+        self._map.zoom(factor)
 
     def _reset_view(self) -> None:
-        """Reset zoom and pan to default."""
-        from hipparchus.rendering.models import ViewportState
-        self.renderer.set_viewport(ViewportState())
-        self._scroll_x = 0.5
-        self._scroll_y = 0.5
-        self._rotation_var.set(0.0)
-        self._sync_scrollbars()
-        self._schedule_redraw()
-        # Ensure canvas has focus for keyboard shortcuts
-        self._canvas.focus_set()
+        self._map.reset_view()
 
     def _rotate_view(self, degrees: float) -> None:
-        """Rotate view by given degrees."""
-        self.renderer.rotate(degrees)
-        new_rotation = (self._rotation_var.get() + degrees) % 360
-        if new_rotation > 180:
-            new_rotation -= 360
-        self._rotation_var.set(new_rotation)
-        self._schedule_redraw()
-        self._canvas.focus_set()
+        self._map.turn(degrees)
 
     def _reset_rotation(self) -> None:
-        """Reset rotation to 0 degrees."""
-        self.renderer.set_rotation(0.0)
-        self._rotation_var.set(0.0)
-        self._schedule_redraw()
-        self._canvas.focus_set()
-
-    def _on_rotation_changed(self, value: str) -> None:
-        """Handle rotation slider change."""
-        try:
-            degrees = float(value)
-            self.renderer.set_rotation(degrees)
-            self._schedule_redraw()
-        except ValueError:
-            pass
+        self._map.north_up()
 
     def _arm_area_selection(self) -> None:
-        """Next drag on the canvas draws an area instead of panning."""
-        self._select_armed = True
-        self._canvas.configure(cursor="crosshair")
-        self._status_var.set("Drag on the map to draw a new area")
-
-    def _disarm_area_selection(self) -> None:
-        self._select_armed = False
-        self._canvas.configure(cursor="")
-
-    def _on_select_start(self, event: tk.Event) -> "str | None":
-        if self._current_scene is None:
-            return None
-        self._select_origin = (event.x, event.y)
-        if self._select_rect is not None:
-            self._canvas.delete(self._select_rect)
-        self._select_rect = self._canvas.create_rectangle(
-            event.x, event.y, event.x, event.y,
-            outline=THEME_PALETTES[self._theme_mode]["select_text"],
-            width=2,
-            dash=(4, 3),
-        )
-        return "break"  # the pan handler must not see this press too
-
-    def _on_select_move(self, event: tk.Event) -> "str | None":
-        if self._select_origin is None or self._select_rect is None:
-            return None
-        x0, y0 = self._select_origin
-        self._canvas.coords(self._select_rect, x0, y0, event.x, event.y)
-        return "break"
-
-    def _on_select_end(self, event: tk.Event) -> "str | None":
-        origin = self._select_origin
-        self._select_origin = None
-        if self._select_rect is not None:
-            self._canvas.delete(self._select_rect)
-            self._select_rect = None
-        self._disarm_area_selection()
-        if origin is None:
-            return None
-
-        x0, y0 = origin
-        if abs(event.x - x0) < 8 or abs(event.y - y0) < 8:
-            # A stray click is not an area; ignore it rather than jumping the
-            # map to a sliver nobody meant to draw.
-            self._status_var.set("Area too small - drag a box to set one")
-            return "break"
-
-        bounds = self._canvas_box_to_bounds((x0, y0), (event.x, event.y))
-        if bounds is None:
-            self._status_var.set("Could not read that area from the map")
-            return "break"
-
-        self._set_aoi(*bounds)
-        self._status_var.set("Area set from the map - Render map to fetch it")
-        return "break"
-
-    def _canvas_box_to_bounds(
-        self,
-        first: tuple[int, int],
-        second: tuple[int, int],
-    ) -> tuple[float, float, float, float] | None:
-        """Two canvas corners to a lon/lat bbox, through the render transform."""
-        scene = self._current_scene
-        projection = getattr(scene, "projection", None) if scene is not None else None
-        if projection is None:
-            return None
-        width = max(1, self._canvas.winfo_width())
-        height = max(1, self._canvas.winfo_height())
-
-        corners = []
-        for x, y in (first, second):
-            world = self.renderer.screen_to_world(float(x), float(y), width, height)
-            if world is None:
-                return None
-            corners.append(projection.unproject_point(*world))
-
-        lons = [point[0] for point in corners]
-        lats = [point[1] for point in corners]
-        min_lon, max_lon = min(lons), max(lons)
-        min_lat, max_lat = min(lats), max(lats)
-        if max_lon - min_lon < 1e-6 or max_lat - min_lat < 1e-6:
-            return None
-        return (min_lon, min_lat, max_lon, max_lat)
-
-    def _on_drag_start(self, event: tk.Event) -> None:
-        if self._select_armed:
-            self._on_select_start(event)
-            return
-        self._drag_last_xy = (event.x, event.y)
-        self._canvas.configure(cursor="fleur")
-
-    def _on_drag_move(self, event: tk.Event) -> None:
-        if self._select_origin is not None:
-            self._on_select_move(event)
-            return
-        if self._drag_last_xy is None:
-            return
-        lx, ly = self._drag_last_xy
-        dx = event.x - lx
-        dy = event.y - ly
-        self._drag_last_xy = (event.x, event.y)
-        self.renderer.pan(dx, dy)
-        self._update_scroll_state(dx=dx, dy=dy)
-        self._schedule_redraw()
-
-    def _on_drag_end(self, _: tk.Event) -> None:
-        if self._select_origin is not None:
-            self._on_select_end(_)
-            return
-        self._drag_last_xy = None
-        self._canvas.configure(cursor="")
-
-    def _on_hscroll(self, *args: str) -> None:
-        if self._current_scene is None:
-            return
-        next_value = self._next_scroll_value(self._scroll_x, args)
-        dx = (next_value - self._scroll_x) * self._scroll_span_pixels
-        self._scroll_x = next_value
-        self.renderer.pan(dx, 0.0)
-        self._sync_scrollbars()
-        self._schedule_redraw()
-
-    def _on_vscroll(self, *args: str) -> None:
-        if self._current_scene is None:
-            return
-        next_value = self._next_scroll_value(self._scroll_y, args)
-        dy = (next_value - self._scroll_y) * self._scroll_span_pixels
-        self._scroll_y = next_value
-        self.renderer.pan(0.0, dy)
-        self._sync_scrollbars()
-        self._schedule_redraw()
-
-    def _next_scroll_value(self, current: float, args: tuple[str, ...]) -> float:
-        if not args:
-            return current
-        mode = args[0]
-        if mode == "moveto" and len(args) > 1:
-            return max(0.0, min(1.0, float(args[1])))
-        if mode == "scroll" and len(args) > 1:
-            units = int(args[1])
-            return max(0.0, min(1.0, current + units * self._scroll_step))
-        return current
-
-    def _sync_scrollbars(self) -> None:
-        thumb = 0.12
-        x1 = max(0.0, min(1.0 - thumb, self._scroll_x - thumb * 0.5))
-        y1 = max(0.0, min(1.0 - thumb, self._scroll_y - thumb * 0.5))
-        self._h_scroll.set(x1, x1 + thumb)
-        self._v_scroll.set(y1, y1 + thumb)
-
-    def _update_scroll_state(self, dx: float, dy: float) -> None:
-        self._scroll_x = max(0.0, min(1.0, self._scroll_x + (dx / self._scroll_span_pixels)))
-        self._scroll_y = max(0.0, min(1.0, self._scroll_y + (dy / self._scroll_span_pixels)))
-        self._sync_scrollbars()
+        self._map.arm_area_selection()
 
     def _set_busy(self, label: str) -> None:
         self._busy_counter += 1
         if self._busy_counter == 1:
-            self._progress.start(10)
-        self._progress_label_var.set(label)
+            self._status.set_busy(True)
+        self._status.set_message(label)
 
     def _set_idle(self, label: str) -> None:
+        """One job finishing does not make the app idle: the counter is what
+        stops a lookup completing mid-fetch from stopping the spinner."""
         self._busy_counter = max(0, self._busy_counter - 1)
         if self._busy_counter == 0:
-            self._progress.stop()
-            self._progress_label_var.set(label)
+            self._status.set_busy(False)
 
     def _scene_bounds_text(self, scene: RenderScene) -> str:
         minx: float | None = None
@@ -1814,7 +2127,42 @@ class MainWindow:
             height=export_height,
         )
         diagnostics = exporter.export_with_profile(Path(target), profile=profile)
-        self._status_var.set(f"Exported {diagnostics.total_paths} paths")
+        self._status.set_message(f"Exported {diagnostics.total_paths} paths")
+
+    def _on_export_pdf(self) -> None:
+        """The map as vector paths, at the paper size the Page section names."""
+        self._export_raster(
+            PDFExporter, ".pdf", [("PDF", "*.pdf"), ("All files", "*.*")], "PDF"
+        )
+
+    def _on_export_png(self) -> None:
+        self._export_raster(
+            PNGExporter, ".png", [("PNG", "*.png"), ("All files", "*.*")], "PNG"
+        )
+
+    def _export_raster(self, exporter, suffix: str, filetypes, label: str) -> None:
+        """One path for both, because they differ only in the file they write."""
+        if self._current_scene is None:
+            self._status.set_message("There is no map to export yet.", error=True)
+            return
+        target = filedialog.asksaveasfilename(
+            title=f"Export {label}", defaultextension=suffix, filetypes=filetypes
+        )
+        if not target:
+            return
+
+        width, height = self._export_dimensions()
+        self._set_busy(f"Writing {label}…")
+        try:
+            exporter(scene=self._current_scene, width=width, height=height).export(Path(target))
+        except Exception as exc:  # noqa: BLE001
+            self._status.set_message(f"{label} export failed: {exc}", error=True)
+            return
+        finally:
+            self._set_idle("Idle")
+
+        self._status.set_message(f"Exported {Path(target).name} · {width}×{height}")
+        reveal(Path(target))
 
     def _export_composition(self) -> MapComposition:
         return MapComposition(
@@ -1847,69 +2195,6 @@ class MainWindow:
             scale = float(getattr(self.renderer, "device_scale", 1.0))
         return max(1.0, min(4.0, scale))
 
-    def _selected_map_model_id(self) -> str:
-        return self._map_model_label_to_id.get(self._map_model_var.get(), "osm_live")
-
-    def _format_provider_status(self) -> str:
-        statuses = self.controller.data_source_manager.get_provider_statuses()
-        lines: list[str] = []
-        for provider_id in ("local_osm_pbf", "vector_tiles", "natural_earth", "overture", "terrain_dem"):
-            status = statuses.get(provider_id)
-            if status is None:
-                continue
-            mark = "ok" if status.available else "missing"
-            detail = f" - {status.detail}" if status.detail else ""
-            lines.append(f"{status.label}: {mark}{detail}")
-        return "\n".join(lines)
-
-    def _apply_source_library_preset(self) -> None:
-        preset = next(
-            (item for item in SOURCE_LIBRARY_PRESETS if item.label == self._source_library_var.get()),
-            SOURCE_LIBRARY_PRESETS[0],
-        )
-        self._source_library_note_var.set(preset.note)
-        if preset.label == "Custom":
-            self._status_var.set("Custom source mode: use model and path fields manually")
-            return
-
-        model_label = self._map_model_id_to_label.get(preset.model_id)
-        if model_label is not None:
-            self._map_model_var.set(model_label)
-
-        for provider_id, var in self._optional_source_vars.items():
-            var.set("")
-        root = self._repo_root()
-        missing: list[str] = []
-        for provider_id, relative_path in preset.paths.items():
-            candidate = root / relative_path
-            if candidate.exists():
-                self._optional_source_vars[provider_id].set(str(candidate))
-            else:
-                missing.append(relative_path)
-
-        if preset.aoi is not None:
-            self._set_aoi(*preset.aoi)
-        if preset.quality_label is not None:
-            self._quality_var.set(preset.quality_label)
-
-        self._apply_runtime_settings()
-        if missing:
-            messagebox.showwarning(
-                "Source preset",
-                "Some sample sources were not found:\n" + "\n".join(missing),
-            )
-        else:
-            self._status_var.set(f"Source preset applied: {preset.label}")
-
-    def _apply_and_fetch_source_library_preset(self) -> None:
-        self._apply_source_library_preset()
-        if self._source_library_var.get() != "Custom":
-            self._on_fetch_clicked()
-
-    def _use_installed_sample_sources(self) -> None:
-        self._source_library_var.set("Installed Samples")
-        self._apply_source_library_preset()
-
     def _repo_root(self) -> Path:
         return Path(__file__).resolve().parents[3]
 
@@ -1932,33 +2217,42 @@ class MainWindow:
             selected = filedialog.askopenfilename(title="Choose map source", filetypes=filetypes)
         if not selected:
             return
-        # Three places need to agree: the stack decides whether the source can
-        # be ticked, the manager does the reading, and the old path field is
-        # still what Apply Settings writes from.
+        # Two places need to agree: the stack decides whether the source can be
+        # ticked, and the manager does the reading. There used to be a third —
+        # a set of path variables that Apply Settings wrote from — and nothing
+        # reads them now that the button is gone.
         self.source_stack.set_path(provider_id, selected)
         self.controller.data_source_manager.set_optional_source_path(provider_id, selected)
-        if provider_id in self._optional_source_vars:
-            self._optional_source_vars[provider_id].set(selected)
         if self._sources_panel is not None:
             self._sources_panel.rebuild()
-        self._status_var.set(f"{provider_id}: {selected}")
+        self._status.set_message(f"{provider_id}: {selected}")
+        self._record()
 
     def _restyle_icons(self) -> None:
         """Keep the drawn icons in step with the current appearance."""
-        palette = THEME_PALETTES.get(self._theme_mode, THEME_PALETTES["light"])
+        palette = theme.palette(self._theme_mode)
         icons.restyle_all(
-            colour=palette["text"],
-            background=palette["panel_alt"],
-            hover=palette["button_active"],
+            colour=palette.text,
+            background=palette.panel_alt,
+            hover=palette.button_active,
         )
+        if getattr(self, "_locator_window", None) is not None:
+            self._locator_window.restyle()
         self._refresh_minimap()
 
     def _toggle_theme(self) -> None:
+        # The title does not carry the appearance. Which mode you are in is
+        # visible in every pixel of the window; saying it again in the title bar
+        # is furniture, and it made the window's name change under anything
+        # that reads it.
         self._theme_mode = "dark" if self._theme_mode == "light" else "light"
         self._apply_theme()
-        self._root.title(f"{self.config.app_name} ({self._theme_mode} mode)")
 
     def _apply_theme(self) -> None:
+        # Said once, here, so everything drawn later — a swatch border, a
+        # tooltip's ground, an icon — reads the same appearance rather than
+        # each keeping its own copy of which one is in force.
+        theme.set_mode(self._theme_mode)
         style = ttk.Style(master=self._root)
         self._setup_platform_theme(style)
         self._restyle_icons()
@@ -1966,124 +2260,124 @@ class MainWindow:
             self._apply_macos_aqua_appearance()
             return
 
-        palette = THEME_PALETTES.get(self._theme_mode, THEME_PALETTES["light"])
+        palette = theme.palette(self._theme_mode)
         self._root.tk_setPalette(
-            background=palette["bg"],
-            foreground=palette["text"],
-            activeBackground=palette["button_active"],
-            activeForeground=palette["text"],
-            highlightBackground=palette["border"],
-            highlightColor=palette["select"],
-            selectBackground=palette["select"],
-            selectForeground=palette["select_text"],
+            background=palette.bg,
+            foreground=palette.text,
+            activeBackground=palette.button_active,
+            activeForeground=palette.text,
+            highlightBackground=palette.border,
+            highlightColor=palette.select,
+            selectBackground=palette.select,
+            selectForeground=palette.select_text,
         )
-        self._root.option_add("*Menu.background", palette["panel_alt"])
-        self._root.option_add("*Menu.foreground", palette["text"])
-        self._root.option_add("*Menu.activeBackground", palette["button_active"])
-        self._root.option_add("*Menu.activeForeground", palette["text"])
-        self._root.option_add("*Menu.selectColor", palette["select"])
+        self._root.option_add("*Menu.background", palette.panel_alt)
+        self._root.option_add("*Menu.foreground", palette.text)
+        self._root.option_add("*Menu.activeBackground", palette.button_active)
+        self._root.option_add("*Menu.activeForeground", palette.text)
+        self._root.option_add("*Menu.selectColor", palette.select)
 
-        style.configure(".", background=palette["bg"], foreground=palette["text"])
-        style.configure("TFrame", background=palette["bg"])
-        style.configure("TLabel", background=palette["bg"], foreground=palette["text"])
+        style.configure(".", background=palette.bg, foreground=palette.text)
+        style.configure("TFrame", background=palette.bg)
+        style.configure("TLabel", background=palette.bg, foreground=palette.text)
         style.configure(
             "TButton",
-            background=palette["button"],
-            foreground=palette["text"],
-            bordercolor=palette["border"],
-            lightcolor=palette["button_active"],
-            darkcolor=palette["border"],
-            focuscolor=palette["select"],
+            background=palette.button,
+            foreground=palette.text,
+            bordercolor=palette.border,
+            lightcolor=palette.button_active,
+            darkcolor=palette.border,
+            focuscolor=palette.select,
             padding=5,
         )
         style.configure(
             "TMenubutton",
-            background=palette["button"],
-            foreground=palette["text"],
-            bordercolor=palette["border"],
-            arrowcolor=palette["text"],
-            focuscolor=palette["select"],
+            background=palette.button,
+            foreground=palette.text,
+            bordercolor=palette.border,
+            arrowcolor=palette.text,
+            focuscolor=palette.select,
             padding=4,
         )
-        style.configure("TCheckbutton", background=palette["bg"], foreground=palette["text"])
+        style.configure("TCheckbutton", background=palette.bg, foreground=palette.text)
         style.configure(
             "TEntry",
-            fieldbackground=palette["field"],
-            foreground=palette["field_text"],
-            insertcolor=palette["field_text"],
-            bordercolor=palette["border"],
-            lightcolor=palette["button_active"],
-            darkcolor=palette["border"],
+            fieldbackground=palette.field,
+            foreground=palette.field_text,
+            insertcolor=palette.field_text,
+            bordercolor=palette.border,
+            lightcolor=palette.button_active,
+            darkcolor=palette.border,
         )
         style.configure(
             "TCombobox",
-            fieldbackground=palette["field"],
-            foreground=palette["field_text"],
-            background=palette["button"],
-            bordercolor=palette["border"],
-            arrowcolor=palette["text"],
+            fieldbackground=palette.field,
+            foreground=palette.field_text,
+            background=palette.button,
+            bordercolor=palette.border,
+            arrowcolor=palette.text,
         )
         style.configure(
             "TSpinbox",
-            fieldbackground=palette["field"],
-            foreground=palette["field_text"],
-            background=palette["button"],
-            bordercolor=palette["border"],
-            arrowcolor=palette["text"],
+            fieldbackground=palette.field,
+            foreground=palette.field_text,
+            background=palette.button,
+            bordercolor=palette.border,
+            arrowcolor=palette.text,
         )
-        style.configure("Horizontal.TScale", background=palette["bg"], troughcolor=palette["panel_alt"], sliderrelief="flat")
-        style.configure("TSeparator", background=palette["border"])
-        style.configure("Vertical.TScrollbar", background=palette["button"], troughcolor=palette["panel"], arrowcolor=palette["text"])
-        style.configure("Horizontal.TScrollbar", background=palette["button"], troughcolor=palette["panel"], arrowcolor=palette["text"])
+        style.configure("Horizontal.TScale", background=palette.bg, troughcolor=palette.panel_alt, sliderrelief="flat")
+        style.configure("TSeparator", background=palette.border)
+        style.configure("Vertical.TScrollbar", background=palette.button, troughcolor=palette.panel, arrowcolor=palette.text)
+        style.configure("Horizontal.TScrollbar", background=palette.button, troughcolor=palette.panel, arrowcolor=palette.text)
         style.map(
             "TButton",
             background=[
-                ("disabled", palette["panel_alt"]),
-                ("active", palette["button_active"]),
-                ("pressed", palette["select"]),
+                ("disabled", palette.panel_alt),
+                ("active", palette.button_active),
+                ("pressed", palette.select),
             ],
-            foreground=[("disabled", palette["muted"]), ("active", palette["text"])],
+            foreground=[("disabled", palette.muted), ("active", palette.text)],
         )
         style.map(
             "TMenubutton",
             background=[
-                ("disabled", palette["panel_alt"]),
-                ("active", palette["button_active"]),
-                ("pressed", palette["select"]),
+                ("disabled", palette.panel_alt),
+                ("active", palette.button_active),
+                ("pressed", palette.select),
             ],
-            foreground=[("disabled", palette["muted"]), ("active", palette["text"])],
-            arrowcolor=[("disabled", palette["muted"]), ("active", palette["text"])],
+            foreground=[("disabled", palette.muted), ("active", palette.text)],
+            arrowcolor=[("disabled", palette.muted), ("active", palette.text)],
         )
         style.map(
             "TCheckbutton",
-            background=[("active", palette["bg"])],
-            foreground=[("disabled", palette["muted"]), ("active", palette["text"])],
-            indicatorcolor=[("selected", palette["select"]), ("!selected", palette["panel_alt"])],
+            background=[("active", palette.bg)],
+            foreground=[("disabled", palette.muted), ("active", palette.text)],
+            indicatorcolor=[("selected", palette.select), ("!selected", palette.panel_alt)],
         )
         style.map(
             "TEntry",
-            fieldbackground=[("disabled", palette["panel_alt"]), ("readonly", palette["panel_alt"])],
-            foreground=[("disabled", palette["muted"]), ("readonly", palette["text"])],
+            fieldbackground=[("disabled", palette.panel_alt), ("readonly", palette.panel_alt)],
+            foreground=[("disabled", palette.muted), ("readonly", palette.text)],
         )
         style.map(
             "TCombobox",
-            fieldbackground=[("readonly", palette["field"]), ("disabled", palette["panel_alt"])],
-            foreground=[("readonly", palette["field_text"]), ("disabled", palette["muted"])],
-            selectbackground=[("readonly", palette["select"])],
-            selectforeground=[("readonly", palette["select_text"])],
+            fieldbackground=[("readonly", palette.field), ("disabled", palette.panel_alt)],
+            foreground=[("readonly", palette.field_text), ("disabled", palette.muted)],
+            selectbackground=[("readonly", palette.select)],
+            selectforeground=[("readonly", palette.select_text)],
         )
         style.map(
             "TSpinbox",
-            fieldbackground=[("disabled", palette["panel_alt"])],
-            foreground=[("disabled", palette["muted"])],
+            fieldbackground=[("disabled", palette.panel_alt)],
+            foreground=[("disabled", palette.muted)],
         )
 
         for canvas_name in ("_left_sidebar_canvas", "_right_sidebar_canvas"):
             if hasattr(self, canvas_name):
                 canvas = getattr(self, canvas_name)
-                canvas.configure(background=palette["bg"])
+                canvas.configure(background=palette.bg)
         if hasattr(self, "_canvas"):
-            self._canvas.configure(background=palette["canvas_bg"], highlightbackground=palette["canvas_border"])
+            self._canvas.configure(background=palette.canvas_bg, highlightbackground=palette.canvas_border)
 
     def _apply_macos_aqua_appearance(self) -> None:
         """Switch native macOS Aqua appearance without overriding ttk colors."""

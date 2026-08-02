@@ -1,6 +1,6 @@
 # Hipparchus
 
-**Version 0.3.2**
+**Version 0.4.1**
 
 **Hipparchus is an online desktop vector cartography app for creating clean, editable maps from OpenStreetMap data and exporting them as Illustrator-friendly SVG files.**
 
@@ -25,11 +25,25 @@ Hipparchus is a standalone map creation tool focused on live online data, clean 
 
 ## Features
 
+New in 0.4.1:
+
+- A menu bar and the whole keyboard: ⌘↵ to render, ⌘. to cancel, ⌘L for the Locator, ⌘F to search, ⌘1…⌘9 for saved places, ⌘Z to undo, ⌘, for settings.
+- **The Locator**: an interactive world map drawn from Natural Earth — no network, no key, no tile policy — in the sidebar and in a window of its own. It follows the zoom into the 1:10m dataset, so a sea has its islands rather than a coarse outline at every scale.
+- **Palettes**: colour as an axis of its own. A preset is a whole sheet, so the same map in other colours was not something you could ask for; a palette replaces the colour and keeps the geometry, and applies to any of the sixteen styles.
+- Undo that names what it will take back, and never re-fetches to do it.
+- The window reopens where you left it — area, sources, style, palette, quality and hidden layers.
+- Settings at ⌘,, with no Apply button: a change takes effect as it is made.
+- Per-source progress, so a five-minute fetch says which source is slow instead of "Idle".
+- A large area says what it will cost before you wait for it.
+- PDF and PNG export, both of which previously existed as classes that did nothing. The PDF is drawn rather than photographed.
+
+Throughout:
+
 - Online-only OpenStreetMap fetching through Overpass.
 - Public Overpass endpoint fallback support.
 - Location lookup by place name.
 - Manual bounding-box editing.
-- Preset areas for quick testing.
+- Saved places, reachable from the Map menu and from ⌘1…⌘9.
 - Layer toggles for roads, buildings, water, parks, railways, natural areas, labels, amenities, shops, landuse, barriers, and power features.
 - Styled road hierarchy with motorway, trunk, primary, secondary, tertiary, residential, service, and other road classes.
 - Visible blue water rendering for lakes and coastline-derived sea areas.
@@ -37,14 +51,14 @@ Hipparchus is a standalone map creation tool focused on live online data, clean 
 - Cartographic presets including `OSM Standard`, `Urban Structure`, `Fragmented Urban`, `Organic Field`, and `Blueprint Relief`.
 - Additional print-oriented presets including `Editorial Print`, `Clean Atlas`, `Soft Urban`, `Technical Blueprint`, `Terrain Study`, `Monochrome Figure Ground`, `Coastal Survey`, `Contour Study`, `Relief Sheet`, and `Hypsometric Relief`.
 - A dark `Night` preset that paints its own ground, so lit streets read against an unlit city in both the preview and the SVG export.
-- Sixteen map models covering live OSM, local OSM `.osm.pbf`, vector tiles, Natural Earth, Overture, terrain relief, night lights, simulated terrain, live earthquakes, online night lights, satellite ground tracks, a contour atlas, and a hybrid atlas — each backed by an optional dependency that never becomes mandatory.
+- **Sources that stack.** A map is built from sources rather than chosen from a list of models: ticking Elevation onto a street map adds contours to it and never throws the streets away. Live OSM, local OSM `.osm.pbf`, vector tiles, Natural Earth, Overture, terrain relief, night lights, simulated terrain, live earthquakes, online night lights and satellite ground tracks all compose, each backed by an optional dependency that never becomes mandatory.
 - `Night Lights (VIIRS)` model that turns a nighttime-illumination GeoTIFF into iso-radiance contours: how brightly a place is actually lit at night, as editable vector lines.
 - `Terrain Online (real elevation)` and `Terrain Atlas (OSM + real elevation)` models that fetch **real measured elevation** for any area on Earth from public terrain tiles — no key, no account, no downloaded file — and contour it into editable linework. Terrarium-encoded tiles are stitched, cropped and contoured, with the Web Mercator projection inverted properly so contours land where the ground actually is.
 - Filled hypsometric tints: real elevation turned into graded elevation bands under the contours, with holes and nesting resolved from the data rather than assumed, so an enclosed basin reads as a hollow instead of filling itself in. Each band exports as its own path with its own fill.
 - Supersampled preview rendering: the quality profile's oversampling factor is applied and resampled down with a Mitchell filter, so hairline contours stop aliasing. `High Preview` renders at 1.5x.
 - Summit labels carrying **measured** heights read straight off the elevation data, so a contour sheet tells you the number as well as the shape.
 - Bathymetry as its own layer: terrain tiles carry the sea floor in the same band as the land, so sub-sea contours come free with the coast and are styled apart from it.
-- A `Relief` toggle that layers real elevation onto *any* model, so choosing a street map never means giving up terrain, and terrain never means giving up streets, labels or buildings.
+- Elevation layers onto anything, because it is a source like the others: choosing a street map never means giving up terrain, and terrain never means giving up streets, labels or buildings.
 - `Simulated Terrain (synthetic)` model that generates its own relief and contours it — no data file, no account, no network, and no optional packages. The field is anchored to longitude and latitude, so panning at a fixed zoom reveals more of one continuous landscape, and a seed (`HIPPARCHUS_SIMULATED_SEED`) always returns the same one. Landform size and relief follow the window, so a city AOI and a regional one both read as terrain rather than as a single hillside or a wall of mush. Everything it produces is flagged `synthetic`; the elevations are invented, not measured.
 - Separate `Terrain Contours` and `Index Contours` layers, exported as their own SVG groups, with the interval rounded to a readable step that follows the relief in view.
 - A `Relief Sheet` model and preset for the dense hairline look: hundreds of levels on a fine grid, no accented lines and no weight variation, so depth is carried entirely by how tightly the contours crowd — open paper on flat ground, near-solid ink where it falls away. Costs a few seconds per fetch rather than a few hundred milliseconds.
@@ -94,7 +108,14 @@ A map is built from **sources**, and sources stack. Ticking Elevation onto a
 street map adds contours to it; it never replaces what is already there. Below
 that, **Layers** lists what the map you just fetched actually contains, with
 counts, and **Style** is chosen from thumbnails drawn from the presets
-themselves.
+themselves — with **Palette** beneath them, because colour is a separate
+question from which sheet you are drawing.
+
+Above both sits the **Locator**: a world map drawn from Natural Earth, in the
+sidebar and — at ⌘L — in a window with room to aim in. In the sidebar what it
+shows *is* the area to fetch. In the window the two come apart: panning and
+zooming go looking, and a **click** chooses, so you can pick a place, zoom out
+to check you picked the right one, and still have it picked.
 
 <table>
   <tr>
@@ -108,18 +129,25 @@ themselves.
 </table>
 
 Both are screenshots of the running app, not mockups. The layer list on the
-right is the map that was actually fetched: Santorini shows 798 index contours
-and 24 summit heights with the label layers greyed because that area has none;
-Sydney shows 28 layers and 154,572 features, grouped from terrain through to
-labels.
+right is the map that was actually fetched, layer by layer with its counts, so
+a layer holding nothing says so instead of sitting there ticked and blank.
+
+*These two were taken before the 0.4.1 interface revision and do not show the
+menu bar, the Locator or the palette row. `scripts/screenshot_session.py`
+prepares the application for their replacements.*
 
 The maps at the top of this page and in the gallery are the app's own output,
 rendered through the same pipeline that writes the SVG.
 
 ## Gallery: the measured sources
 
-Eight maps of seven places, each from live data through the same pipeline that
+Eleven maps of nine places, each from live data through the same pipeline that
 produces the SVG export. Nothing here is drawn by hand or touched up.
+
+The two most recent were made headlessly, by
+[`scripts/render_gallery.py`](scripts/render_gallery.py), which records the
+bounding box, the sources and the style for each plate so any of them can be
+made again.
 
 <table>
   <tr>
@@ -156,10 +184,18 @@ produces the SVG export. Nothing here is drawn by hand or touched up.
   </tr>
   <tr>
     <td width="50%"><img src="docs/assets/gallery-miami-night-lights.png" width="100%" alt="South Florida at night"></td>
-    <td width="50%"></td>
+    <td width="50%"><img src="docs/assets/gallery-cartagena-coastal-survey.png" width="100%" alt="Cartagena de Indias, the walled city and Bocagrande between the Caribbean and the bay"></td>
   </tr>
   <tr>
     <td align="center"><em>South Florida — Homestead to Palm Beach<br><code>Night Lights Online (GIBS)</code></em></td>
+    <td align="center"><em>Cartagena de Indias — the sea inferred from the coastline alone<br><code>OpenStreetMap</code> + <code>Coastal Survey</code></em></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/assets/gallery-auckland-hypsometric.png" width="100%" alt="Auckland on its isthmus, volcanic cones raised as filled elevation bands"></td>
+    <td width="50%"></td>
+  </tr>
+  <tr>
+    <td align="center"><em>Auckland — the isthmus and its volcanic cones, Maungawhau at 186 m<br><code>OpenStreetMap</code> + <code>Elevation</code> + <code>Hypsometric Relief</code></em></td>
     <td align="center"></td>
   </tr>
 </table>
@@ -223,12 +259,12 @@ Ten renders of the built-in cartographic presets, each from live OpenStreetMap d
 
 ## Current Status
 
-Hipparchus is a working desktop application under active development. It can fetch real map data, render an interactive preview, and export SVG. Some UI controls are still evolving, and PDF, PNG, and GeoJSON exporters are placeholders.
+Hipparchus is a working desktop application under active development. It can fetch real map data, render an interactive preview, and export SVG, PDF and PNG. The GeoJSON exporter is still a placeholder.
 
 Recommended workflow:
 
-1. Search for a location or choose a preset area.
-2. Keep the area reasonably small.
+1. Search for a location, choose a saved place, or find one on the Locator.
+2. Keep the area reasonably small — a city centre, not a region. The app says so before a long fetch, but a smaller area is the difference between seconds and minutes.
 3. Select only the layers you need.
 4. Choose `Fast Preview` while exploring or `High Preview` for a smoother screen render.
 5. Fetch map data.
@@ -441,7 +477,7 @@ $env:HIPPARCHUS_VECTOR_TILES = "datasets\pmtiles\firenze.pmtiles"
 .\run_hprs.ps1
 ```
 
-Inside the app, the right sidebar also includes a `Source Library` selector with one-click presets for OSM Live, installed samples, Florence PMTiles, Natural Earth World, Athens DEM, and Athens Overture.
+Sources are ticked individually in the Sources list and stack rather than replace; the one-click `Source Library` presets that predated it were removed in 0.4.1, along with the map-model dropdown they shared a purpose with.
 
 ## Running Checks
 
@@ -543,7 +579,9 @@ Experimental derived geometry layers such as Voronoi, Delaunay, hex grid, and ci
 
 ## Water And Sea Rendering
 
-Closed lake and reservoir polygons are rendered through the `water` layer. Coastal seas are often represented in OpenStreetMap as coastline lines rather than filled polygons, so Hipparchus derives visible sea polygons from coastline geometry and the current bounding box. This makes coastal water areas render as blue fills behind roads and land features.
+Closed lake and reservoir polygons are rendered through the `water` layer. Coastal seas are often represented in OpenStreetMap as coastline lines rather than filled polygons, so Hipparchus derives visible sea polygons from coastline geometry and the current bounding box. This makes coastal water areas render as blue fills under the roads and buildings.
+
+The sea is drawn **over** the relief rather than under it. Terrain tiles carry the sea floor in the same band as the ground, so elevation bands cover the water as well as the land; an opaque hypsometric fill drawn afterwards paints a harbour out.
 
 ## SVG Export
 
@@ -583,6 +621,32 @@ Override the preset file location:
 ```bash
 HIPPARCHUS_PRESETS_FILE=/path/to/presets.json ./run_hprs.sh
 ```
+
+## Palettes
+
+A preset is a whole sheet: geometry, weights and colour together. That makes
+"the same map in different colours" something you cannot ask for — you can only
+pick a different sheet, and the geometry and the emphasis come with it whether
+you wanted them or not.
+
+A palette is eight colours and nothing else, so any of them can be laid over any
+preset:
+
+`Tsevis Daylight` · `Tsevis Nocturne` · `Admiralty` · `Riso Teal & Coral` ·
+`Riso Blue & Ochre` · `Sepia` · `Botanical` · `Slate` · `High Contrast Light` ·
+`High Contrast Dark`
+
+`Preset's own` leaves the style's colours alone, and is what a new session
+starts on.
+
+Every layer's colour is **derived** from those eight rather than chosen one by
+one, which is what keeps a sheet coherent: picked layer by layer, the water ends
+up a blue that belongs to no other colour on the map. The derivation is shared
+with the macOS application and with the script that generated the style packs,
+and a fixture holds all three to the same answer.
+
+A palette takes effect on the next Render map, as a style does. The fetch behind
+it is cached, so re-drawing the same area in other colours costs no network.
 
 ## Cache And User Data
 
@@ -651,19 +715,19 @@ $env:HIPPARCHUS_START_AREA = "Venice Historic"; $env:HIPPARCHUS_FETCH_ON_START =
 
 ```text
 src/hipparchus/
-  application/       Controller, presets, preset persistence, quality, scene builder
+  application/       The rules: sources, session, undo, presets, palettes, the Locator's arithmetic, scene builder
   cache/             Disk cache, cache index, and housekeeping
-  core/              App bootstrap, config, project state, settings store
+  core/              App bootstrap, config, fetch progress, settings store
   data_sources/      Overpass provider, query builder, GeoJSON conversion, map models, local-source backends
-  export/            SVG export, export profiles, and SVG cleanup
+  export/            SVG, PDF and PNG export, export profiles, and SVG cleanup
   geometry/          Projection, simplification, smoothing, and derived geometry tools
   plugins/           Plugin interfaces, loader, and builtin plugins
   rendering/         Render models, geometry adapter, and Skia renderer
-  ui/                Tkinter main window
+  ui/                The window: wiring, not rules
 
 hipparchus/          Compatibility shim so `python -m hipparchus` runs from source
-tests/               Unit tests (20 test modules)
-scripts/             Launch, preflight, precache, and clip scripts
+tests/               Unit tests (65 test modules)
+scripts/             Launch, preflight, precache, gallery, and clip scripts
 docs/                Documentation assets (screenshots)
 documents/           Design and planning notes
 datasets/            Local sample data (gitignored except README)

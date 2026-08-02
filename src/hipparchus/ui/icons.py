@@ -15,6 +15,8 @@ from __future__ import annotations
 import tkinter as tk
 from typing import Callable
 
+from hipparchus.ui.tooltip import attach as attach_tooltip
+
 # Unit-square line art: each icon is a list of polylines in 0..1 coordinates,
 # drawn with round caps so small sizes stay legible.
 Polyline = list[tuple[float, float]]
@@ -54,6 +56,93 @@ ICONS: dict[str, list[Polyline]] = {
         [(0.5, 0.22), (0.80, 0.38), (0.5, 0.54), (0.20, 0.38), (0.5, 0.22)],
         [(0.20, 0.56), (0.5, 0.72), (0.80, 0.56)],
     ],
+    # A folded paper map, for the Locator — the same glyph wherever the Locator
+    # is reachable from, so the two ways in look like one thing.
+    "map": [
+        [
+            (0.20, 0.28), (0.40, 0.22), (0.60, 0.30), (0.80, 0.24),
+            (0.80, 0.72), (0.60, 0.78), (0.40, 0.70), (0.20, 0.76), (0.20, 0.28),
+        ],
+        [(0.40, 0.22), (0.40, 0.70)],
+        [(0.60, 0.30), (0.60, 0.78)],
+    ],
+    # Back to the whole world. A meridian either side of the axis reads as a
+    # sphere where a bare circle reads as a button.
+    "globe": [
+        [(0.22, 0.5), (0.78, 0.5)],
+        [(0.5, 0.22), (0.38, 0.35), (0.38, 0.65), (0.5, 0.78)],
+        [(0.5, 0.22), (0.62, 0.35), (0.62, 0.65), (0.5, 0.78)],
+    ],
+    "pin": [
+        [
+            (0.5, 0.80), (0.32, 0.52), (0.32, 0.40), (0.40, 0.30),
+            (0.60, 0.30), (0.68, 0.40), (0.68, 0.52), (0.5, 0.80),
+        ],
+    ],
+    "folder": [
+        [(0.20, 0.72), (0.20, 0.32), (0.42, 0.32), (0.48, 0.40), (0.80, 0.40), (0.80, 0.72), (0.20, 0.72)],
+    ],
+    "trash": [
+        [(0.26, 0.32), (0.74, 0.32)],
+        [(0.42, 0.32), (0.42, 0.26), (0.58, 0.26), (0.58, 0.32)],
+        [(0.32, 0.32), (0.35, 0.76), (0.65, 0.76), (0.68, 0.32)],
+        [(0.44, 0.42), (0.44, 0.66)],
+        [(0.56, 0.42), (0.56, 0.66)],
+    ],
+    # Into the tray. `export` is the same drawing with the arrow reversed, and
+    # the pair has to stay a pair: two identical arrows would make Export SVG
+    # and Save this style the same button.
+    "save": [
+        [(0.5, 0.24), (0.5, 0.58)],
+        [(0.36, 0.46), (0.5, 0.60), (0.64, 0.46)],
+        [(0.26, 0.66), (0.26, 0.76), (0.74, 0.76), (0.74, 0.66)],
+    ],
+    "export": [
+        [(0.5, 0.60), (0.5, 0.24)],
+        [(0.36, 0.38), (0.5, 0.24), (0.64, 0.38)],
+        [(0.26, 0.58), (0.26, 0.76), (0.74, 0.76), (0.74, 0.58)],
+    ],
+    "clipboard": [
+        [(0.30, 0.26), (0.24, 0.26), (0.24, 0.78), (0.76, 0.78), (0.76, 0.26), (0.70, 0.26)],
+        [(0.36, 0.30), (0.36, 0.22), (0.64, 0.22), (0.64, 0.30), (0.36, 0.30)],
+    ],
+    "gear": [
+        [(0.72, 0.50), (0.82, 0.50)],
+        [(0.6556, 0.3444), (0.7263, 0.2737)],
+        [(0.50, 0.28), (0.50, 0.18)],
+        [(0.3444, 0.3444), (0.2737, 0.2737)],
+        [(0.28, 0.50), (0.18, 0.50)],
+        [(0.3444, 0.6556), (0.2737, 0.7263)],
+        [(0.50, 0.72), (0.50, 0.82)],
+        [(0.6556, 0.6556), (0.7263, 0.7263)],
+    ],
+    "warning": [
+        [(0.5, 0.22), (0.82, 0.76), (0.18, 0.76), (0.5, 0.22)],
+        [(0.5, 0.40), (0.5, 0.58)],
+        [(0.5, 0.66), (0.5, 0.68)],
+    ],
+    "tick-circle": [
+        [(0.34, 0.51), (0.45, 0.62), (0.66, 0.39)],
+    ],
+    # A source still being fetched. An open ring with a lead reads as motion
+    # where a ring of dots reads as a queue — and the two must not look alike,
+    # because "waiting" and "working" are the question a slow fetch raises.
+    "spinner": [
+        [(0.70, 0.30), (0.78, 0.22), (0.74, 0.34)],
+    ],
+    # A ring of dashes: a source that has not started yet. Told apart from
+    # `tick-circle` by shape as well as by colour, because colour alone is not
+    # a distinction everyone can see.
+    "dot-circle": [
+        [(0.7773, 0.5390), (0.7773, 0.4610)],
+        [(0.7236, 0.3315), (0.6685, 0.2764)],
+        [(0.5390, 0.2227), (0.4610, 0.2227)],
+        [(0.3315, 0.2764), (0.2764, 0.3315)],
+        [(0.2227, 0.4610), (0.2227, 0.5390)],
+        [(0.2764, 0.6685), (0.3315, 0.7236)],
+        [(0.4610, 0.7773), (0.5390, 0.7773)],
+        [(0.6685, 0.7236), (0.7236, 0.6685)],
+    ],
 }
 
 # Icons that need a circle as well as their polylines.
@@ -61,10 +150,15 @@ CIRCLES: dict[str, tuple[float, float, float]] = {
     "search": (0.44, 0.44, 0.22),
     "rotate-left": (0.5, 0.52, 0.22),
     "rotate-right": (0.5, 0.52, 0.22),
+    "globe": (0.5, 0.5, 0.28),
+    "pin": (0.5, 0.42, 0.09),
+    "gear": (0.5, 0.5, 0.18),
+    "tick-circle": (0.5, 0.5, 0.30),
 }
 
 # Arcs, as (cx, cy, r, start_degrees, extent_degrees).
 ARCS: dict[str, tuple[float, float, float, float, float]] = {
+    "spinner": (0.5, 0.5, 0.28, 45.0, 260.0),
     "rotate-left": (0.5, 0.52, 0.22, 40.0, 280.0),
     "rotate-right": (0.5, 0.52, 0.22, 260.0, -280.0),
 }
@@ -157,6 +251,18 @@ class IconButton(tk.Canvas):
         self.bind("<Button-1>", lambda _e: self._command())
         self.bind("<Enter>", lambda _e: self._set_background(self._hover))
         self.bind("<Leave>", lambda _e: self._set_background(self._background))
+        # An icon button carries no words, so its explanation is the only thing
+        # that says what it does. The text was being stored and never shown.
+        self._tip = attach_tooltip(self, tooltip)
+
+    def set_tooltip(self, text: str) -> None:
+        """Change the explanation — for a button whose meaning depends on its
+        state, such as draw-area on or off."""
+        self.tooltip = text
+        if self._tip is not None:
+            self._tip.set_text(text)
+        else:
+            self._tip = attach_tooltip(self, text)
 
     def _set_background(self, colour: str) -> None:
         self.configure(background=colour)

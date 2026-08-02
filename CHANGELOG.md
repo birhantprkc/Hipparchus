@@ -2,6 +2,104 @@
 
 Notable changes to Hipparchus. Earlier history is in the git log.
 
+## 0.4.1
+
+The interface release. Everything the macOS rewrite learned, brought back to the
+application it was a rewrite of — and, along the way, five features that were
+declared in the source and did nothing.
+
+### A window you can find your way around
+
+- **A menu bar and the whole keyboard.** ⌘↵ to render, ⌘. to cancel, ⌘L for the
+  Locator, ⌘F to search, ⌘1…⌘9 for saved places, ⌘E/⇧⌘E/⌥⌘E to export,
+  ⌘+/−/0 and ⌘[/] for the view, ⌘Z/⇧⌘Z to undo, ⌘, for settings. Every one of
+  them drives a control that is also on screen; a shortcut for something with no
+  button is a secret, not a feature.
+- **Undo that names what it will take back** — "Undo Change Preset", "Undo
+  Enable Elevation" — and never re-fetches to do it: the previous map is
+  restored from a bounded store, because undo must not cost minutes of Overpass
+  time to take back something that cost minutes of Overpass time.
+- **The window reopens where you left it.** Area, sources, files, settings,
+  preset, quality and hidden layers are saved on close.
+- **Settings at ⌘,**, in the file the macOS app already shared and nothing could
+  reach without a text editor. No Apply button: a change takes effect as it is
+  made.
+
+### A map you can point at
+
+- **An interactive world map** drawn from the Natural Earth data already on
+  disk — no network, no key, no tile policy. Drag it, zoom it, and what it
+  shows is the area to fetch. It follows the zoom into the detailed 1:10m set,
+  so a sea has its islands and Italy has its boot rather than the coarse world
+  outline at every scale.
+- **A floating Locator** with room to aim in, where panning and zooming go
+  looking and a click chooses — so you can pick a place, zoom out to check, and
+  still have it picked.
+- **Turning the view lives on the map**, in the same stack as the zooming, with
+  a bearing that appears only when the view is turned.
+- **Render map draws what you are looking at.** Zooming out and pressing it used
+  to re-fetch the old area while the screen showed the wider one.
+- **Render map fetches the area you chose.** Once any map had been drawn, it
+  read the canvas and took whatever it found — so the Locator, a search result,
+  a saved place and four typed numbers all lost to the map already on screen.
+  It worked once per session and silently re-fetched the old area thereafter.
+- **A large area says what it will cost before you wait for it.** The Locator
+  makes a whole sea one drag away, and an area that size does not return; there
+  was no size guard of any kind.
+
+### Colour, separate from the style
+
+- **Ten palettes**, and *Preset's own* for leaving a style alone. A preset is a
+  whole sheet — geometry, weights and colour together — so the same map in other
+  colours was not something you could ask for. A palette replaces the colour and
+  keeps the geometry, and applies to any of the sixteen styles.
+- Every layer's colour is **derived** from the palette's eight rather than
+  chosen one by one, which is what keeps a sheet coherent: hand-picked, the
+  water ends up a blue that belongs to no other colour on the map.
+- It takes effect on the next Render map, as a style does. The fetch behind it
+  is cached, so re-drawing in other colours costs no network.
+- It is saved with the session and undo calls it "Change Palette".
+
+### Saying why, before the click
+
+- **Render map goes dead with its reason on it** instead of raising a dialogue
+  after a click that could never have worked.
+- **A source that needs a file shows its file, its Choose button and the reason
+  it cannot be read**, in the row, rather than behind a chevron.
+- **Per-source progress**: which source is running, which finished with what,
+  which failed and why. A five-minute fetch used to say "Idle".
+- **What the map is made of**, as a badge: the weakest claim any of its sources
+  makes, because a map is only as trustworthy as its least trustworthy layer.
+
+### Things that were there and did nothing
+
+- **PDF and PNG export.** Both classes existed with empty bodies. The PDF is
+  drawn rather than photographed — vector paths, not an embedded bitmap.
+- **Tooltips.** Eight controls passed explanatory text that was stored and never
+  shown.
+- **Plugin failures.** The loader has recorded them since it was written and the
+  window had never displayed one, so a plugin that failed looked like a plugin
+  that was never installed.
+- **Search beyond the first answer.** It asked for one result and applied it
+  silently; it offers several now, each showing the frame it would give, and
+  clamps a summit marker up and a country down.
+
+### Also
+
+- **An About window**, carrying the OpenStreetMap attribution the licence
+  requires, with the text under test so it cannot quietly go missing. It is the
+  macOS one rather than a resemblance of it — the same Cyprus key art, drawn by
+  the application from real elevation and coastline, and the same measurements
+  down to where the mark sits against the type beside it. Whether it appears at
+  launch moved to Settings, where the other choices are.
+- **The maker's mark opens tsevis.com.** It had named the address in a tooltip
+  and done nothing when clicked.
+- **All sixteen styles on show** rather than six with the rest in a dropdown,
+  and styles of your own can be saved and deleted.
+- Gone: the source-library presets and the map-model dropdown, both replaced by
+  the composing source stack; `Apply Settings`; the canvas scrollbars; and
+  `project_state.py`, superseded by the session.
+
 ## 0.3.2
 
 The release that stops Hipparchus being an OpenStreetMap tool and makes it a

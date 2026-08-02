@@ -120,3 +120,64 @@ class ReporterTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SnapshotTests(unittest.TestCase):
+    """The reporter is written from the fetch thread and read by the window."""
+
+    def test_a_snapshot_carries_every_source_in_order(self) -> None:
+        reporter = FetchReporter()
+        reporter.expect(("overpass", "terrain_tiles"))
+        self.assertEqual(
+            [item.source_id for item in reporter.snapshot()],
+            ["overpass", "terrain_tiles"],
+        )
+
+    def test_it_carries_state_detail_and_timing(self) -> None:
+        reporter = FetchReporter()
+        reporter.expect(("overpass",))
+        reporter.started("overpass")
+        reporter.finished("overpass", detail="12 features")
+        item = reporter.snapshot()[0]
+        self.assertEqual(item.state, "done")
+        self.assertEqual(item.detail, "12 features")
+        self.assertGreaterEqual(item.elapsed, 0.0)
+
+    def test_a_snapshot_does_not_change_underneath_its_reader(self) -> None:
+        """The point of taking one: the window walks a still, not the live
+        record being rewritten by the fetch thread."""
+        reporter = FetchReporter()
+        reporter.expect(("overpass",))
+        taken = reporter.snapshot()
+        reporter.started("overpass")
+        self.assertEqual(taken[0].state, "waiting")
+        self.assertEqual(reporter.snapshot()[0].state, "running")
+
+    def test_it_survives_being_read_while_sources_are_reporting(self) -> None:
+        import threading
+
+        reporter = FetchReporter()
+        reporter.expect(tuple(f"source_{index}" for index in range(20)))
+        failures: list[Exception] = []
+
+        def churn() -> None:
+            try:
+                for index in range(200):
+                    reporter.started(f"source_{index % 20}")
+                    reporter.finished(f"source_{index % 20}", detail=str(index))
+            except Exception as exc:  # noqa: BLE001
+                failures.append(exc)
+
+        def read() -> None:
+            try:
+                for _ in range(200):
+                    self.assertEqual(len(reporter.snapshot()), 20)
+            except Exception as exc:  # noqa: BLE001
+                failures.append(exc)
+
+        threads = [threading.Thread(target=churn), threading.Thread(target=read)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+        self.assertEqual(failures, [])

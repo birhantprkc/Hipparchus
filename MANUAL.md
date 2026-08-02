@@ -1,6 +1,6 @@
 # Hipparchus Manual
 
-**Version 0.3.2**
+**Version 0.4.1**
 
 This manual explains how to use Hipparchus as an online map creation app. It covers installation, launching, fetching map data, working with layers and presets, exporting SVG files, and solving common problems. It applies to macOS, Linux, and Windows.
 
@@ -351,8 +351,8 @@ If a selected local model is not configured yet, Hipparchus reports provider sta
 
 Every other rich model reads data you downloaded first. `Simulated Terrain
 (synthetic)` invents a landscape instead, so contour work is one click away on a
-fresh clone. Pick it from the `Model` dropdown, or use the `Simulated Terrain`
-entry in the Source Library, then fetch any AOI.
+fresh clone. Tick `Simulated terrain` in the Sources list, then Render map on
+any area.
 
 **The elevations are not real.** They are procedural noise, not a survey. The
 model label, the provider status line, the feature properties, and the exported
@@ -468,7 +468,10 @@ Windows (PowerShell):
 $env:HIPPARCHUS_VECTOR_TILES = "datasets\pmtiles\firenze.pmtiles"; .\run_hprs.ps1
 ```
 
-The right sidebar `Source Library` selector can apply source/model/AOI combinations without typing paths. Use `Apply Source Preset` to configure the source, or `Apply + Fetch Source Preset` to configure and render immediately.
+Sources are ticked individually in the Sources list and **stack rather than
+replace** — adding Elevation to a street map adds contours, it does not discard
+the streets. A source that needs a file shows its file, the reason it cannot be
+read, and a `Choose…` button in its own row.
 
 ### Why Fetches Can Fail
 
@@ -703,14 +706,14 @@ These controls affect the preview, not the fetched AOI coordinates.
 
 ## 12. Label Settings
 
-The right sidebar includes label settings:
+Label settings live in **Settings (⌘,) → Appearance**:
 
-- Font family
-- Font size
+- Label face
+- Label size
 
-Both apply when you click `Apply Settings` in the `Provider` block, which
-repaints the preview immediately. The panel opens on Arial at 12pt and the
-renderer starts there too, so what you see matches the sidebar from the first
+They apply the moment you change them and repaint the preview; there is no
+Apply step. The window opens on Arial at 12pt and the renderer starts there
+too, so what you see matches the setting from the first
 render.
 
 A family the system does not have falls back to the default face rather than
@@ -757,16 +760,20 @@ Suggested values:
 - `2.0`: typical high-density display.
 - `3.0` or `4.0`: sharper but more expensive.
 
-Click `Apply Settings` after changing this value.
+It applies as soon as you change it. Render scale is in **Settings (⌘,) →
+Appearance**.
 
 ## 14. Provider Settings
 
 The right sidebar has online provider controls:
 
-- `Endpoint`
-- `Req/sec`
-- `Timeout (s)`
-- `Apply Settings`
+`Endpoint` and `Timeout` are settings **of the OpenStreetMap source**: expand
+its row in the Sources list. `Requests a second` is in **Settings (⌘,) → Shared
+services**, because it applies to every service this asks.
+
+- `Endpoint` — chosen from the known public mirrors rather than typed
+- `Timeout`
+- `Requests a second`
 
 ### Endpoint
 
@@ -990,10 +997,9 @@ Try this sequence:
 2. Disable `Shops & Businesses`.
 3. Disable `Amenities`.
 4. Disable `Landuse`, `Barriers`, and `Power` if enabled.
-5. Lower `Req/sec` to `0.2`.
-6. Increase `Timeout (s)` to `120`.
-7. Click `Apply Settings`.
-8. Fetch again.
+5. Lower `Requests a second` to `0.2` in Settings (⌘,).
+6. Increase `Timeout` to `120` on the OpenStreetMap source's row.
+7. Render map again.
 
 If all public Overpass servers are overloaded, wait a few minutes and retry.
 
