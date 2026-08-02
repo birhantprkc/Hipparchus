@@ -36,8 +36,14 @@ Render map will not work, `world_view` where the locator is looking. A rule kept
 in widget code can only be checked by a person opening the panel and looking at
 it, which on this project means it cannot be checked at all.
 
-## The revision in progress
+## The working files
 
-`Hv0_4_1_Claude.md` is the working file for the 0.4.1 interface revision: what
-the macOS app has, what this one has, and what is being brought across. It
-records each phase as it lands, including what went wrong.
+The plans, briefs and reviews this project is built from live in `documents/`,
+which is **deliberately not in the repository** — it is ignored, and the files
+exist only on the author's machine. They are the thinking rather than the
+product, and several of them describe unreleased work on the macOS side.
+
+If you are working here and that directory is present, read it: the current
+working file records each phase as it lands, **including what went wrong**, and
+the mistakes are the part that has repeatedly turned out to be worth keeping.
+If it is absent, this file and the repository are the whole of what you have.

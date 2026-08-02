@@ -62,3 +62,8 @@ Desktop.ini
 
 # Local-only geometry export helper
 scripts/export_*_geometry.py
+
+# Working documents — plans, prompts, briefs and reviews.
+# These stay on the author's machine. They are the thinking rather than the
+# product, and several of them quote unreleased work on the macOS side.
+documents/
