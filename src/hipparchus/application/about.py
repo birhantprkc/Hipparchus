@@ -17,11 +17,12 @@ from pathlib import Path
 
 from hipparchus import __version__
 
-#: The key art is the application's own output — Santorini's caldera in
-#: Hypsometric Relief, drawn by this renderer from real elevation. Not a
-#: decoration somebody drew: the only honest thing to put on the front of a
-#: program is what the program makes.
-KEY_ART = Path(__file__).resolve().parent.parent / "ui" / "assets" / "about-santorini.png"
+#: The key art is the application's own output — Cyprus in Monochrome Figure
+#: Ground, drawn from real elevation and coastline data. The same picture the
+#: macOS application carries, so the two front doors are one design rather than
+#: two attempts at it. Not a decoration somebody drew: the only honest thing to
+#: put on the front of a program is what the program makes.
+KEY_ART = Path(__file__).resolve().parent.parent / "ui" / "assets" / "about-cyprus.png"
 
 TITLE = "Hipparchus"
 SUBTITLE = "Maps built from sources that stack"

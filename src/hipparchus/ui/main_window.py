@@ -1397,9 +1397,6 @@ class MainWindow:
             self._about = AboutWindow(
                 self._root,
                 show_on_launch=lambda: self._settings.show_about_on_launch,
-                set_show_on_launch=lambda wanted: self._apply_settings(
-                    self._settings.with_changes(show_about_on_launch=wanted)
-                ),
             )
         return self._about
 

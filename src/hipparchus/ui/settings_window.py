@@ -88,6 +88,9 @@ class SettingsWindow:
             "size": tk.StringVar(value=str(current.label_font_size)),
             "scale": tk.StringVar(value=f"{current.device_scale:g}"),
             "theme": tk.StringVar(value=current.theme_mode),
+            # A StringVar so it shares the one trace every other row uses; a
+            # BooleanVar would need a second path through _write for one row.
+            "splash": tk.StringVar(value="yes" if current.show_about_on_launch else "no"),
         }
 
         self._cache_section(body)
@@ -177,11 +180,26 @@ class SettingsWindow:
         ttk.Spinbox(
             row, from_=1.0, to=4.0, increment=0.5, textvariable=self._vars["scale"], width=8
         ).pack(side="left")
+
+        # The splash carries the licence notice, so turning it off is a real
+        # choice and belongs where the other choices are. It used to be a
+        # checkbox on the splash itself, which the macOS application does not
+        # have; keeping the two front doors identical moved it here rather than
+        # deleting it.
+        row = ttk.Frame(frame)
+        row.pack(fill="x", pady=2)
+        ttk.Label(row, text="At launch", width=16).pack(side="left")
+        ttk.Checkbutton(
+            row, text="Show the About window", variable=self._vars["splash"],
+            onvalue="yes", offvalue="no",
+        ).pack(side="left")
+
         self._footnote(
             parent,
             "Labels are drawn into the map, so their face and size are part of "
             "the picture. Render scale trades drawing time for sharpness on a "
-            "dense display.",
+            "dense display. The About window is where the data licences are "
+            "recorded; it stays reachable from the View menu either way.",
         )
 
     def _storage_section(self, parent: ttk.Frame) -> None:
@@ -228,6 +246,10 @@ class SettingsWindow:
                 changed = current.with_changes(device_scale=float(self._vars["scale"].get()))
             elif key == "theme":
                 changed = current.with_changes(theme_mode=self._vars["theme"].get())
+            elif key == "splash":
+                changed = current.with_changes(
+                    show_about_on_launch=self._vars["splash"].get() == "yes"
+                )
             else:
                 return
         except (TypeError, ValueError):
@@ -247,6 +269,7 @@ class SettingsWindow:
             self._vars["size"].set(str(current.label_font_size))
             self._vars["scale"].set(f"{current.device_scale:g}")
             self._vars["theme"].set(current.theme_mode)
+            self._vars["splash"].set("yes" if current.show_about_on_launch else "no")
         finally:
             self._writing = False
         self._refresh_cache_state()
