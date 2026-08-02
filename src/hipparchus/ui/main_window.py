@@ -20,6 +20,7 @@ from hipparchus.application import geocoding, places, provenance, session_edit
 from hipparchus.application.coordinate_import import parse as parse_coordinates
 from hipparchus.application.locator import describe_area
 from hipparchus.application.controller import ApplicationController
+from hipparchus.application.layer_inventory import fetch_layers
 from hipparchus.core.fetch_progress import CancellationToken, FetchReporter
 from hipparchus.application.source_stack import SourceStack
 from hipparchus.ui import actions, icons, menubar, shortcuts, theme, tooltip
@@ -1661,15 +1662,12 @@ class MainWindow:
         self._aoi_vars["max_lat"].set(f"{max_lat:.5f}")
 
     def _active_base_layers(self) -> list[str]:
-        # All possible base layers including road types, natural features, places, and detailed info
-        base = [
-            "roads_motorway", "roads_trunk", "roads_primary", "roads_secondary",
-            "roads_tertiary", "roads_residential", "roads_service", "roads_other",
-            "roads", "buildings", "water", "parks", "railways",
-            "forests", "fields", "natural", "coastline",
-            "places", "shops", "amenities", "landuse", "barriers", "power"
-        ]
-        return [name for name in base if self._layer_visibility_vars.get(name, tk.BooleanVar(value=True)).get()]
+        """The layers to fetch: the standard set, minus anything unticked."""
+        def visible(layer_id: str) -> bool:
+            variable = self._layer_visibility_vars.get(layer_id)
+            return True if variable is None else bool(variable.get())
+
+        return list(fetch_layers(visible))
 
     def _on_cancel_fetch(self) -> None:
         """Stop waiting for the current fetch.
