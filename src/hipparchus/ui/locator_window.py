@@ -94,6 +94,7 @@ class LocatorWindow:
             pass
         # Closing hides it; the window and the place it is looking at survive.
         window.protocol("WM_DELETE_WINDOW", self.close)
+        theme.follow_appearance(window)
 
         body = ttk.Frame(window, padding=8)
         body.pack(fill="both", expand=True)

@@ -2389,11 +2389,13 @@ class MainWindow:
 
     def _apply_macos_aqua_appearance(self) -> None:
         """Switch native macOS Aqua appearance without overriding ttk colors."""
-        appearance = "darkaqua" if self._theme_mode == "dark" else "aqua"
-        try:
-            self._root.tk.call("::tk::unsupported::MacWindowStyle", "appearance", ".", appearance)
-        except tk.TclError:
-            pass
+        # Per window, not per application: a Toplevel opened later keeps the
+        # appearance it was born with, which is why the splash and the settings
+        # window came up light in front of a dark main window.
+        for held in (self._root, self._about, self._settings_window, self._locator_window):
+            opened = getattr(held, "_window", held) if held is not None else None
+            if opened is not None:
+                theme.follow_appearance(opened, self._theme_mode)
 
         sidebar_bg = "#1e1e1e" if self._theme_mode == "dark" else "#f5f5f5"
         canvas_border = "#555555" if self._theme_mode == "dark" else "#d0d0d0"

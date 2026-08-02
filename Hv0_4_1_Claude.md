@@ -1420,6 +1420,33 @@ dict nor attribute-addressable. Every place name came back empty, and the list
 came back empty with it — the same class of silent-empty-read the geometry
 loader had already been caught by once.
 
+### The splash and the settings window, looked at for the first time
+
+Both had been built and never opened. Two bugs each, and the same one twice.
+
+**Neither followed the appearance.** macOS holds an appearance *per window* and
+Tk sets it by window path; `_apply_theme` set it on `"."`, the root. So every
+`Toplevel` opened in light Aqua in front of a dark application — a light grey
+panel with `palette.muted` text on it, which in dark mode is a pale grey and was
+close to invisible. On macOS `_apply_theme` returns early and leaves the ttk
+styling to the native appearance, so nothing else was covering for it.
+
+**The settings window opened clipped.** It asked `winfo_reqheight` before the
+layout had been worked out, got the height of an empty window, and opened at 228
+points against the 688 it needs. Three of its four sections were not on screen at
+all — `Shared services`, `Appearance` and `Where things are kept`, including the
+`Show the About window` row moved there from the splash.
+
+**The splash's shadow was a doubled outline.** Canvas text cannot be translucent,
+so the one-pixel black offset standing in for the Mac's soft shadow was an opaque
+black copy of every letter. In a dark slate close to the scrimmed sea it lifts
+the type without announcing itself. The version was also set in a whole
+monospace family where the Mac asks for monospaced digits of the system face,
+and read as a code snippet.
+
+The licence disclosure — the reason the window exists — opens and shows the ODbL
+notice in full. That much had always worked.
+
 ### What went wrong taking the screenshots
 
 - **The first capture photographed the user's screen, not the application.** It
@@ -1442,9 +1469,14 @@ dropdown and the splash have still never been seen in a running window.
 
 Ranked by what it costs to leave.
 
-1. **Most of the window has still not been read carefully.** The two screenshots
-   are the first proper look at it, and they cost three bugs in an hour. The
-   splash and the settings window have never been seen at all.
+1. **The Settings window disagrees with itself under `HIPPARCHUS_THEME`.** The
+   `Theme` row shows the stored preference while the window wears the overridden
+   one, and changing any setting snaps the appearance back to the file. Only
+   reachable through the environment variable, which is why it survived.
+2. **The rest of the window has still not been read carefully.** The main window,
+   the splash and the settings window have now been looked at, and cost six bugs
+   between them. The Locator panel, the search field and the export dialogues
+   have not.
 3. **Resizable and collapsible columns** (B1.2, B1.3) — still fixed at
    360 / flex / 300; the `ttk.PanedWindow` swap from D2 never happened.
 4. **Window size** (B1.5) — opens 1600×1080, minimum 1400×980. The Mac is

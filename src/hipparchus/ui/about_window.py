@@ -83,7 +83,12 @@ LOGO = Path(__file__).resolve().parent / "assets" / "tvd-logo.png"
 TITLE_INK = "#ffffff"
 SUBTITLE_INK = "#e8eceb"  # white at 0.85
 VERSION_INK = "#d5dbda"  # white at 0.70
-SHADOW_INK = "#000000"
+#: The shadow, in the deepest tone the art already has rather than in black.
+#: Canvas text cannot be translucent, so a pure black offset is an opaque black
+#: copy of every letter one pixel down — which reads as a doubled outline, not
+#: as a shadow. A dark slate sits close enough to the scrimmed sea to lift the
+#: type off it without announcing itself.
+SHADOW_INK = "#1d2b30"
 
 
 def _load_logo() -> "tk.PhotoImage | None":
@@ -156,6 +161,8 @@ class AboutWindow:
         window.protocol("WM_DELETE_WINDOW", self.close)
         window.bind("<Escape>", lambda _e: self.close())
         window.bind("<Return>", lambda _e: self.close())
+        # Or it opens light in front of a dark application.
+        theme.follow_appearance(window)
         self._window = window
 
         # The footer is pinned to the bottom and the words sit under the art,
@@ -206,7 +213,10 @@ class AboutWindow:
         face = theme.family()
         title_font = tkfont.Font(family=face, size=TITLE_SIZE, weight="bold")
         subtitle_font = tkfont.Font(family=face, size=SUBTITLE_SIZE)
-        version_font = tkfont.Font(family=theme.mono_family(), size=CAPTION_SIZE, weight="bold")
+        # The Mac asks for monospaced *digits* of the system face; Tk has no
+        # such thing, and a whole monospace family reads as a code snippet
+        # rather than a version. The UI face is the closer of the two wrongs.
+        version_font = tkfont.Font(family=face, size=CAPTION_SIZE, weight="bold")
 
         # The lockup's bottom edge, then back up to the subtitle's baseline.
         bottom = ART_HEIGHT - LOCKUP_BOTTOM

@@ -124,6 +124,14 @@ most of it had been true since the interface was rebuilt.
   zoom instead of being fixed at thirty degrees. Over an inland city it used to
   be a blank white rectangle: no coastline, no border and no lake within a tenth
   of a degree, and no grid either.
+- **The splash and the settings window follow the appearance.** macOS holds an
+  appearance per window and Tk sets it by window path; it was being set on the
+  root, so every panel opened light in front of a dark application, with pale
+  muted text on a pale ground.
+- **The settings window opens at its full height.** It asked how tall it needed
+  to be before its four sections had been laid out, got the answer for an empty
+  window, and opened showing only the first — everything from `Shared services`
+  down was simply not there.
 - **No more error dialogue from the render thread.** It asked a Tk variable
   whether debug logging was on, which from any thread but the main one raises —
   and the worker turned that into a modal alert on top of whatever you were

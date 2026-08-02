@@ -76,6 +76,7 @@ class SettingsWindow:
         window.resizable(False, False)
         window.protocol("WM_DELETE_WINDOW", self.close)
         window.bind("<Escape>", lambda _e: self.close())
+        theme.follow_appearance(window)
 
         body = ttk.Frame(window, padding=16)
         body.pack(fill="both", expand=True)
@@ -102,6 +103,10 @@ class SettingsWindow:
             var.trace_add("write", lambda *_a, key=name: self._write(key))
 
         self._window = window
+        # Asked *after* the layout has been worked out. Before it, a window with
+        # four sections in it reports the height of an empty one and opens
+        # clipped: everything below the first section was simply not there.
+        window.update_idletasks()
         window.geometry(f"{WIDTH}x{window.winfo_reqheight()}")
 
     def _section(self, parent: ttk.Frame, title: str) -> ttk.Frame:

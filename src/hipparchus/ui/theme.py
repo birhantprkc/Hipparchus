@@ -16,6 +16,7 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 import platform
+from typing import Any
 
 # The one colour the application draws itself with: turquoise, the same
 # turquoise as the app icon, at two weights. Not the platform's accent — a
@@ -133,6 +134,36 @@ def set_mode(mode: str) -> str:
 def current() -> Palette:
     """The palette in force."""
     return palette(_mode)
+
+
+def window_appearance(mode: str | None) -> str:
+    """The native macOS appearance name for a mode."""
+    return "darkaqua" if (mode or "").strip().lower() == "dark" else "aqua"
+
+
+def follow_appearance(window: Any, mode: str | None = None) -> None:
+    """Put one window into the application's appearance.
+
+    macOS draws a window's chrome, its scrollbars and its native controls from
+    an appearance held **per window**, and Tk sets it by window path. Asking for
+    it on the root — which is what `"."` means — left every `Toplevel` light: the
+    splash and the settings window came up as light grey panels with pale muted
+    text on them, unreadable, in front of a dark main window.
+
+    Silent on anything but macOS, and on a Tk that has never had the unsupported
+    command, because neither is a failure worth a traceback over an appearance.
+    """
+    if platform.system() != "Darwin":
+        return
+    try:
+        window.tk.call(
+            "::tk::unsupported::MacWindowStyle",
+            "appearance",
+            window._w,
+            window_appearance(_mode if mode is None else mode),
+        )
+    except Exception:  # noqa: BLE001 - an appearance is never worth raising over
+        pass
 
 
 # -- provenance ---------------------------------------------------------------

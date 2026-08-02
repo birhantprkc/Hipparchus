@@ -173,3 +173,21 @@ class ColourMathTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class AppearanceTests(unittest.TestCase):
+    """macOS draws a window's chrome and its native controls from an appearance
+    set **per window**. Setting it on the root left every Toplevel light: the
+    splash and the settings window came up in light grey with pale muted text on
+    it, unreadable, while the main window behind them was dark."""
+
+    def test_dark_asks_for_the_dark_appearance(self) -> None:
+        self.assertEqual(theme.window_appearance("dark"), "darkaqua")
+
+    def test_light_asks_for_the_light_one(self) -> None:
+        self.assertEqual(theme.window_appearance("light"), "aqua")
+
+    def test_an_unknown_mode_is_light_rather_than_an_error(self) -> None:
+        for mode in ("", "sepia", None):
+            with self.subTest(mode=mode):
+                self.assertEqual(theme.window_appearance(mode), "aqua")
