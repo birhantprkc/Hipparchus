@@ -298,7 +298,10 @@ class MainWindow:
     def _build_window(self) -> None:
         self._root.title(self.config.app_name)
         self._root.geometry(f"{self.config.default_width}x{self.config.default_height}")
-        self._root.minsize(1400, 980)
+        # From the config rather than written here, so the size it opens at and
+        # the size it may be dragged to cannot disagree — the minimum used to be
+        # a pair of literals larger than a 13-inch laptop's whole screen.
+        self._root.minsize(self.config.min_width, self.config.min_height)
 
         style = ttk.Style(master=self._root)
         self._setup_platform_theme(style)

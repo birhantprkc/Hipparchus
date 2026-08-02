@@ -9,6 +9,29 @@ import os
 
 ThemeMode = str
 
+#: The size the macOS application opens at, and the smallest it may be dragged.
+#:
+#: It used to open 1600x1080 with a minimum of 1400x980 — larger than a 13-inch
+#: laptop's entire screen, and unshrinkable below it, which is a window that
+#: cannot be used rather than a window that is merely big.
+DEFAULT_WIDTH = 1100
+DEFAULT_HEIGHT = 800
+MIN_WIDTH = 960
+MIN_HEIGHT = 620
+
+
+def _positive_int(name: str, fallback: int) -> int:
+    """An environment override, or the default if it is not a usable number.
+
+    A window that will not open because somebody typed a word into a size is a
+    worse outcome than a window of the wrong size.
+    """
+    try:
+        value = int(os.getenv(name, "").strip())
+    except (TypeError, ValueError):
+        return fallback
+    return value if value > 0 else fallback
+
 
 @dataclass(slots=True, frozen=True)
 class AppConfig:
@@ -25,6 +48,8 @@ class AppConfig:
     project_dir: Path
     default_width: int
     default_height: int
+    min_width: int
+    min_height: int
     provider_rps_limit: float
     start_area: str
     fetch_on_start: bool
@@ -58,8 +83,13 @@ class ConfigLoader:
             Path(__file__).resolve().parent.parent / "ui" / "assets" / "makers-mark.png"
         )
 
-        default_width = int(os.getenv("HIPPARCHUS_WINDOW_WIDTH", "1600"))
-        default_height = int(os.getenv("HIPPARCHUS_WINDOW_HEIGHT", "1080"))
+        default_width = _positive_int("HIPPARCHUS_WINDOW_WIDTH", DEFAULT_WIDTH)
+        default_height = _positive_int("HIPPARCHUS_WINDOW_HEIGHT", DEFAULT_HEIGHT)
+        # Never larger than what was asked for: a minimum above the requested
+        # size opens the window at the minimum instead, and the request looks
+        # ignored rather than overridden.
+        min_width = min(MIN_WIDTH, default_width)
+        min_height = min(MIN_HEIGHT, default_height)
         provider_rps_limit = float(os.getenv("HIPPARCHUS_PROVIDER_RPS", "1.0"))
 
         start_area = os.getenv("HIPPARCHUS_START_AREA", "").strip()
@@ -88,6 +118,8 @@ class ConfigLoader:
             project_dir=project_dir,
             default_width=default_width,
             default_height=default_height,
+            min_width=min_width,
+            min_height=min_height,
             provider_rps_limit=provider_rps_limit,
             start_area=start_area,
             fetch_on_start=fetch_on_start,
