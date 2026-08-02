@@ -210,7 +210,9 @@ scripts/
 ├── precache_presets.py       Warm the Overpass cache for built-in presets
 ├── python_env.sh             Shared PYTHONPATH / interpreter helper
 ├── release_preflight.sh      Compile, test, and dependency checks before release
+├── make_about_art.py         The splash's key art and maker's mark, from the macOS sources
 ├── render_gallery.py         Make a named gallery plate from live data, no window
+├── screenshot_session.py     Put the app in the state a documentation screenshot needs
 ├── smoke_render.py           Prove the preview reaches the canvas, end to end
 └── smoke_run.sh              Quick smoke launch
 ```
