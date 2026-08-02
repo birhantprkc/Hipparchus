@@ -1204,29 +1204,207 @@ them rather than something to be quietly resolved.
   Source Library, both removed, and listed five `ui/` modules where there are
   sixteen.
 
+---
+
+## The verification session
+
+**831 → 907 passing, 80 skipped.** The session that finally looked at some of
+this, and found the thing the previous thirteen phases had built and never run.
+
+### What was checked, and how
+
+The prompt asked for three things: run the tests, add two gallery plates, and
+find out whether the Locator actually produces a map. The third is the one that
+mattered.
+
+**The tests pass.** 831 at the start, and nothing failing. That was never the
+question.
+
+**Two plates, made headlessly.** `scripts/render_gallery.py` walks the same path
+the window walks — source stack, fetch, scene build, `PNGExporter` — with the
+widgets left out, so no window was needed for either. Each plate is named with
+the bounding box, the sources and the quality that made it, which the existing
+nine were not: nobody could tell what produced them, and re-making one meant
+guessing.
+
+| plate | style | why | cost |
+|---|---|---|---|
+| Cartagena de Indias | `Coastal Survey` | the only geometry profile that smooths `coastline` three times and `water` twice, on a walled peninsula between open sea and a bay | 43 s, 17 351 features |
+| Auckland | `Hypsometric Relief` | elevation bands over an isthmus between two harbours, exercising terrain and coastline together | **762 s**, 247 994 features |
+
+Cartagena shows the sea inference working: the Caribbean and the bay are filled
+from coastline lines alone. Auckland shows it being covered up — `_ordered_layers`
+puts `elevation_bands` after `water`, and Hypsometric's band fill is opaque, so
+the Waitematā is inferred correctly and then painted over. That is still true.
+
+### The Locator did not produce a map, and had not since the first render
+
+`_sync_area_to_what_is_on_screen` read the canvas and took whatever it found:
+
+```python
+visible = self._map.visible_area()
+if visible is not None:
+    self._set_aoi(*visible)
+```
+
+`visible_area()` returns non-`None` whenever *any* scene exists, and it knows
+nothing about the coordinate boxes. So once a map had been drawn, Render map
+overwrote the chosen area with the old one, unconditionally.
+
+Driving the real widgets with an Athens map on the canvas:
+
+| what chose the area | what Render map fetched |
+|---|---|
+| the floating Locator, by click | Athens, not Cartagena |
+| the rail strip, by drag | Athens |
+| four typed numbers | Athens, not London |
+| nothing drawn yet — the first render | the chosen area |
+
+It was never Locator-specific. Every way of choosing an area failed except
+drawing on the map itself, which works only because that path reads the same
+canvas. The Locator worked exactly once per session and silently re-fetched the
+old area thereafter.
+
+What separates a pan from a choice is whether the request still describes the
+map on screen — which the window could not tell, because it never recorded what
+the map was of. It does now, and `area_to_fetch` decides, in
+`application/viewport.py`.
+
+**The two failures that were expected did not happen.** Panning the floating
+Locator leaves the area alone; a click chooses; draw mode turns itself off after
+one rectangle. All three behave as designed.
+
+**Also found, and not fixed:** the visible-area round trip is not a fixed point.
+`_apply_fit_transform` fits by the tighter axis and centres, so on the loose axis
+the real margin exceeds the uniform `fit_margin` — 70.8 px against an inset of 54
+on a 1180×900 canvas. `visible_bounds` insets the same number on both axes and
+therefore reads ground that was never drawn. Each press of Render map grows the
+area **3.2 %**; ten presses make it 71 % wider. The docstring in `viewport.py`
+says this was designed out. The inset removed most of it, not the part caused by
+the asymmetry.
+
+### Then: the splash, the palettes, the mark, the Locator's quality
+
+- **The splash is now a port of `AboutView.swift` rather than something
+  resembling it.** Same island — Cyprus in Monochrome Figure Ground, the picture
+  the Mac carries, in place of a different render of a different place — and the
+  same measurements: 640×580, 250 pt of full-bleed art, 26 pt margins,
+  36/13/11 pt type, and the mark's height derived from the block the two lines of
+  type occupy rather than picked by eye. The lockup sits on one baseline now,
+  worked out from the fonts. `scripts/make_about_art.py` makes both assets from
+  the macOS repository's own sources, so neither is a file nobody can account
+  for. Three things SwiftUI does that Tk cannot are named in the module rather
+  than quietly approximated: the scrim is burned into the asset, the type's
+  opacities are mixed down, and the shadow has no blur. Tk knows two weights, so
+  `.semibold` and `.medium` both arrive as bold, and the title's −0.6 tracking is
+  lost.
+- **The `Show at launch` checkbox is gone**, because the Mac has no such control
+  on its splash. The preference moved to Settings under Appearance rather than
+  becoming unreachable — this window is where the licence notice lives, so
+  turning it off is a real choice.
+- **Palettes.** The preset *lists* were already identical: `PresetTables.swift`
+  is generated from this registry. What the Mac had and this did not is colour as
+  an axis of its own. A preset here is a whole sheet, so "the same map in other
+  colours" was not something that could be asked for. Ten palettes now, each
+  eight colours and nothing else, with every layer style derived from them —
+  because a colour scheme picked layer by layer drifts and one obtained by mixing
+  cannot. It is a session choice like the style and the quality, and undo calls
+  it "Change Palette".
+- **The maker's mark leads somewhere.** It carried a tooltip reading
+  "tsevis.com" and did nothing when clicked.
+- **The Locator draws a coastline you can recognise.** It used 1:110m at every
+  zoom — a rectangle where Sicily is, no boot on Italy, no islands in the Aegean
+  — while `datasets/README.md` has said for months that the 1:10m set is the one
+  worth using. The module's note blamed the data: the detailed set "would make
+  dragging stutter". **The note was wrong about the cause.** The cost was running
+  the Mercator projection over every vertex of every line on every frame, in
+  Python, and rejecting lines by scanning all their vertices too. Mercator
+  depends on the point and not on the view, so it belongs at load time. A
+  Mediterranean view cost 117 ms a frame; it now costs 5, with sixty times the
+  vertices. The bounds test also stopped dropping lines it should have kept — a
+  coastline can cross the view with no vertex inside it, and those are the long
+  ocean ones.
+
+### The size guard that was never there
+
+Making the Locator work made something reachable that had been hidden by the
+bug. There was **no size guard anywhere**: every area went to Overpass with
+twenty-three layers, whatever it was. One drag across the Aegean is 18 400 km²,
+against 51 for the Cartagena plate and 164 for Auckland's, and Auckland's took
+twelve minutes. It never returned, and nothing said it would not.
+
+`application/fetch_cost.py` now says what an area will cost before it is spent,
+with thresholds anchored to those two plates rather than guessed. It asks rather
+than refuses. What was there before — "Large area detected: applying preview
+sampling" — is a report of a decision already taken about a request already sent.
+
+### What went wrong in this session
+
+- **I told the user a modal dialogue on their screen was not mine.** The PID
+  evidence pointed at their own packaged `Hipparchus.app`, and I said so. But my
+  own probe raises exactly that dialogue — `_debug` reads a Tk `BooleanVar` from
+  the render worker thread, which raises "main thread is not in main loop", which
+  the worker turns into a `messagebox.showerror`. I had run the probe three times
+  before they asked. I could not have ruled it out and should not have sounded
+  as though I had.
+- **That probe put a blocking dialogue on their screen and I killed it mid-run.**
+  `showerror` blocks the thread it is called on until somebody presses OK. The
+  probe now replaces the message boxes with prints, which it should have done
+  from the start.
+- **`_debug` reading a Tk variable from the render thread is still there.** Found,
+  reported, not fixed.
+- **My first "every layer has a colour" test checked the sheet against itself**
+  and proved only that it equalled itself. It checks the layer panel's inventory
+  and the fetch's own request now — two lists that module does not own.
+- **Two of my culling tests were wrong, not the code**, and one of them found a
+  real flaw doing it: `Segment` holds a numpy array, so the generated `__eq__`
+  raised rather than answering `False`, which broke `in`.
+- **I spaced the thousands in a warning by running `replace(",", " ")` over the
+  whole sentence**, which took the commas out of the prose with it.
+- **I should have looked for a size guard when I made the Locator work.** The
+  consequence of a fix is part of the fix.
+
+### Still unverified by eye
+
+`screencapture` on this machine returns the desktop without window contents —
+macOS withholds them without Screen Recording permission — so nothing in this
+session was confirmed visually by me. The splash is verified by measuring the
+widgets from inside Tk against the Swift constants; the Locator's new coastline
+by drawing it through its own projection and culling code into an image; the
+palettes by rebuilding Cartagena in three of them headlessly. The palette
+dropdown and the splash have still never been seen in a running window.
+
 ## Still to be made
 
 Ranked by what it costs to leave.
 
-1. **Nothing has been looked at.** Phases 5–13 have never been seen in a running
-   window. The About window is the one exception, and it needed two fixes on
-   first sight. `documents/NextSessionPrompt.md` sets up the session that
-   changes this.
-2. **"This will take a while" before an expensive fetch** (B13.2) — still
-   degrades quality silently and mentions it afterwards.
-3. **Resizable and collapsible columns** (B1.2, B1.3) — still fixed at
+1. **Almost nothing has been looked at.** The logic of Phases 5–13 is now
+   exercised — the Locator by driving its real widgets, the splash by measuring
+   it, the palettes and the plates by rendering them — but the *layout* has been
+   seen by nobody. Screenshots are not available on this machine.
+2. **Render map walks the area outwards 3.2 % a press.** The visible-area round
+   trip is not a fixed point: the fit margin is uniform and the fit is not, so
+   `visible_bounds` reads ground on the loose axis that was never drawn.
+   Understood, measured, and not fixed.
+3. **`_debug` reads a Tk variable from the render worker thread**, which raises
+   from that thread and surfaces as a modal error dialogue. Found by accident;
+   not fixed.
+4. **The elevation bands paint over the inferred sea.** `_ordered_layers` puts
+   `elevation_bands` after `water`, and an opaque band fill hides a harbour —
+   visible in the Auckland plate.
+5. **Resizable and collapsible columns** (B1.2, B1.3) — still fixed at
    360 / flex / 300; the `ttk.PanedWindow` swap from D2 never happened.
-4. **Window size** (B1.5) — opens 1600×1080, minimum 1400×980. The Mac is
+6. **Window size** (B1.5) — opens 1600×1080, minimum 1400×980. The Mac is
    1100×800, minimum 960×620.
-5. **Toolbar polish** (B2.4, B2.5, B2.7) — no area readout, no Cancel beside
+7. **Toolbar polish** (B2.4, B2.5, B2.7) — no area readout, no Cancel beside
    Render map, and Export is a bare SVG button with PDF and PNG only in the menu.
-6. **Layers panel** (B6b.3, B6b.5, B6b.6) — `All`/`None` in the header, the
+8. **Layers panel** (B6b.3, B6b.5, B6b.6) — `All`/`None` in the header, the
    labels-versus-features tooltip, and hiding the group heading when there is
    one group.
-7. **SVG export does not reveal the file.** PDF and PNG do. Mine, and
+9. **SVG export does not reveal the file.** PDF and PNG do. Mine, and
    inconsistent.
-8. **No application icon** (B14.7).
-9. **`featured_names()`** survives in `style_previews.py` with no caller but its
+10. **No application icon** (B14.7).
+11. **`featured_names()`** survives in `style_previews.py` with no caller but its
    own default and its own tests. The "featured six" idea died in Phase 6.
 
 *Nothing pushed.*
