@@ -1633,36 +1633,81 @@ of `8c82845` in a worktree:
 Nobody would have seen these. Running the suite that contains them is something
 you have to ask for, which is the point of the flag and also its cost.
 
+### And then it was green, and one of the three was never a test's fault
+
+`e785421`. **1112 passing gated, none failing.**
+
+`FakeRenderer` was what it looked like: a stand-in that went stale when
+`visible_area` started reading the fit gap from the renderer's own numbers —
+the fix that stopped Render map walking the area outwards. It now has
+`fit_metrics`, shaped like Skia's and with the same margin, so it answers the
+shape of a real answer. It failed with an `AttributeError` rather than a wrong
+number, which is at least the loud kind of stale.
+
+**The other one was not a test problem. ⌥⌘E — Export PNG — had never worked**,
+and the comment explaining why was itself the bug. `sequences_for` emitted the
+`Option` spelling on a Mac and only that, on the stated grounds that "Tk on Aqua
+treats Option and Alt as the same modifier bit, so binding both would fire the
+action twice for one press". That was a guess, written confidently, and a test
+had been built on top of it asserting the `Alt` form must *not* be emitted.
+
+Measured against a real Tk before anything was touched, since the note being
+replaced was itself plausible:
+
+| claim | measured |
+|---|---|
+| Option and Alt are the same bit | different: **16** and **1 << 17** |
+| binding both fires twice | fires **once** — same tag, best match only |
+| the `Option` form works | binds, and **never fires** |
+| the `Alt` form is wrong on a Mac | it is the only one that **does** fire |
+
+The reason is worse than a wrong bit. **`Option` makes Tk translate the keysym
+the way macOS composes it**, so Option-E arrives as `acute` — and a binding on
+`Key-e` cannot match a keysym of `acute` at any modifier mask. The shortcut was
+not misrouted; it was addressed to a key that does not exist.
+
+Both spellings are emitted now, `Alt` first because it is the one known to work
+here. **What this could not test is a physical keypress** — `event_generate` is
+Tk synthesising its own event, which proves the binding table and nothing about
+what macOS hands over when a person actually holds Option. That is why both are
+bound rather than only the one that works synthetically.
+
+The lesson is not about Tk. A comment that explains why something is done a
+particular way is a claim, and this one had survived a release, acquired a test
+that enshrined it, and been read past by everyone — including me, twice, while
+working in the same file.
+
 ## Still to be made
 
 Ranked by what it costs to leave.
 
-1. **The gated suite is red.** Three failures, none of them new; see above.
-   `FakeRenderer` needs `fit_metrics`, and `export_png` needs to fire from its
-   accelerator. A red suite nobody runs stops being a suite.
-2. **The Settings window disagrees with itself under `HIPPARCHUS_THEME`.** The
+1. **The Settings window disagrees with itself under `HIPPARCHUS_THEME`.** The
    `Theme` row shows the stored preference while the window wears the overridden
    one, and changing any setting snaps the appearance back to the file. Only
    reachable through the environment variable, which is why it survived.
-3. **Resizable and collapsible columns** (B1.2, B1.3) — still fixed at
+2. **Resizable and collapsible columns** (B1.2, B1.3) — still fixed at
    360 / flex / 300; the `ttk.PanedWindow` swap from D2 never happened. At the
    1100-wide default this is what puts the style picker below the fold, so it
    now has a symptom as well as a description.
-4. **Choosing a style or a palette says nothing.** Both are deliberately
+3. **Choosing a style or a palette says nothing.** Both are deliberately
    deferred to the next Render map, and the swatch highlights, but nothing else
    moves — so the click reads as a no-op. One result on the bar would fix it:
    "Style: Coastal Survey — Render map to draw it".
-5. **Toolbar polish** (B2.4, B2.5, B2.7) — no area readout, no Cancel beside
+4. **Toolbar polish** (B2.4, B2.5, B2.7) — no area readout, no Cancel beside
    Render map, and Export is a bare SVG button with PDF and PNG only in the menu.
-6. **Layers panel** (B6b.3, B6b.5, B6b.6) — `All`/`None` in the header, the
+5. **Layers panel** (B6b.3, B6b.5, B6b.6) — `All`/`None` in the header, the
    labels-versus-features tooltip, and hiding the group heading when there is
    one group.
-7. **No application icon** (B14.7).
-8. **`featured_names()`** survives in `style_previews.py` with no caller but its
+6. **No application icon** (B14.7).
+7. **`featured_names()`** survives in `style_previews.py` with no caller but its
    own default and its own tests. The "featured six" idea died in Phase 6.
 
 ### Struck off, and by what evidence
 
+- **The gated suite is red** — green in `e785421`: **1112 passing, none
+  failing**. Two were a stale stand-in; the third was ⌥⌘E, which had never
+  worked, and is the entry above. Struck off the same day it was written down,
+  which is the argument for writing it down.
 - **Window size** (B1.5) was listed as opening 1600×1080. It opens **1100×828,
   minimum 960×620** — read off the running window and its `AppConfig`. Fixed in
   `d6d6fb1`; the list was stale.
@@ -1673,6 +1718,12 @@ Ranked by what it costs to leave.
   test rather than by hand.
 
 ### Still unverified by eye
+
+**⌥⌘E under a real keypress.** Everything establishing that it now fires goes
+through `event_generate`, which is Tk making its own event: it proves the
+binding table, not what macOS hands over when a person holds Option. Both
+spellings are bound so that it should hold either way, but the only way to know
+is to press it with a map on screen — a save sheet opening is the whole test.
 
 The Settings window under `HIPPARCHUS_THEME`. The **dark** appearance of the
 status bar: the widening was confirmed by photograph in light only, because the
