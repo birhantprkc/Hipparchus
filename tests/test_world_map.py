@@ -10,10 +10,9 @@ and never the area it exists to choose.
 
 from __future__ import annotations
 
-import tkinter as tk
 import unittest
 
-from gui_support import require_gui, show_offscreen
+from gui_support import reset_root, shared_root, show_offscreen
 
 from hipparchus.ui import theme
 from hipparchus.ui.world_map import WorldMap
@@ -26,13 +25,8 @@ class WorldMapTestCase(unittest.TestCase):
     reports_view = False
 
     def setUp(self) -> None:
-        require_gui()
-        try:
-            self.root = tk.Tk()
-        except tk.TclError as exc:  # pragma: no cover - headless CI
-            self.skipTest(f"no display: {exc}")
-        self.root.withdraw()
-        self.root.geometry("700x500")
+        self.root = shared_root(700, 500)
+        self.addCleanup(reset_root)
         theme.set_mode("light")
         self.chosen: list[tuple[float, float, float, float]] = []
         self.map = WorldMap(
@@ -45,9 +39,6 @@ class WorldMapTestCase(unittest.TestCase):
         # Mapped, because an unmapped canvas reports one pixel and holds the
         # area it was shown until there is somewhere to put it.
         show_offscreen(self.root)
-
-    def tearDown(self) -> None:
-        self.root.destroy()
 
     def rectangles(self) -> list[int]:
         canvas = self.map.widget

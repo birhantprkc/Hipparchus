@@ -7,10 +7,9 @@ the truth — rather than the drawing.
 
 from __future__ import annotations
 
-import tkinter as tk
 import unittest
 
-from gui_support import require_focus_tests, require_gui, show_offscreen
+from gui_support import require_focus_tests, reset_root, shared_root, show_offscreen
 from hipparchus.ui import theme
 from hipparchus.ui.map_canvas import TURN_STEP, ZOOM_STEP, MapCanvas
 
@@ -70,16 +69,12 @@ class FakeScene:
 
 class CanvasTestCase(unittest.TestCase):
     def setUp(self) -> None:
-        require_gui()
-        try:
-            self.root = tk.Tk()
-        except tk.TclError as exc:  # pragma: no cover - headless CI
-            self.skipTest(f"no display: {exc}")
-        # Mapped off-screen: an unmapped window reports a size of one pixel and
-        # routes no events, so the gestures below would silently do nothing —
-        # but nothing should ever appear on the desktop of whoever runs this.
-        self.root.withdraw()
-        self.root.geometry("900x700+-4000+-4000")
+        # Mapped off-screen below: an unmapped window reports a size of one
+        # pixel and routes no events, so the gestures here would silently do
+        # nothing. It is the one window a run is allowed, and it is put back
+        # out of sight afterwards.
+        self.root = shared_root(900, 700)
+        self.addCleanup(reset_root)
         self.root.grid_rowconfigure(0, weight=1)
         self.root.grid_columnconfigure(0, weight=1)
         theme.set_mode("light")
@@ -103,9 +98,6 @@ class CanvasTestCase(unittest.TestCase):
 
     def _redraw(self) -> None:
         self.redraws += 1
-
-    def tearDown(self) -> None:
-        self.root.destroy()
 
 
 class ViewportTests(CanvasTestCase):

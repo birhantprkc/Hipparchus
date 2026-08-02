@@ -6,30 +6,29 @@ callback straight into a status bar that did not exist yet, passed 719 tests and
 then failed on the first launch. This is the cheapest test that catches that
 class of mistake.
 
-**One application, built when this module starts and closed when it ends — and
-only this module builds one.** Two things were learned the hard way, both by
-hanging a run until it had to be killed:
+**The application is built in `gui_support.shared_root` — the one window a run
+is allowed — rather than making a root of its own.** It used to make one, and
+that cost two hangs before the reason was understood: a second Tk root in one
+interpreter is a hang or a crash on macOS depending on the order the roots are
+made and destroyed in. With one root there is no order to get wrong, and the
+file no longer has to sort before every other file that needs a window.
 
-* Building it **twice in one interpreter** hangs macOS Tk. The second bootstrap
-  never returns. So a second file that wanted a real window could not have one.
-* Keeping the first alive **for the rest of the process** is no better. The
-  files that follow build plain Tk roots of their own, and with the application
-  still up, `test_status_bar` hangs on its eighth test.
-
-That leaves one window with a lifetime no wider than this module, which is why
-the export round trip below lives here rather than in a file of its own. The
-assertions share that window and must put back anything they change.
+Still one application per run, built when this module starts and closed when it
+ends — bootstrapping twice hangs whatever root it is handed. That is why the
+export round trip below lives here rather than in a file of its own. The
+assertions share the window and must put back anything they change.
 """
 
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
 import tempfile
 import tkinter as tk
 import unittest
 
-from gui_support import require_gui
+from gui_support import require_gui, reset_root, shared_root
 from shapely.geometry import LineString, Polygon
 
 from hipparchus.rendering.models import RenderLayer, RenderScene
@@ -41,12 +40,7 @@ _PREVIOUS: dict[str, str | None] = {}
 
 
 def setUpModule() -> None:
-    """Build it, in a temporary home of its own.
-
-    No throwaway `tk.Tk()` to probe for a display first: creating a root,
-    destroying it and then letting the application create another hangs the
-    interpreter on macOS. The bootstrap below is the probe.
-    """
+    """Build it in the shared root, in a temporary home of its own."""
     global _APP, _FOLDER, _PREVIOUS
     require_gui()
     _FOLDER = tempfile.TemporaryDirectory()
@@ -57,16 +51,25 @@ def setUpModule() -> None:
             "HIPPARCHUS_SESSION_FILE",
             "HIPPARCHUS_PRESETS_FILE",
             "HIPPARCHUS_CACHE_DIR",
+            "HIPPARCHUS_SETTINGS_FILE",
         )
     }
     os.environ["HIPPARCHUS_SESSION_FILE"] = str(home / "session.json")
     os.environ["HIPPARCHUS_PRESETS_FILE"] = str(home / "presets.json")
     os.environ["HIPPARCHUS_CACHE_DIR"] = str(home / "cache")
+    # Settings too, which this did not isolate: every gated run until now read
+    # — and on close rewrote — the preferences of whoever ran it. And the one
+    # that matters here is `show_about_on_launch`, which is on by default and
+    # raises the splash 120 ms after the window appears. A second window,
+    # unasked, every run.
+    settings = home / "settings.json"
+    settings.write_text(json.dumps({"show_about_on_launch": False}))
+    os.environ["HIPPARCHUS_SETTINGS_FILE"] = str(settings)
 
     from hipparchus.core.application import HipparchusApp
 
     try:
-        _APP = HipparchusApp.bootstrap()
+        _APP = HipparchusApp.bootstrap(root=shared_root(1100, 800))
     except tk.TclError as exc:  # pragma: no cover - headless CI
         raise unittest.SkipTest(f"no display: {exc}") from exc
     _APP.window._root.withdraw()
@@ -74,7 +77,7 @@ def setUpModule() -> None:
 
 
 def tearDownModule() -> None:
-    """Close it before the next file builds a root of its own."""
+    """Take the application off the shared root and leave it as found."""
     global _APP
     if _APP is not None:
         try:
@@ -82,6 +85,7 @@ def tearDownModule() -> None:
         except tk.TclError:
             pass
         _APP = None
+    reset_root()
     for key, value in _PREVIOUS.items():
         if value is None:
             os.environ.pop(key, None)

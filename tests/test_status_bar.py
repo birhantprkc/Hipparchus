@@ -12,7 +12,7 @@ import tkinter as tk
 from tkinter import font as tkfont, ttk
 import unittest
 
-from gui_support import require_gui, show_offscreen
+from gui_support import reset_root, shared_root, show_offscreen
 
 from hipparchus.core.fetch_progress import FetchReporter
 from hipparchus.ui import theme
@@ -32,13 +32,8 @@ class LabelTests(unittest.TestCase):
 
 class StatusBarTestCase(unittest.TestCase):
     def setUp(self) -> None:
-        require_gui()
-        try:
-            self.root = tk.Tk()
-        except tk.TclError as exc:  # pragma: no cover - headless CI
-            self.skipTest(f"no display: {exc}")
-        self.root.withdraw()
-        self.root.geometry("1000x200")
+        self.root = shared_root(1000, 200)
+        self.addCleanup(reset_root)
         # The bar is gridded across the foot of the window in the application,
         # so it is gridded across the foot of the window here.
         self.root.grid_columnconfigure(0, weight=1)
@@ -51,9 +46,6 @@ class StatusBarTestCase(unittest.TestCase):
 
     def _cancel(self) -> None:
         self.cancelled += 1
-
-    def tearDown(self) -> None:
-        self.root.destroy()
 
     def row_labels(self) -> list[str]:
         return [row.name for row in self.bar.rows()]

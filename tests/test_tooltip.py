@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import unittest
 
-from gui_support import require_gui
+from gui_support import reset_root, shared_root
 from hipparchus.ui import tooltip
 
 SCREEN = (1920, 1080)
@@ -71,18 +71,10 @@ class AttachTests(unittest.TestCase):
     """The widget half, smoke-tested by construction the way panels.py is."""
 
     def setUp(self) -> None:
-        import tkinter as tk
-
-        # A tooltip is a Toplevel — a real window on a real screen.
-        require_gui()
-        try:
-            self.root = tk.Tk()
-        except tk.TclError as exc:  # pragma: no cover - headless CI
-            self.skipTest(f"no display: {exc}")
-        self.root.withdraw()
-
-    def tearDown(self) -> None:
-        self.root.destroy()
+        # A tooltip is a Toplevel — a real window on a real screen — so this
+        # shares the one root a run is allowed.
+        self.root = shared_root()
+        self.addCleanup(reset_root)
 
     def test_attaching_empty_text_is_a_no_op_rather_than_a_blank_box(self) -> None:
         import tkinter as tk

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from hipparchus.application.controller import ApplicationController
 from hipparchus.application.presets import DEFAULT_PRESET_NAME, default_preset
@@ -13,6 +14,9 @@ from hipparchus.plugins.loader import PluginLoader
 from hipparchus.rendering import NoOpRenderer, SkiaRenderer, SkiaUnavailableError
 from hipparchus.ui.main_window import MainWindow
 
+if TYPE_CHECKING:  # pragma: no cover
+    import tkinter as tk
+
 
 @dataclass(slots=True)
 class HipparchusApp:
@@ -22,7 +26,12 @@ class HipparchusApp:
     window: MainWindow
 
     @classmethod
-    def bootstrap(cls) -> "HipparchusApp":
+    def bootstrap(cls, root: "tk.Tk | None" = None) -> "HipparchusApp":
+        """Build the application. `root` lets a caller supply the window.
+
+        Only the test suite does, so that a run has one Tk root rather than one
+        per file — see `tests/conftest.py`.
+        """
         config = ConfigLoader.load()
         settings = SettingsStore(config.settings_file).load()
         plugin_loader = PluginLoader(
@@ -51,6 +60,7 @@ class HipparchusApp:
             controller=controller,
             renderer=renderer,
             default_preset=default_preset(DEFAULT_PRESET_NAME),
+            root=root,
         )
         return cls(config=config, window=window)
 

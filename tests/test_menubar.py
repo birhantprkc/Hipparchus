@@ -10,7 +10,7 @@ from __future__ import annotations
 import tkinter as tk
 import unittest
 
-from gui_support import require_focus_tests, require_gui, show_offscreen
+from gui_support import require_focus_tests, reset_root, shared_root, show_offscreen
 from hipparchus.ui import actions as verbs
 from hipparchus.ui import menubar
 from hipparchus.ui.shortcuts import sequences_for
@@ -42,19 +42,12 @@ class FocusTestCase:
 
 class MenuBarTestCase(unittest.TestCase):
     def setUp(self) -> None:
-        require_gui()
-        try:
-            self.root = tk.Tk()
-        except tk.TclError as exc:  # pragma: no cover - headless CI
-            self.skipTest(f"no display: {exc}")
-        self.root.withdraw()
+        self.root = shared_root()
+        self.addCleanup(reset_root)
         self.calls: list[str] = []
         self.actions = verbs.Actions()
         for verb in verbs.VERBS:
             self.actions.register(verb.key, lambda key=verb.key: self.calls.append(key))
-
-    def tearDown(self) -> None:
-        self.root.destroy()
 
     def send(self, sequence: str) -> None:
         """Press a key at the window, deterministically.

@@ -117,9 +117,17 @@ class MainWindow:
     #: What the plugin loader could not load, and why. Recorded since the
     #: loader was written and never once shown.
     plugin_load_errors: list[str] = field(default_factory=list)
+    #: The window to build in, or `None` to make one — which is what the
+    #: application does. The test suite hands in the one root a run is allowed:
+    #: a second Tk root is a second window on somebody's screen, and on macOS
+    #: it is also a hang or a crash depending on the order they are made in.
+    root: tk.Tk | None = None
 
     def __post_init__(self) -> None:
-        self._root = tk.Tk()
+        #: Whether closing this window should take the interpreter's root with
+        #: it. False when the root was handed in: it outlives this window.
+        self._owns_root = self.root is None
+        self._root = self.root if self.root is not None else tk.Tk()
         self._theme_mode = self.config.theme_mode
         # Before anything is built. `theme.current()` is what every raw Tk
         # widget reads for its own colours — the Locator's canvas, the map's
@@ -718,7 +726,13 @@ class MainWindow:
                     pass
         self._queue_job = None
         self._redraw_job = None
-        self._root.destroy()
+        if self._owns_root:
+            self._root.destroy()
+        else:
+            # Somebody else's root. Take this window's widgets off it and leave
+            # it standing — `gui_support.reset_root` does the rest.
+            for child in self._root.winfo_children():
+                child.destroy()
 
     def _build_menus(self) -> None:
         """Hand the menu bar the window's verbs.
