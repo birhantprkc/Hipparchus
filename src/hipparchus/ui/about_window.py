@@ -50,6 +50,12 @@ ART_HEIGHT = 250
 #: Every edge in the window sits on this margin.
 MARGIN = 26
 
+#: A ttk.Label asks for a few pixels more than its wraplength, for a border it
+#: does not draw. The window is fixed at the Mac's width, so the text has to
+#: wrap inside that rather than the window growing to fit the text.
+LABEL_SLACK = 4
+TEXT_WIDTH = WIDTH - MARGIN * 2 - LABEL_SLACK
+
 #: `AboutView.titleSize` / `.subtitleSize`, and the two smaller sizes beside
 #: them. Points in SwiftUI, points in Tk.
 TITLE_SIZE = 36
@@ -260,7 +266,7 @@ class AboutWindow:
     def _words(self, window: tk.Toplevel, palette: theme.Palette) -> None:
         ttk.Label(
             window, text=self._about.body, font=(theme.family(), BODY_SIZE),
-            wraplength=WIDTH - MARGIN * 2, justify="left",
+            wraplength=TEXT_WIDTH, justify="left",
         ).pack(side="top", anchor="w", padx=MARGIN, pady=(20, 0))
 
     def _footer(self, window: tk.Toplevel, palette: theme.Palette) -> None:
@@ -295,7 +301,7 @@ class AboutWindow:
         # requirement, without being the first thing anybody reads.
         self._legal = ttk.Label(
             window, text=self._about.legal, font=(theme.family(), LEGAL_SIZE),
-            wraplength=WIDTH - MARGIN * 2, justify="left", foreground=palette.muted,
+            wraplength=TEXT_WIDTH, justify="left", foreground=palette.muted,
         )
         self._legal_button = ttk.Label(
             window, text="Data, licences and credits ▸",
