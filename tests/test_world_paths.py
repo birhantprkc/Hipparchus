@@ -21,10 +21,12 @@ from hipparchus.application.world_outline import (
     DETAIL_10M,
     DETAIL_110M,
     Outline,
+    Settlement,
     detail_for,
 )
 from hipparchus.application.world_paths import (
     Segment,
+    markers_within,
     prepare,
     screen_coordinates,
     visible,
@@ -177,3 +179,50 @@ class DetailTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class MarkerTests(unittest.TestCase):
+    """Named places, which are what a locator over an inland city has to show."""
+
+    def _paths(self):
+        return prepare(
+            Outline(
+                settlements=(
+                    Settlement("South Bend", -86.25, 41.68),
+                    Settlement("Valletta", 14.51, 35.90),
+                )
+            ),
+            DETAIL_10M,
+        )
+
+    def test_each_place_is_projected_like_everything_else(self) -> None:
+        marker = self._paths().markers[0]
+        expected = project(-86.25, 41.68)
+        self.assertAlmostEqual(marker.x, expected[0], delta=1e-3)
+        self.assertAlmostEqual(marker.y, expected[1], delta=1e-3)
+
+    def test_places_alone_are_worth_drawing(self) -> None:
+        self.assertFalse(self._paths().is_empty)
+
+    def test_only_the_ones_on_screen_are_kept(self) -> None:
+        paths = self._paths()
+        window = (project(-87.0, 41.0)[0], project(-87.0, 41.0)[1],
+                  project(-85.0, 42.0)[0], project(-85.0, 42.0)[1])
+        found = markers_within(paths.markers, window)
+        self.assertEqual([marker.name for marker in found], ["South Bend"])
+
+    def test_a_crowded_view_is_capped(self) -> None:
+        """A hundred and fifty pixels of strip cannot carry three hundred
+        names; past a dozen they overlap into a smear."""
+        many = Outline(
+            settlements=tuple(
+                Settlement(f"Place {index}", index * 0.01, 0.0) for index in range(200)
+            )
+        )
+        paths = prepare(many, DETAIL_10M)
+        window = (project(-1.0, -1.0)[0], project(-1.0, -1.0)[1],
+                  project(5.0, 1.0)[0], project(5.0, 1.0)[1])
+        self.assertEqual(len(markers_within(paths.markers, window)), 12)
+
+    def test_an_outline_with_no_places_has_no_markers(self) -> None:
+        self.assertEqual(prepare(Outline(), DETAIL_10M).markers, ())

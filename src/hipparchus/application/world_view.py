@@ -37,6 +37,41 @@ WORLD_HALF = _PROFILE.project_point(180.0, 0.0)[0]
 MIN_SPAN = 200.0
 
 
+#: Spacings a person can read a position off. A grid at 0.037° tells you where
+#: the lines are and nothing else.
+GRATICULE_STEPS: tuple[float, ...] = (
+    30.0, 10.0, 5.0, 2.0, 1.0, 0.5, 0.2, 0.1, 0.05, 0.02, 0.01,
+)
+
+#: About this many lines across the view. Two is a cross, twenty is graph paper.
+GRATICULE_LINES = 4.0
+
+
+def graticule_step(span_degrees: float) -> float:
+    """How far apart to draw the meridians and parallels, for a view this wide.
+
+    Fixed at thirty degrees, the graticule disappears below a continent. Over an
+    inland city — where Natural Earth has no coastline, no border and no lake —
+    that left the Locator a blank white rectangle with nothing in it at all. A
+    grid that follows the zoom always has something to say, and what it says is
+    the scale.
+    """
+    try:
+        span = float(span_degrees)
+    except (TypeError, ValueError):
+        return GRATICULE_STEPS[0]
+    if not (span > 0.0) or span != span:
+        return GRATICULE_STEPS[0]
+
+    wanted = span / GRATICULE_LINES
+    # The coarsest step that still leaves enough lines on screen; the finest we
+    # have if the view is closer than the ladder goes.
+    for step in GRATICULE_STEPS:
+        if step <= wanted:
+            return step
+    return GRATICULE_STEPS[-1]
+
+
 def project(lon: float, lat: float) -> tuple[float, float]:
     return _PROFILE.project_point(lon, _clamp_latitude(lat))
 

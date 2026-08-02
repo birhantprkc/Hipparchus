@@ -149,3 +149,46 @@ class LakeTests(unittest.TestCase):
         outline = world_outline.Outline(lakes=(((0.0, 0.0), (1.0, 1.0)),))
         self.assertFalse(outline.is_empty)
         self.assertEqual(outline.vertex_count, 2)
+
+
+class SettlementTests(unittest.TestCase):
+    """Somewhere the map can be recognised by, at the scale a city is chosen at.
+
+    Coastlines, borders and lakes are all absent over an inland city, and a
+    graticule tells you the coordinates but not the place. Natural Earth carries
+    seven thousand populated places and knows South Bend, which is the whole
+    reason this is worth reading.
+    """
+
+    def setUp(self) -> None:
+        if not (world_outline.repository_root() / world_outline.COASTLINE).is_file():
+            self.skipTest("the Natural Earth dataset is not in this checkout")
+        self.outline = world_outline.load(detail=world_outline.DETAIL_10M)
+
+    def test_the_places_are_read(self) -> None:
+        self.assertTrue(self.outline.settlements)
+
+    def test_each_one_has_a_name_and_a_position(self) -> None:
+        for settlement in self.outline.settlements[:50]:
+            with self.subTest(name=settlement.name):
+                self.assertTrue(settlement.name.strip())
+                self.assertGreaterEqual(settlement.lon, -180.0)
+                self.assertLessEqual(settlement.lon, 180.0)
+                self.assertGreater(settlement.lat, -90.0)
+                self.assertLess(settlement.lat, 90.0)
+
+    def test_it_knows_the_inland_city_that_started_this(self) -> None:
+        found = [s for s in self.outline.settlements if s.name == "South Bend"]
+        self.assertTrue(found, "Natural Earth has South Bend; the reader lost it")
+        self.assertAlmostEqual(found[0].lon, -86.25, delta=0.4)
+        self.assertAlmostEqual(found[0].lat, 41.68, delta=0.4)
+
+    def test_an_empty_outline_has_none(self) -> None:
+        self.assertEqual(world_outline.Outline().settlements, ())
+        self.assertTrue(world_outline.Outline().is_empty)
+
+    def test_places_alone_are_enough_to_be_worth_drawing(self) -> None:
+        outline = world_outline.Outline(
+            settlements=(world_outline.Settlement("Somewhere", 0.0, 0.0),)
+        )
+        self.assertFalse(outline.is_empty)

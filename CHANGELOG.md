@@ -120,8 +120,10 @@ most of it had been true since the interface was rebuilt.
 - **The Locator opens where it was told to.** It was asked to show an area
   before its canvas had been laid out, and an area fitted into one pixel came
   back as the whole world.
-- **The Locator draws lakes**, so it is not a blank rectangle over the middle of
-  a continent, where there is no coastline and no national border.
+- **The Locator draws lakes and names places**, and its graticule follows the
+  zoom instead of being fixed at thirty degrees. Over an inland city it used to
+  be a blank white rectangle: no coastline, no border and no lake within a tenth
+  of a degree, and no grid either.
 - **No more error dialogue from the render thread.** It asked a Tk variable
   whether debug logging was on, which from any thread but the main one raises —
   and the worker turned that into a modal alert on top of whatever you were

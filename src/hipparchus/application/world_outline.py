@@ -31,6 +31,20 @@ logger = logging.getLogger(__name__)
 
 Polyline = tuple[tuple[float, float], ...]
 
+
+@dataclass(frozen=True, slots=True)
+class Settlement:
+    """A named place, for recognising where the view is.
+
+    Lines are not enough on their own: over an inland city there is no
+    coastline, no border and no lake within a tenth of a degree, and a
+    graticule gives the coordinates without giving the place.
+    """
+
+    name: str
+    lon: float
+    lat: float
+
 #: The two scales, by the name Natural Earth gives them.
 DETAIL_110M = "110m"
 DETAIL_10M = "10m"
@@ -39,17 +53,19 @@ DETAIL_10M = "10m"
 COASTLINE = Path("datasets/natural_earth/ne_110m_coastline/ne_110m_coastline.shp")
 COUNTRIES = Path("datasets/natural_earth/ne_110m_admin_0_countries/ne_110m_admin_0_countries.shp")
 LAKES = Path("datasets/natural_earth/ne_110m_lakes/ne_110m_lakes.shp")
+PLACES = Path("datasets/natural_earth/ne_110m_populated_places/ne_110m_populated_places.shp")
 
 #: Coastline, borders and lakes, per scale. The lakes matter more than their
 #: size suggests: a coastline and a national border draw nothing at all over
 #: the middle of a continent, and the Locator over Indiana was a blank white
 #: rectangle at every zoom until they were added.
-DATASETS: dict[str, tuple[Path, Path, Path]] = {
-    DETAIL_110M: (COASTLINE, COUNTRIES, LAKES),
+DATASETS: dict[str, tuple[Path, Path, Path, Path]] = {
+    DETAIL_110M: (COASTLINE, COUNTRIES, LAKES, PLACES),
     DETAIL_10M: (
         Path("datasets/natural_earth_10m/ne_10m_coastline/ne_10m_coastline.shp"),
         Path("datasets/natural_earth_10m/ne_10m_admin_0_countries/ne_10m_admin_0_countries.shp"),
         Path("datasets/natural_earth_10m/ne_10m_lakes/ne_10m_lakes.shp"),
+        Path("datasets/natural_earth_10m/ne_10m_populated_places/ne_10m_populated_places.shp"),
     ),
 }
 
@@ -86,10 +102,11 @@ class Outline:
     coastline: tuple[Polyline, ...] = ()
     borders: tuple[Polyline, ...] = ()
     lakes: tuple[Polyline, ...] = ()
+    settlements: tuple[Settlement, ...] = ()
 
     @property
     def is_empty(self) -> bool:
-        return not self.coastline and not self.borders and not self.lakes
+        return not (self.coastline or self.borders or self.lakes or self.settlements)
 
     @property
     def vertex_count(self) -> int:
@@ -107,11 +124,12 @@ def load(root: Path | None = None, detail: str = DETAIL_110M) -> Outline:
     than no locator, but a window that will not open is worse than both.
     """
     base = root if root is not None else repository_root()
-    coastline, countries, lakes = DATASETS.get(detail, DATASETS[DETAIL_110M])
+    coastline, countries, lakes, places = DATASETS.get(detail, DATASETS[DETAIL_110M])
     return Outline(
         coastline=_read(base / coastline),
         borders=_read(base / countries),
         lakes=_read(base / lakes),
+        settlements=_read_places(base / places),
     )
 
 
@@ -122,7 +140,7 @@ def is_available(detail: str, root: Path | None = None) -> bool:
     stays on the coarse set instead of reading nothing and drawing nothing.
     """
     base = root if root is not None else repository_root()
-    coastline, _countries, _lakes = DATASETS.get(detail, DATASETS[DETAIL_110M])
+    coastline, _countries, _lakes, _places = DATASETS.get(detail, DATASETS[DETAIL_110M])
     return (base / coastline).is_file()
 
 
@@ -147,6 +165,46 @@ def _read(path: Path) -> tuple[Polyline, ...]:
     except Exception as exc:  # noqa: BLE001 - any read failure is the same answer
         logger.warning("could not read %s: %s", path, exc)
         return ()
+
+
+def _read_places(path: Path) -> tuple[Settlement, ...]:
+    """Named points, or nothing. Absent is absent, as everywhere else here."""
+    if not path.is_file():
+        logger.info("no populated places at %s; the locator will name nothing", path)
+        return ()
+    try:
+        import fiona
+    except ImportError:  # pragma: no cover - fiona is a declared dependency
+        return ()
+
+    try:
+        with fiona.open(str(path)) as source:
+            return tuple(
+                settlement
+                for feature in source
+                if (settlement := _settlement_of(feature)) is not None
+            )
+    except Exception as exc:  # noqa: BLE001 - any read failure is the same answer
+        logger.warning("could not read %s: %s", path, exc)
+        return ()
+
+
+def _settlement_of(feature: object) -> Settlement | None:
+    """One place, if it has both a name and somewhere to put it."""
+    geometry = _attribute(feature, "geometry")
+    properties = _attribute(feature, "properties") or {}
+    if _attribute(geometry, "type") != "Point":
+        return None
+    coordinates = _attribute(geometry, "coordinates")
+    name = str(_attribute(properties, "NAME") or _attribute(properties, "name") or "").strip()
+    if not name or not coordinates:
+        return None
+    try:
+        lon, lat = float(coordinates[0]), float(coordinates[1])
+    except (TypeError, ValueError, IndexError):
+        return None
+    return Settlement(name=name, lon=max(-180.0, min(180.0, lon)),
+                      lat=max(-89.9, min(89.9, lat)))
 
 
 def _lines_of(geometry: object) -> list[Polyline]:
@@ -177,10 +235,22 @@ def _lines_of(geometry: object) -> list[Polyline]:
 
 
 def _attribute(item: object, name: str) -> object | None:
-    """One field of a mapping or of an object that merely behaves like one."""
+    """One field of a mapping or of an object that merely behaves like one.
+
+    Three shapes, because fiona has used all three. A plain dictionary, in the
+    old versions. `fiona.model.Geometry`, which exposes `type` and `coordinates`
+    as attributes. And `fiona.model.Properties`, which is neither a dict nor
+    attribute-addressable and answers only to `get` — asking it by `getattr`
+    returned nothing for every field, which is how every place name came back
+    empty and the settlements list came back empty with it.
+    """
     if isinstance(item, dict):
         return item.get(name)
-    return getattr(item, name, None)
+    found = getattr(item, name, None)
+    if found is not None:
+        return found
+    getter = getattr(item, "get", None)
+    return getter(name) if callable(getter) else None
 
 
 def _clean(points: object) -> Polyline:

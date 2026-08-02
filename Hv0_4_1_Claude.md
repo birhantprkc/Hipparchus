@@ -1397,6 +1397,29 @@ Daylight and Nocturne, Admiralty Chart, the two Riso duotones, High Contrast
 Light and Dark — are the ten palettes, from the same derivation. A pack is one
 fixed sheet; a palette dresses any of the sixteen.
 
+### And the blank strip, which needed neither more data nor a redesign
+
+The rail's Locator over an inland city was white and empty, because what it
+shows *is* the area and Natural Earth has nothing inside a tenth of a degree of
+South Bend — no coastline, no border, no lake, and no river either: its
+watercourses are a world set that stops well above the St Joseph.
+
+More line data was therefore not the answer. Two things were:
+
+- **A graticule that follows the zoom.** It was fixed at thirty degrees, so it
+  disappeared below a continent. Spaced from a ladder of readable steps — 30, 10,
+  5, 2, 1, 0.5, 0.2, 0.1, 0.05, 0.02, 0.01 — it always leaves a few lines on
+  screen, and what it says is the scale.
+- **Named places.** Natural Earth carries seven thousand populated places and
+  knows South Bend. A dot and a name is the only thing that says *where* rather
+  than merely how close.
+
+Reading them exposed a third bug on the way: `_attribute` fell back to `getattr`
+for anything that was not a `dict`, and `fiona.model.Properties` is neither a
+dict nor attribute-addressable. Every place name came back empty, and the list
+came back empty with it — the same class of silent-empty-read the geometry
+loader had already been caught by once.
+
 ### What went wrong taking the screenshots
 
 - **The first capture photographed the user's screen, not the application.** It
@@ -1419,11 +1442,7 @@ dropdown and the splash have still never been seen in a running window.
 
 Ranked by what it costs to leave.
 
-1. **The rail's Locator strip is blank for an inland city.** What it shows *is*
-   the area, and at city scale over Indiana there is no coastline, no border and
-   no lake. The design working as written, and the one thing in the South Bend
-   screenshot that looks like a fault.
-2. **Most of the window has still not been read carefully.** The two screenshots
+1. **Most of the window has still not been read carefully.** The two screenshots
    are the first proper look at it, and they cost three bugs in an hour. The
    splash and the settings window have never been seen at all.
 3. **Resizable and collapsible columns** (B1.2, B1.3) — still fixed at

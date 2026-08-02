@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import unittest
 
-from hipparchus.application.world_view import MAX_LATITUDE, WorldView
+from hipparchus.application.world_view import MAX_LATITUDE, WorldView, graticule_step
 
 WIDTH, HEIGHT = 400, 260
 ATHENS = (23.68, 37.94, 23.80, 38.03)
@@ -209,3 +209,46 @@ class BoundsTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class GraticuleTests(unittest.TestCase):
+    """How far apart the meridians and parallels go.
+
+    Fixed at thirty degrees, the graticule vanishes below a continent — and over
+    an inland city, where Natural Earth has no coastline, no border and no lake,
+    that left the Locator a blank white rectangle. A grid that follows the zoom
+    always has something to say, and says what scale you are looking at.
+    """
+
+    def test_the_whole_world_gets_a_coarse_grid(self) -> None:
+        self.assertGreaterEqual(graticule_step(360.0), 20.0)
+
+    def test_a_city_gets_a_fine_one(self) -> None:
+        self.assertLessEqual(graticule_step(0.1), 0.05)
+
+    def test_it_never_returns_nothing(self) -> None:
+        for span in (0.001, 0.1, 1.0, 17.0, 360.0, 0.0, -4.0, float("nan")):
+            with self.subTest(span=span):
+                step = graticule_step(span)
+                self.assertGreater(step, 0.0)
+
+    def test_it_always_leaves_a_few_lines_on_screen(self) -> None:
+        """Two is a cross and twenty is graph paper; the useful range between
+        is what makes this worth deriving rather than fixing."""
+        for span in (0.05, 0.2, 1.0, 5.0, 30.0, 120.0, 360.0):
+            with self.subTest(span=span):
+                lines = span / graticule_step(span)
+                self.assertGreaterEqual(lines, 1.5)
+                self.assertLessEqual(lines, 12.0)
+
+    def test_it_never_gets_coarser_as_you_zoom_in(self) -> None:
+        spans = [360.0, 90.0, 30.0, 10.0, 3.0, 1.0, 0.3, 0.1, 0.03]
+        steps = [graticule_step(span) for span in spans]
+        self.assertEqual(steps, sorted(steps, reverse=True))
+
+    def test_the_steps_are_numbers_a_person_would_choose(self) -> None:
+        """A grid at 0.037° is a grid nobody can read a position off."""
+        friendly = {30.0, 10.0, 5.0, 2.0, 1.0, 0.5, 0.2, 0.1, 0.05, 0.02, 0.01}
+        for span in (0.05, 0.2, 1.0, 5.0, 30.0, 360.0):
+            with self.subTest(span=span):
+                self.assertIn(graticule_step(span), friendly)

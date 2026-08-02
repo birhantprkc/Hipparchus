@@ -33,12 +33,13 @@ from hipparchus.application.world_outline import (
 )
 from hipparchus.application.world_paths import (
     WorldPaths,
+    markers_within,
     prepare,
     screen_coordinates,
     visible,
     window_of,
 )
-from hipparchus.application.world_view import WorldView
+from hipparchus.application.world_view import WorldView, graticule_step
 from hipparchus.ui import theme
 
 #: Redraw no faster than this. A drag delivers motion events far quicker than
@@ -48,8 +49,8 @@ REDRAW_MS = 24
 
 ZOOM_STEP = 1.3
 
-#: Meridians and parallels, in degrees.
-GRATICULE = 30
+#: How far a place name sits from its dot.
+LABEL_OFFSET = 5
 
 
 class WorldMap:
@@ -326,6 +327,12 @@ class WorldMap:
         for segment in visible(paths.coastline, window):
             self._draw_segment(segment, palette.muted, 1)
 
+        # Last, over everything: a named place is the only thing that says
+        # *where* rather than what scale, and over an inland city it is the only
+        # thing on the canvas at all.
+        for marker in markers_within(paths.markers, window):
+            self._draw_marker(marker, palette)
+
         if paths.is_empty:
             canvas.create_text(
                 max(1, canvas.winfo_width()) // 2,
@@ -334,6 +341,20 @@ class WorldMap:
                 fill=palette.muted,
                 font=theme.font("caption"),
             )
+
+    def _draw_marker(self, marker, palette: theme.Palette) -> None:
+        """A place, as a dot and its name."""
+        x = (marker.x - self._view.centre_x) * self._view.scale + self._view.width / 2
+        y = (self._view.centre_y - marker.y) * self._view.scale + self._view.height / 2
+        radius = 1.5
+        self.widget.create_oval(
+            x - radius, y - radius, x + radius, y + radius,
+            fill=palette.muted, outline="",
+        )
+        self.widget.create_text(
+            x + LABEL_OFFSET, y, anchor="w", text=marker.name,
+            fill=palette.muted, font=theme.font("caption2"),
+        )
 
     def _draw_segment(self, segment, colour: str, width: int) -> None:
         """One polyline, already projected and already known to be on screen."""
@@ -392,15 +413,25 @@ class WorldMap:
             self._detail_poll = None
 
     def _draw_graticule(self, palette: theme.Palette) -> None:
+        """Meridians and parallels, spaced to suit the zoom.
+
+        Fixed at thirty degrees this vanished below a continent, and over an
+        inland city — no coastline, no border, no lake within a tenth of a
+        degree — the canvas was blank white with nothing in it whatsoever. The
+        spacing is decided in `world_view`, where it can be checked.
+        """
         width = max(1, self.widget.winfo_width())
         height = max(1, self.widget.winfo_height())
         west, south, east, north = self._view.bounds()
+        step = graticule_step(abs(east - west))
 
-        for lon in range(-180, 181, GRATICULE):
+        for index in range(int(west / step) - 1, int(east / step) + 2):
+            lon = index * step
             if west <= lon <= east:
                 x, _ = self._view.to_screen(lon, 0)
                 self.widget.create_line(x, 0, x, height, fill=palette.border)
-        for lat in range(-60, 61, GRATICULE):
+        for index in range(int(south / step) - 1, int(north / step) + 2):
+            lat = index * step
             if south <= lat <= north:
                 _, y = self._view.to_screen(0, lat)
                 self.widget.create_line(0, y, width, y, fill=palette.border)

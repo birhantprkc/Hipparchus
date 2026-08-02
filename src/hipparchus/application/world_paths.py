@@ -22,7 +22,7 @@ from typing import Iterable, Sequence
 
 import numpy as np
 
-from hipparchus.application.world_outline import Outline
+from hipparchus.application.world_outline import Outline, Settlement
 from hipparchus.application.world_view import MAX_LATITUDE, WorldView
 from hipparchus.geometry.projection import EARTH_RADIUS_M
 
@@ -59,6 +59,19 @@ class Segment:
 
 
 @dataclass(frozen=True, slots=True)
+class Marker:
+    """A named place, projected once like everything else."""
+
+    name: str
+    x: float
+    y: float
+
+    def inside(self, window: Window) -> bool:
+        min_x, min_y, max_x, max_y = window
+        return min_x <= self.x <= max_x and min_y <= self.y <= max_y
+
+
+@dataclass(frozen=True, slots=True)
 class WorldPaths:
     """A whole outline, ready to draw."""
 
@@ -67,13 +80,16 @@ class WorldPaths:
     #: Inland, a coastline and a national border draw nothing; the lakes are
     #: what a locator over the middle of a continent has to show.
     lakes: tuple[Segment, ...] = ()
+    #: Named places. Over an inland city these are the only thing that says
+    #: *where* rather than merely *what scale*.
+    markers: tuple[Marker, ...] = ()
     #: Which dataset this came from, so the widget can tell whether what it is
     #: holding is the detail the current zoom asked for.
     detail: str = ""
 
     @property
     def is_empty(self) -> bool:
-        return not self.coastline and not self.borders and not self.lakes
+        return not (self.coastline or self.borders or self.lakes or self.markers)
 
     @property
     def vertex_count(self) -> int:
@@ -103,8 +119,32 @@ def prepare(outline: Outline, detail: str) -> WorldPaths:
         coastline=tuple(_segments(outline.coastline)),
         borders=tuple(_segments(outline.borders)),
         lakes=tuple(_segments(outline.lakes)),
+        markers=_markers(outline.settlements),
         detail=detail,
     )
+
+
+def _markers(settlements: Iterable[Settlement]) -> tuple[Marker, ...]:
+    listed = list(settlements)
+    if not listed:
+        return ()
+    points = project_many(
+        np.asarray([(item.lon, item.lat) for item in listed], dtype=np.float64)
+    )
+    return tuple(
+        Marker(name=item.name, x=float(point[0]), y=float(point[1]))
+        for item, point in zip(listed, points)
+    )
+
+
+def markers_within(markers: Iterable[Marker], window: Window, limit: int = 12) -> list[Marker]:
+    """The named places on screen, at most this many.
+
+    Capped because a wide view over Europe holds hundreds and a locator strip
+    is a hundred and fifty pixels tall: past a dozen the names overlap into a
+    grey smear and none of them can be read.
+    """
+    return [marker for marker in markers if marker.inside(window)][:limit]
 
 
 def _segments(lines: Iterable[Sequence[tuple[float, float]]]) -> list[Segment]:
