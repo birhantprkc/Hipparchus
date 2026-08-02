@@ -81,6 +81,50 @@ class MessageTests(StatusBarTestCase):
         self.assertEqual(self.bar.message_widget.cget("state"), "readonly")
 
 
+class RankingTests(StatusBarTestCase):
+    """That the bar asks `application/status_line.py` rather than deciding.
+
+    The ranking itself is tested there, without a widget. What is checked here
+    is only that the four verbs reach it and that the entry shows the answer.
+    """
+
+    def test_a_report_does_not_destroy_a_result(self) -> None:
+        self.bar.set_message("Exported valletta.svg · 21 384 paths")
+        self.bar.note("Rendering preview...")
+        self.bar.note("Rendered · 21 layers · 24 926 features")
+        self.assertEqual(self.bar.message, "Exported valletta.svg · 21 384 paths")
+
+    def test_work_in_flight_says_what_it_is_and_then_gives_the_line_back(self) -> None:
+        self.bar.set_message("Exported valletta.svg")
+        self.bar.begin("Fetching map data...")
+        self.assertEqual(self.bar.message, "Fetching map data...")
+        self.assertTrue(self.bar.can_cancel)
+        self.bar.end()
+        self.assertEqual(self.bar.message, "Exported valletta.svg")
+        self.assertFalse(self.bar.can_cancel)
+
+    def test_a_lookup_finishing_mid_fetch_leaves_the_spinner_alone(self) -> None:
+        self.bar.begin("Fetching map data...")
+        self.bar.begin("Searching…")
+        self.bar.end()
+        self.assertTrue(self.bar.can_cancel)
+        self.assertEqual(self.bar.message, "Fetching map data...")
+
+    def test_asking_for_something_new_retires_the_last_result(self) -> None:
+        self.bar.set_message("Exported valletta.svg")
+        self.bar.undertake()
+        self.bar.note("Rendered · 21 layers")
+        self.assertEqual(self.bar.message, "Rendered · 21 layers")
+
+    def test_the_colour_belongs_to_the_line_on_show(self) -> None:
+        """A failure held behind a running fetch must not paint the fetch red."""
+        self.bar.begin("Fetching map data...")
+        self.bar.set_message("Overpass said no", error=True)
+        self.assertNotEqual(self.bar.message_colour, theme.current().danger)
+        self.bar.end()
+        self.assertEqual(self.bar.message_colour, theme.current().danger)
+
+
 class ProgressRowTests(StatusBarTestCase):
     def reporter(self) -> FetchReporter:
         reporter = FetchReporter()

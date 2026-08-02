@@ -144,7 +144,6 @@ class MainWindow:
         self._queue_job: str | None = None
         self._render_request_id = 0
         self._render_inflight = False
-        self._busy_counter = 0
         self._fetch_started_at: float | None = None
         self._debug_enabled_var = tk.BooleanVar(value=True)
         #: The same answer, readable from any thread. Kept in step by a trace
@@ -1223,6 +1222,10 @@ class MainWindow:
             self._set_aoi(*shaped)
 
     def _on_fetch_clicked(self) -> None:
+        # Render map is a new thing asked for, so whatever the last one came to
+        # is history — otherwise an export's line would outlive the map it was
+        # made from and sit over this render's own summary.
+        self._status.undertake()
         self._sync_area_to_what_is_on_screen()
         try:
             # Validate and parse coordinates
@@ -1294,9 +1297,7 @@ class MainWindow:
                 preset_profile,
                 max_on_screen_features_per_layer=min(preset_profile.max_on_screen_features_per_layer, 1500),
             )
-            self._status.set_message("Large area detected: applying preview sampling")
-        else:
-            self._status.set_message("Fetching map data...")
+            self._status.note("Large area detected: applying preview sampling")
         preset_profile = self._cartographic_geometry_profile(preset_profile)
         self._set_busy("Fetching map data...")
         self._fetch_started_at = time.perf_counter()
@@ -1787,6 +1788,10 @@ class MainWindow:
                 if kind == "scene":
                     scene, cache_state = payload
                     self._apply_scene(scene, cache_state)
+                    # The fetch that asked for this is over. Its own end,
+                    # rather than a redraw popping one more than it pushed,
+                    # which is what used to stop the spinner.
+                    self._set_idle()
                 elif kind == "places":
                     self._show_search_results(payload)
                 elif kind == "search_failed":
@@ -1838,7 +1843,6 @@ class MainWindow:
         self._sync_layer_visibility_to_scene()
         self.renderer.set_scene(scene)
         self.renderer.set_viewport(ViewportState())
-        self._status.set_message("Rendering preview...")
         self._status.set_cache(cache_state)
         geometry_count = sum(len(layer.geometries) for layer in scene.layers)
         bounds_text = self._scene_bounds_text(scene)
@@ -1952,7 +1956,6 @@ class MainWindow:
         self._render_inflight = True
         self._render_request_id += 1
         request_id = self._render_request_id
-        self._status.set_message("Rendering preview...")
         self._set_busy("Rendering preview...")
 
         def _worker() -> None:
@@ -2003,15 +2006,14 @@ class MainWindow:
                 font=theme.font("lead"),
                 justify="center",
             )
-            self._status.set_message("Renderer fallback active")
-            self._finish_render("Renderer fallback")
+            self._status.note("Renderer fallback active")
             return
 
         self._canvas_image = self._photo_image_from_png(png)
         self._canvas.delete("all")
         self._canvas.create_image(0, 0, anchor="nw", image=self._canvas_image)
         self._canvas.configure(scrollregion=(0, 0, width, height))
-        self._status.set_message(f"Rendered · {getattr(self, '_layer_summary', '')}".rstrip(" ·"))
+        self._status.note(f"Rendered · {getattr(self, '_layer_summary', '')}".rstrip(" ·"))
         png_bytes = len(png)
         if isinstance(render_ms, (int, float)):
             drawn_paths = getattr(self.renderer, "_last_drawn_paths", -1)
@@ -2027,12 +2029,6 @@ class MainWindow:
             self._perf_summary_var.set(
                 f"{summary}\nRender: {float(render_ms):.1f} ms | PNG: {png_bytes / 1024.0:.1f} KiB | Paths: {drawn_paths}"
             )
-        self._finish_render("Idle")
-
-    def _finish_render(self, label: str) -> None:
-        """Common end of a render: stop the spinner and disarm Cancel."""
-
-        self._set_idle(label)
 
     def _photo_image_from_png(self, png_bytes: bytes) -> tk.PhotoImage:
         """Robust PNG->PhotoImage loader for macOS Tk variants."""
@@ -2079,17 +2075,12 @@ class MainWindow:
         self._map.arm_area_selection()
 
     def _set_busy(self, label: str) -> None:
-        self._busy_counter += 1
-        if self._busy_counter == 1:
-            self._status.set_busy(True)
-        self._status.set_message(label)
+        self._status.begin(label)
 
-    def _set_idle(self, label: str) -> None:
-        """One job finishing does not make the app idle: the counter is what
-        stops a lookup completing mid-fetch from stopping the spinner."""
-        self._busy_counter = max(0, self._busy_counter - 1)
-        if self._busy_counter == 0:
-            self._status.set_busy(False)
+    def _set_idle(self, label: str = "Idle") -> None:
+        """The label is not used: what the bar says when work ends is whatever
+        stands behind the work — a result, or the last report."""
+        self._status.end()
 
     def _scene_bounds_text(self, scene: RenderScene) -> str:
         minx: float | None = None

@@ -20,6 +20,7 @@ from tkinter import ttk
 from typing import Any, Callable
 import webbrowser
 
+from hipparchus.application import status_line
 from hipparchus.application.source_stack import default_sources
 from hipparchus.ui import theme, tooltip
 from hipparchus.ui.icons import IconButton
@@ -101,7 +102,8 @@ class StatusBar:
         # The message, in a read-only entry rather than a label, because a
         # status line you can read but not copy is half a status line — and it
         # is usually the half with the error in it.
-        self._message_var = tk.StringVar(value="Ready")
+        self._state = status_line.StatusState()
+        self._message_var = tk.StringVar(value=status_line.IDLE)
         self.message_widget = tk.Entry(
             self._frame,
             textvariable=self._message_var,
@@ -159,9 +161,45 @@ class StatusBar:
     # -- the message ----------------------------------------------------------
 
     def set_message(self, text: str, *, error: bool = False) -> None:
-        self._message_var.set(text)
+        """A result: what something the person asked for came to.
+
+        It stands until they ask for something else, which is why a redraw
+        cannot take it away. `application/status_line.py` holds the ranking.
+        """
+        self._state = status_line.announce(self._state, text, error=error)
+        self._show()
+
+    def note(self, text: str) -> None:
+        """The application, about itself — shown when no result stands."""
+        self._state = status_line.report(self._state, text)
+        self._show()
+
+    def undertake(self) -> None:
+        """The person asked for something new, so the last outcome is history."""
+        self._state = status_line.undertake(self._state)
+        self._show()
+
+    def begin(self, label: str) -> None:
+        """Work starts, and says what it is until it ends."""
+        self._state = status_line.start(self._state, label)
+        self.set_busy(self._state.busy)
+        self._show()
+
+    def end(self) -> None:
+        """That work ends; the line falls back to whatever stands behind it.
+
+        One job finishing does not make the application idle — the stack is
+        what stops a lookup completing mid-fetch from stopping the spinner.
+        """
+        self._state = status_line.finish(self._state)
+        self.set_busy(self._state.busy)
+        self._show()
+
+    def _show(self) -> None:
+        line = self._state.line
+        self._message_var.set(line.text)
         palette = theme.current()
-        self.message_widget.configure(fg=palette.danger if error else palette.text)
+        self.message_widget.configure(fg=palette.danger if line.error else palette.text)
 
     @property
     def message(self) -> str:
