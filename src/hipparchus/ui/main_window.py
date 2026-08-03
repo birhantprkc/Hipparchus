@@ -162,6 +162,10 @@ class MainWindow(FramePanelMixin, PagePanelMixin, ToolbarMixin):
         self._custom_presets = self._load_custom_presets()
         self._preset_options = sorted({*preset_names(), *self._custom_presets.keys()})
         self._quality_var = tk.StringVar(value="Fast Preview")
+        # Not part of the session: a drawing choice for the next Render map,
+        # like the page-panel Include toggles, rather than a fact about the
+        # map worth undoing back to.
+        self._relief_over_buildings_var = tk.BooleanVar(value=False)
         self._paper_preset_var = tk.StringVar(value="Canvas")
         self._paper_orientation_var = tk.StringVar(value="Landscape")
         # A choice from four rather than a field: a field invites 1200 dpi on a
@@ -476,7 +480,14 @@ class MainWindow(FramePanelMixin, PagePanelMixin, ToolbarMixin):
         for definition in self.source_stack.definitions:
             for setting in self.source_stack.settings_for(definition.source_id):
                 field = f"{definition.source_id}.{setting.key}"
-                if isinstance(setting.value, (int, float)) and not isinstance(setting.value, bool):
+                if isinstance(setting.value, bool):
+                    # Not a number, and not a plain choice either: `str(True)`
+                    # would come back as the *string* "True", which is still
+                    # truthy read back as `bool("True")` -- restoring "off"
+                    # would silently leave the setting on. Restored explicitly
+                    # in `_apply_session`, keyed on the same `kind`.
+                    choices[field] = "true" if setting.value else "false"
+                elif isinstance(setting.value, (int, float)):
                     settings[field] = float(setting.value)
                 else:
                     choices[field] = str(setting.value)
@@ -580,8 +591,16 @@ class MainWindow(FramePanelMixin, PagePanelMixin, ToolbarMixin):
                     self.source_stack.set_path(definition.source_id, path)
             for field, value in {**session.source_settings, **session.source_choices}.items():
                 source_id, _, key = field.rpartition(".")
-                if source_id:
-                    self.source_stack.set_setting(source_id, key, value)
+                if not source_id:
+                    continue
+                definition = self.source_stack.definition(source_id)
+                setting = definition.setting(key) if definition is not None else None
+                if setting is not None and setting.kind == "boolean":
+                    # Session storage only ever has strings; recover the type
+                    # `current_session` encoded rather than pass "false" on
+                    # to a provider field typed `bool`.
+                    value = str(value).strip().lower() == "true"
+                self.source_stack.set_setting(source_id, key, value)
             self._preset_var.set(session.preset_name)
             self._palette_var.set(session.palette_name)
             self._quality_var.set(quality_label_for(session.quality_key))
@@ -762,6 +781,19 @@ class MainWindow(FramePanelMixin, PagePanelMixin, ToolbarMixin):
             row,
             "A preset says what the map should look like; quality says how much "
             "work to spend getting there.",
+        )
+
+        row = ttk.Frame(style_body)
+        row.pack(fill="x", pady=(4, 0))
+        ttk.Checkbutton(
+            row, text="Relief over buildings", variable=self._relief_over_buildings_var,
+        ).pack(side="left")
+        tooltip.attach(
+            row,
+            "Lifts the hillshade above the built environment instead of under "
+            "it, stopping just short of the labels. Off draws relief the "
+            "ordinary way, beneath streets and buildings. Needs Hillshade "
+            "ticked on the Elevation source to draw anything.",
         )
 
         self._build_saved_styles(style_body)
@@ -974,6 +1006,7 @@ class MainWindow(FramePanelMixin, PagePanelMixin, ToolbarMixin):
             derive_delaunay=False,
             derive_hex_grid=False,
             derive_circle_packing=False,
+            relief_over_buildings=bool(self._relief_over_buildings_var.get()),
         )
 
     def _load_custom_presets(self) -> dict[str, ArtisticPreset]:

@@ -248,6 +248,20 @@ class SourcesPanel:
         for setting in self.stack.settings_for(definition.source_id):
             row = ttk.Frame(body)
             row.pack(fill="x", pady=2)
+
+            if setting.kind == "boolean":
+                bool_var = tk.BooleanVar(value=bool(setting.value))
+                ttk.Checkbutton(
+                    row,
+                    text=setting.label,
+                    variable=bool_var,
+                    command=(
+                        lambda sid=definition.source_id, key=setting.key, var=bool_var:
+                        self.on_setting(sid, key, bool(var.get()))
+                    ),
+                ).pack(side="left")
+                continue
+
             ttk.Label(row, text=setting.label, width=10, font=theme.font("caption")).pack(side="left")
 
             if setting.choices:

@@ -210,6 +210,50 @@ class WindowTests(SharesTheWindow):
             self.root.update()
 
 
+class ReliefAndHillshadeControlsTests(SharesTheWindow):
+    """The two settings Phase 1 shipped with no way to turn on: relief drawn
+    over the built environment, and hillshade itself."""
+
+    def test_relief_over_buildings_follows_the_checkbox(self) -> None:
+        from hipparchus.application.presets import GeometryPipelineProfile
+
+        original = self.window._relief_over_buildings_var.get()
+        try:
+            self.window._relief_over_buildings_var.set(True)
+            self.root.update()
+            self.assertTrue(
+                self.window._cartographic_geometry_profile(GeometryPipelineProfile()).relief_over_buildings
+            )
+
+            self.window._relief_over_buildings_var.set(False)
+            self.root.update()
+            self.assertFalse(
+                self.window._cartographic_geometry_profile(GeometryPipelineProfile()).relief_over_buildings
+            )
+        finally:
+            self.window._relief_over_buildings_var.set(original)
+            self.root.update()
+
+    def test_the_hillshade_setting_survives_a_session_round_trip_as_a_real_bool(self) -> None:
+        """`Session.source_choices` only ever holds strings. A bool restored
+        as the string "false" would still be truthy read back by a provider
+        field typed `bool` -- this guards the fix, not just the feature."""
+        stack = self.window.source_stack
+        original = stack.provider_overrides("terrain_tiles").get("emit_hillshade")
+        try:
+            stack.set_setting("terrain_tiles", "hillshade", True)
+            session = self.window.current_session()
+            self.assertEqual(session.source_choices.get("terrain_tiles.hillshade"), "true")
+
+            stack.set_setting("terrain_tiles", "hillshade", False)
+            self.window._apply_session(session)
+            self.root.update()
+            self.assertIs(stack.provider_overrides("terrain_tiles")["emit_hillshade"], True)
+        finally:
+            stack.set_setting("terrain_tiles", "hillshade", bool(original))
+            self.root.update()
+
+
 # -- the three export buttons, driven the way a person drives them ------------
 #
 # Each was checked at its exporter — `test_svg_exporter` and `test_raster_export`

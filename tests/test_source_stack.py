@@ -145,7 +145,7 @@ class SettingsTests(unittest.TestCase):
     def test_declared_settings_come_back_with_defaults(self) -> None:
         stack = SourceStack()
         keys = {setting.key for setting in stack.settings_for("terrain_tiles")}
-        self.assertEqual(keys, {"interval", "bands"})
+        self.assertEqual(keys, {"interval", "bands", "hillshade"})
 
     def test_an_override_replaces_the_default(self) -> None:
         stack = SourceStack()
@@ -197,6 +197,22 @@ class SettingsTests(unittest.TestCase):
         stack.set_setting("terrain_tiles", "interval", 20.0)
         setting = {s.key: s for s in stack.settings_for("terrain_tiles")}["interval"]
         self.assertEqual(setting.display(), "20 m")
+
+    def test_hillshade_is_boolean_off_by_default_and_targets_emit_hillshade(self) -> None:
+        stack = SourceStack()
+        setting = {s.key: s for s in stack.settings_for("terrain_tiles")}["hillshade"]
+        self.assertEqual(setting.kind, "boolean")
+        self.assertIs(setting.value, False)
+        self.assertEqual(setting.target, "emit_hillshade")
+
+    def test_turning_hillshade_on_reaches_the_provider_as_a_real_bool(self) -> None:
+        """Not the string `"True"` -- a provider field typed `bool` would
+        accept it silently and every `if settings.emit_hillshade:` downstream
+        would then read a non-empty string as true regardless of its value."""
+        stack = SourceStack()
+        stack.set_setting("terrain_tiles", "hillshade", True)
+        overrides = stack.provider_overrides("terrain_tiles")
+        self.assertIs(overrides["emit_hillshade"], True)
 
 
 class SummaryTests(unittest.TestCase):

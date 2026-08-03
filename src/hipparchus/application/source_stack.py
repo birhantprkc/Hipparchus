@@ -19,7 +19,7 @@ from typing import Any, Literal
 
 
 Provenance = Literal["live", "measured", "synthetic", "uncalibrated", "approximate"]
-SettingKind = Literal["number", "choice"]
+SettingKind = Literal["number", "choice", "boolean"]
 
 # Every provider that can stand on its own has a single-provider model. Used to
 # pick a base when OpenStreetMap is not part of the stack.
@@ -145,6 +145,7 @@ def default_sources() -> tuple[SourceDefinition, ...]:
             settings=(
                 SourceSetting("interval", "Interval", "number", 0.0, suffix="m", attribute="contour_interval_metres"),
                 SourceSetting("bands", "Bands", "number", 10, attribute="elevation_band_count"),
+                SourceSetting("hillshade", "Hillshade", "boolean", False, attribute="emit_hillshade"),
             ),
         ),
         SourceDefinition(
