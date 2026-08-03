@@ -156,6 +156,19 @@ class LayerEntry:
             return f"{self.count:,}".replace(",", " ")
         return str(self.count)
 
+    def count_description(self) -> str:
+        """What the bare number on the row is actually counting.
+
+        "24" reads very differently for a layer of place names than for one
+        of roads, and the row shows only the number -- this is the sentence
+        a tooltip puts behind it.
+        """
+        if not self.has_data:
+            return "Nothing here in this fetch."
+        noun = "label" if self.is_labels else "feature"
+        plural = "" if self.count == 1 else "s"
+        return f"{self.count_text()} {noun}{plural} in this layer"
+
 
 def layer_label(layer_id: str) -> str:
     return LAYER_LABELS.get(layer_id, layer_id.replace("_", " ").capitalize())

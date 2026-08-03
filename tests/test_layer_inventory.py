@@ -127,6 +127,33 @@ class InventoryTests(unittest.TestCase):
         self.assertEqual(grouped(_scene()), [])
 
 
+class CountDescriptionTests(unittest.TestCase):
+    """The bare number on a row does not say what it counts -- "24" reads
+    very differently for place names than for roads."""
+
+    def test_a_feature_layer_says_features(self) -> None:
+        scene = _scene(RenderLayer(name="roads_primary", geometries=_lines(2)))
+        self.assertEqual(inventory(scene)[0].count_description(), "2 features in this layer")
+
+    def test_a_label_layer_says_labels(self) -> None:
+        scene = _scene(
+            RenderLayer(name="street_names", labels=[PlaceLabel(name=f"Street {i}", x=0, y=0) for i in range(3)])
+        )
+        self.assertEqual(inventory(scene)[0].count_description(), "3 labels in this layer")
+
+    def test_a_single_one_is_not_pluralised(self) -> None:
+        scene = _scene(RenderLayer(name="roads_primary", geometries=_lines(1)))
+        self.assertEqual(inventory(scene)[0].count_description(), "1 feature in this layer")
+
+    def test_an_empty_layer_says_nothing_was_fetched(self) -> None:
+        scene = _scene(RenderLayer(name="bathymetry", geometries=[]))
+        self.assertEqual(inventory(scene)[0].count_description(), "Nothing here in this fetch.")
+
+    def test_large_counts_stay_spaced(self) -> None:
+        scene = _scene(RenderLayer(name="buildings", geometries=_lines(12340)))
+        self.assertEqual(inventory(scene)[0].count_description(), "12 340 features in this layer")
+
+
 class SummaryTests(unittest.TestCase):
     def test_the_summary_counts_only_populated_layers(self) -> None:
         scene = _scene(

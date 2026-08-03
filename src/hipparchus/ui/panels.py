@@ -21,7 +21,7 @@ from hipparchus.application.source_stack import SourceDefinition, SourceStack
 from hipparchus.application.style_catalogue import grid_columns
 from hipparchus.application.style_previews import Swatch, ring_geometry, swatch_for
 from hipparchus.rendering.models import RGBAColor, RenderScene
-from hipparchus.ui import theme
+from hipparchus.ui import theme, tooltip
 from hipparchus.ui.icons import IconButton
 
 
@@ -315,17 +315,22 @@ class LayersPanel:
         self.on_visibility = on_visibility
         self._vars: dict[str, tk.BooleanVar] = {}
         self._empty_layers: set[str] = set()
+        #: One per row, keyed by layer id -- kept rather than discarded so a
+        #: test can read back what a row actually says, not just that some
+        #: tooltip or other was attached.
+        self._row_tooltips: dict[str, tooltip.Tooltip] = {}
 
         # Turning twenty layers off one click at a time is the kind of chore an
-        # interface should not ask for.
-        actions = ttk.Frame(parent)
-        actions.pack(fill="x", pady=(0, 4))
-        IconButton(actions, "check", command=lambda: self.set_all(True), size=20,
-                   tooltip="Show every layer").pack(side="left")
-        ttk.Button(actions, text="Check all", width=11, command=lambda: self.set_all(True)).pack(side="left", padx=(2, 8))
-        IconButton(actions, "cross", command=lambda: self.set_all(False), size=20,
-                   tooltip="Hide every layer").pack(side="left")
-        ttk.Button(actions, text="Clear all", width=10, command=lambda: self.set_all(False)).pack(side="left", padx=(2, 0))
+        # interface should not ask for. In the heading itself rather than a
+        # row of their own below it -- two words are a hint beside a title,
+        # not a second toolbar the section has to make room for.
+        heading = section_heading(parent, "Layers in this map")
+        none_button = ttk.Button(heading, text="None", width=5, command=lambda: self.set_all(False))
+        none_button.pack(side="right")
+        tooltip.attach(none_button, "Hide every layer")
+        all_button = ttk.Button(heading, text="All", width=5, command=lambda: self.set_all(True))
+        all_button.pack(side="right", padx=(0, 4))
+        tooltip.attach(all_button, "Show every layer")
 
         self._body = ttk.Frame(parent)
         self._body.pack(fill="x")
@@ -356,6 +361,7 @@ class LayersPanel:
     def update(self, scene: RenderScene | None) -> str:
         for child in self._body.winfo_children():
             child.destroy()
+        self._row_tooltips.clear()
         if scene is None or not scene.layers:
             ttk.Label(
                 self._body,
@@ -365,11 +371,16 @@ class LayersPanel:
             ).pack(anchor="w", pady=4)
             return "Nothing to draw"
 
+        groups = grouped(scene)
         self._empty_layers = {
-            entry.layer_id for group, rows in grouped(scene) for entry in rows if not entry.has_data
+            entry.layer_id for group, rows in groups for entry in rows if not entry.has_data
         }
-        for group, rows in grouped(scene):
-            ttk.Label(self._body, text=group, font=theme.font("group")).pack(anchor="w", pady=(8, 2))
+        # A heading that names the only group on the sheet says nothing a
+        # reader does not already know from the section title above it.
+        show_group_names = len(groups) > 1
+        for group, rows in groups:
+            if show_group_names:
+                ttk.Label(self._body, text=group, font=theme.font("group")).pack(anchor="w", pady=(8, 2))
             for entry in rows:
                 self._layer_row(entry)
         return summarise(scene)
@@ -395,6 +406,11 @@ class LayersPanel:
         if not entry.has_data:
             check.state(["disabled"])
         ttk.Label(row, text=entry.count_text(), font=theme.font("caption")).pack(side="right")
+        # The number alone does not say what it is counting, and "24" reads
+        # very differently for a place-name layer than for a road layer.
+        tip = tooltip.attach(row, entry.count_description())
+        if tip is not None:
+            self._row_tooltips[entry.layer_id] = tip
 
 
 class StylePicker:
