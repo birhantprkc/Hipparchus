@@ -48,7 +48,6 @@ class FramePanelMixin:
 
         row = ttk.Frame(parent)
         row.pack(fill="x", pady=(0, 8))
-        self._minimap_caption = tk.StringVar(value="")
         ttk.Label(
             row, textvariable=self._minimap_caption, font=theme.font("caption")
         ).pack(side="left")

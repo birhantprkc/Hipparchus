@@ -16,6 +16,7 @@ from dataclasses import replace
 from pathlib import Path
 import threading
 import time
+import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
 from hipparchus.application import fetch_cost, geocoding
@@ -62,11 +63,28 @@ class ToolbarMixin:
         # The reason is on the button that will not work, so hovering it answers
         # the question instead of a click having to.
         self._render_tip = tooltip.attach(self._render_button, "Fetch and draw the chosen area.")
+        # Offered only while there is something to cancel -- see _set_busy and
+        # _set_idle, the two places busy state changes at all. The status bar
+        # has had a working Cancel since before this one; it is also at the
+        # foot of the window, away from the button that started the wait.
+        self._toolbar_cancel_button = ttk.Button(
+            controls, text="Cancel", command=self._on_cancel_fetch
+        )
+        self._toolbar_cancel_button.pack(side="left", padx=(0, 4))
+        self._toolbar_cancel_button.state(["disabled"])
+        tooltip.attach(self._toolbar_cancel_button, "Stop the fetch in progress.")
         IconButton(controls, "map", command=self._open_locator, size=26,
                    tooltip="Open the Locator in its own floating window").pack(side="left", padx=(0, 4))
         IconButton(controls, "marquee", command=self._arm_area_selection, size=26,
                    tooltip="Draw a new area on the map").pack(side="left", padx=(0, 4))
         ttk.Button(controls, text="Draw area", command=self._arm_area_selection).pack(side="left", padx=(0, 12))
+
+        # What Render map is actually about to fetch, next to the button that
+        # fetches it -- the same fact the frame rail's caption shows under the
+        # locator, read off the same variable rather than kept in step by hand.
+        self._area_readout = ttk.Label(controls, textvariable=self._minimap_caption, font=theme.font("label"))
+        self._area_readout.pack(side="left", padx=(0, 8))
+        tooltip.attach(self._area_readout, "The area Render map will fetch.")
 
         # Preset and Quality are not here. They belong beside the swatches
         # that show what a preset looks like, and a second copy of a control is
@@ -75,8 +93,17 @@ class ToolbarMixin:
 
         ttk.Label(controls, textvariable=self._composition_var, font=theme.font("label")).pack(side="left", padx=(4, 8))
 
-        # Right side - Export
-        ttk.Button(controls, text="Export SVG", command=self._on_export_clicked).pack(side="right")
+        # Right side - Export. A bare "Export SVG" button used to be the whole
+        # of this, and PDF/PNG were reachable only from the menu bar -- real
+        # controls, with no visible way in from the toolbar that does the rest
+        # of the exporting.
+        self._export_menu_button = ttk.Menubutton(controls, text="Export")
+        self._export_menu_button.pack(side="right")
+        export_menu = tk.Menu(self._export_menu_button, tearoff=0)
+        export_menu.add_command(label="SVG…", command=self._on_export_clicked)
+        export_menu.add_command(label="PDF…", command=self._on_export_pdf)
+        export_menu.add_command(label="PNG…", command=self._on_export_png)
+        self._export_menu_button.configure(menu=export_menu)
 
     def _open_locator(self) -> None:
         """The Locator, in a window big enough to click a place on.

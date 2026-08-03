@@ -210,6 +210,11 @@ class MainWindow(FramePanelMixin, PagePanelMixin, ToolbarMixin):
         )
         self._composition_var = tk.StringVar(value="OpenStreetMap")
         self._location_preset_var = tk.StringVar(value="London Center")
+        # Shared by the frame rail's caption and the toolbar's area readout --
+        # one fact, wanted in two places, so one variable rather than two kept
+        # in step by hand. Created here, not where the rail first uses it, so
+        # the toolbar (built first) can read it too.
+        self._minimap_caption = tk.StringVar(value="")
         # Colour, separate from the style. A preset is a whole sheet, so "the
         # same map in other colours" was not something that could be asked for.
         self._palette_var = tk.StringVar(value=PRESET_OWN)
@@ -232,6 +237,7 @@ class MainWindow(FramePanelMixin, PagePanelMixin, ToolbarMixin):
         self._restoring = False
         self._menubar = None
         self._render_tip = None
+        self._toolbar_cancel_button = None
         self._locator_window = None
         self._settings_window = None
         self._about = None
@@ -1472,11 +1478,15 @@ class MainWindow(FramePanelMixin, PagePanelMixin, ToolbarMixin):
 
     def _set_busy(self, label: str) -> None:
         self._status.begin(label)
+        if self._toolbar_cancel_button is not None:
+            self._toolbar_cancel_button.state(["!disabled"])
 
     def _set_idle(self, label: str = "Idle") -> None:
         """The label is not used: what the bar says when work ends is whatever
         stands behind the work — a result, or the last report."""
         self._status.end()
+        if self._toolbar_cancel_button is not None:
+            self._toolbar_cancel_button.state(["disabled"])
 
     def _scene_bounds_text(self, scene: RenderScene) -> str:
         minx: float | None = None

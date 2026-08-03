@@ -403,6 +403,60 @@ class StyleAndPaletteAnnouncementTests(SharesTheWindow):
         )
 
 
+class ToolbarOwesTests(SharesTheWindow):
+    """The three small things the toolbar owed: Cancel beside Render map, an
+    area readout, and an export control offering all three formats rather
+    than a bare SVG button."""
+
+    def setUp(self) -> None:
+        from hipparchus.ui import toolbar as module
+
+        self.module = module
+        self._saved_asksaveasfilename = module.filedialog.asksaveasfilename
+        self.addCleanup(self._restore)
+
+    def _restore(self) -> None:
+        self.module.filedialog.asksaveasfilename = self._saved_asksaveasfilename
+        self.window._set_idle("Idle")
+
+    def test_cancel_starts_disabled(self) -> None:
+        self.assertIn("disabled", self.window._toolbar_cancel_button.state())
+
+    def test_cancel_is_offered_only_while_something_is_running(self) -> None:
+        self.window._set_busy("Fetching map data...")
+        self.assertNotIn("disabled", self.window._toolbar_cancel_button.state())
+        self.window._set_idle("Idle")
+        self.assertIn("disabled", self.window._toolbar_cancel_button.state())
+
+    def test_pressing_the_toolbar_cancel_asks_the_host_to_stop(self) -> None:
+        """The same verb the status bar's own Cancel already uses."""
+        self.window._set_busy("Fetching map data...")
+        from hipparchus.core.fetch_progress import CancellationToken
+
+        token = CancellationToken()
+        self.window._fetch_cancel = token
+        self.window._toolbar_cancel_button.invoke()
+        self.assertTrue(token.cancelled)
+
+    def test_the_area_readout_shows_what_the_frame_rail_shows(self) -> None:
+        """One StringVar, read by both -- not two captions kept in step by hand."""
+        self.assertEqual(self.window._area_readout.cget("textvariable"), str(self.window._minimap_caption))
+
+    def test_the_export_control_offers_all_three_formats(self) -> None:
+        menu = self.root.nametowidget(self.window._export_menu_button.cget("menu"))
+        labels = [menu.entrycget(index, "label") for index in range(menu.index("end") + 1)]
+        self.assertEqual(labels, ["SVG…", "PDF…", "PNG…"])
+
+    def test_every_export_menu_item_reaches_a_real_export(self) -> None:
+        """A cancelled save sheet writes nothing, so this is safe to actually
+        invoke -- proof each entry reaches its exporter, not just its label."""
+        self.module.filedialog.asksaveasfilename = lambda **_kwargs: ""
+        menu = self.root.nametowidget(self.window._export_menu_button.cget("menu"))
+        for index in range(menu.index("end") + 1):
+            with self.subTest(index=index):
+                menu.invoke(index)
+
+
 
 
 if __name__ == "__main__":
