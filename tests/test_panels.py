@@ -75,6 +75,38 @@ class HeaderButtonTests(LayersPanelTestCase):
         self.assertEqual(self.changes, [])
 
 
+class CollapseTests(LayersPanelTestCase):
+    """The longest section on the rail once populated -- collapsing it is
+    what brings Style and Page back above the fold (Phase 7)."""
+
+    def test_starts_expanded(self) -> None:
+        self.assertTrue(self.panel._section.expanded)
+        self.assertTrue(bool(self.panel._body.winfo_manager()))
+
+    def test_collapsing_hides_the_rows_not_the_heading(self) -> None:
+        scene = _scene(RenderLayer(name="roads", geometries=_lines(2)))
+        self.panel.update(scene)
+
+        self.panel._section.toggle()
+        self.root.update()
+
+        self.assertFalse(bool(self.panel._body.winfo_manager()))
+        self.assertTrue(bool(self.panel._section.header.winfo_manager()))
+
+    def test_all_and_none_still_work_while_collapsed(self) -> None:
+        """The switches live in the heading, which stays visible; only the
+        rows they act on are hidden."""
+        scene = _scene(RenderLayer(name="roads", geometries=_lines(2)))
+        self.panel.update(scene)
+        self.panel._section.toggle()
+        self.root.update()
+        self.changes.clear()
+
+        self.panel.set_all(False)
+
+        self.assertEqual(self.changes, [("roads", False)])
+
+
 class GroupHeadingTests(LayersPanelTestCase):
     """A heading that names the only group on the sheet says nothing the
     section title above it hasn't already said."""
