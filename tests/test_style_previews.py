@@ -6,27 +6,14 @@ import unittest
 
 from hipparchus.application.presets import default_preset, preset_names
 from hipparchus.application.style_previews import (
-    featured_names,
     ring_geometry,
     swatch_for,
-    swatches,
 )
-
-
-class FeaturedTests(unittest.TestCase):
-    def test_every_featured_preset_exists(self) -> None:
-        available = set(preset_names())
-        for name in featured_names():
-            self.assertIn(name, available)
-
-    def test_the_picker_is_short_enough_to_scan(self) -> None:
-        self.assertGreaterEqual(len(featured_names()), 4)
-        self.assertLessEqual(len(featured_names()), 8)
 
 
 class SwatchTests(unittest.TestCase):
     def test_a_swatch_takes_its_ground_from_the_preset(self) -> None:
-        for name in featured_names():
+        for name in preset_names():
             with self.subTest(preset=name):
                 self.assertEqual(swatch_for(name).background, default_preset(name).style_profile.background)
 
@@ -62,9 +49,6 @@ class SwatchTests(unittest.TestCase):
                 swatch = swatch_for(name)
                 self.assertTrue(swatch.contour_widths)
                 self.assertGreater(min(swatch.contour_widths), 0.0)
-
-    def test_swatches_returns_one_per_featured_preset(self) -> None:
-        self.assertEqual(len(swatches()), len(featured_names()))
 
 
 class RingTests(unittest.TestCase):

@@ -211,22 +211,6 @@ class FramePanelMixin:
         self._aoi_vars["max_lat"].set(f"{max_lat:.5f}")
         self._refresh_minimap()
 
-    def _nudge_aoi(self, x_ratio: float, y_ratio: float) -> None:
-        min_lon, min_lat, max_lon, max_lat = self._current_aoi_values()
-        span_lon = max_lon - min_lon
-        span_lat = max_lat - min_lat
-        dx = span_lon * x_ratio
-        dy = span_lat * y_ratio
-        self._set_aoi(min_lon + dx, min_lat + dy, max_lon + dx, max_lat + dy)
-
-    def _scale_aoi(self, factor: float) -> None:
-        min_lon, min_lat, max_lon, max_lat = self._current_aoi_values()
-        center_lon = (min_lon + max_lon) * 0.5
-        center_lat = (min_lat + max_lat) * 0.5
-        half_lon = max(0.0005, (max_lon - min_lon) * 0.5 * factor)
-        half_lat = max(0.0005, (max_lat - min_lat) * 0.5 * factor)
-        self._set_aoi(center_lon - half_lon, center_lat - half_lat, center_lon + half_lon, center_lat + half_lat)
-
     def _current_aoi_values(self) -> tuple[float, float, float, float]:
         return (
             float(self._aoi_vars["min_lon"].get()),

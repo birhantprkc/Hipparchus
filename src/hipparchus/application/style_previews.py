@@ -15,20 +15,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 import math
 
-from hipparchus.application.presets import default_preset, preset_names
+from hipparchus.application.presets import default_preset
 from hipparchus.rendering.models import LayerStyle, RGBAColor
-
-
-# The picker shows a short, curated row rather than all sixteen: these span the
-# looks the app can produce, and the rest stay reachable from the full list.
-FEATURED_PRESETS: tuple[str, ...] = (
-    "Hypsometric Relief",
-    "Contour Study",
-    "Relief Sheet",
-    "Night",
-    "Clean Atlas",
-    "Monochrome Figure Ground",
-)
 
 
 @dataclass(slots=True, frozen=True)
@@ -50,12 +38,6 @@ class Swatch:
         return luminance < 128.0
 
 
-def featured_names() -> tuple[str, ...]:
-    """Featured presets that actually exist, in order."""
-    available = set(preset_names())
-    return tuple(name for name in FEATURED_PRESETS if name in available)
-
-
 def swatch_for(name: str, *, rings: int = 5) -> Swatch:
     """Describe one preset as a swatch, reading its real styles."""
     preset = default_preset(name)
@@ -74,10 +56,6 @@ def swatch_for(name: str, *, rings: int = 5) -> Swatch:
         accent_color=accent.fill_color if accent.fill_enabled else accent.stroke_color,
         band_colors=_band_colors(styles.get("elevation_bands"), rings),
     )
-
-
-def swatches(names: tuple[str, ...] | None = None) -> list[Swatch]:
-    return [swatch_for(name) for name in (names or featured_names())]
 
 
 def ring_geometry(index: int, total: int) -> list[tuple[float, float]]:

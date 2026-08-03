@@ -336,18 +336,6 @@ class SkiaRenderer:
         skia = _import_skia()
         canvas.clear(skia.ColorSetARGB(self.background.a, self.background.r, self.background.g, self.background.b))
 
-        # Debug: check scene state
-        scene_layers = len(self.scene.layers) if self.scene else 0
-        scene_geoms = sum(len(layer.geometries) for layer in self.scene.layers) if self.scene else 0
-        _PERF_LOGGER.debug(
-            "DRAW_SCENE: scene_layers=%d, scene_geoms=%d, bounds=%s, dirty=%s, cache_valid=%s",
-            scene_layers,
-            scene_geoms,
-            self._scene_bounds,
-            self._dirty,
-            self._picture_cache is not None,
-        )
-
         if self._dirty or self._picture_cache is None or self._cache_width != width or self._cache_height != height:
             recorder = skia.PictureRecorder()
             if self._scene_bounds is None:
