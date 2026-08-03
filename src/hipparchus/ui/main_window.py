@@ -694,7 +694,6 @@ class MainWindow(FramePanelMixin, PagePanelMixin, ToolbarMixin):
             file_reason=self._file_reason,
         )
 
-        section_heading(parent, "Layers in this map")
         self._layers_panel = LayersPanel(parent, on_visibility=self._on_layer_visibility_changed)
         # The layer panel owns visibility now, so the renderer reads its vars.
         self._layer_visibility_vars = self._layers_panel.visibility_vars()
