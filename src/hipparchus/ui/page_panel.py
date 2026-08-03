@@ -21,6 +21,7 @@ from __future__ import annotations
 
 from tkinter import ttk
 
+from hipparchus.application.line_weight import MAX_LINE_WEIGHT, MIN_LINE_WEIGHT
 from hipparchus.application.page_size import PageSpec, PaperSize, Resolution
 from hipparchus.export.profiles import MapComposition
 from hipparchus.ui import theme, tooltip
@@ -70,6 +71,28 @@ class PagePanelMixin:
             command=lambda _: self._refresh_page_cost(),
         ).pack(side="left", fill="x", expand=True)
 
+        # Absolute, not the preset's relative weights: a highway still reads
+        # heavier than a footpath at either end, but a poster wants both
+        # heavier than a screen preview does.
+        row = ttk.Frame(parent)
+        row.pack(fill="x", pady=2)
+        ttk.Label(row, text="Line weight", width=11, font=theme.font("caption")).pack(side="left")
+        ttk.Scale(
+            row, from_=MIN_LINE_WEIGHT, to=MAX_LINE_WEIGHT, orient="horizontal",
+            variable=self._line_weight_var, command=lambda _=None: self._refresh_line_weight_label(),
+        ).pack(side="left", fill="x", expand=True)
+        self._line_weight_label = ttk.Label(row, text="1.0×", font=theme.font("caption"), width=5)
+        self._line_weight_label.pack(side="left", padx=(6, 0))
+        tooltip.attach(
+            row,
+            "How heavy every stroke reads on the exported sheet, from the "
+            "preset's own widths (1x) to a quarter as thin or four times as "
+            "heavy. The preset's relative weights — a highway over a "
+            "footpath — hold at every setting; this only scales all of them "
+            "together, for the medium the map is going onto.",
+        )
+        self._refresh_line_weight_label()
+
         # What it costs, before it is spent. A PDF ignores this line entirely —
         # it carries physical size and no pixels — which is why it says so.
         ttk.Label(
@@ -112,6 +135,9 @@ class PagePanelMixin:
             self._title_fields.pack(fill="x", pady=(2, 0))
         else:
             self._title_fields.pack_forget()
+
+    def _refresh_line_weight_label(self) -> None:
+        self._line_weight_label.configure(text=f"{self._line_weight_var.get():.2g}×")
 
     def _export_composition(self) -> MapComposition:
         return MapComposition(

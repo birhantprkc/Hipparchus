@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 from typing import Protocol
 
+from hipparchus.application.line_weight import scale_line_weights
 from hipparchus.export.profiles import ExportDiagnostics, SVGExportProfile
 from hipparchus.export.svg_clean import CleanSVGExporter
 from hipparchus.rendering.models import RenderScene
@@ -26,6 +27,10 @@ class SVGExporter:
     scene: RenderScene
     width: int = 4096
     height: int = 4096
+    #: Absolute stroke scale for the medium this is drawn on -- see
+    #: `application/line_weight.py`. 1.0 leaves every width exactly as the
+    #: preset states it.
+    line_weight: float = 1.0
 
     def export(self, destination: Path) -> None:
         self.export_with_profile(destination=destination, profile=SVGExportProfile(mode="clean"))
@@ -34,8 +39,9 @@ class SVGExporter:
         precision = profile.precision
         if precision is None:
             precision = 6 if profile.mode == "print" else 4
+        scene = scale_line_weights(self.scene, self.line_weight)
         diagnostics = CleanSVGExporter(precision=precision).export_scene(
-            self.scene,
+            scene,
             destination,
             width=self.width,
             height=self.height,
@@ -74,9 +80,14 @@ class PDFExporter:
     #: The paper, in points. `None` reads the drawing as points, which is what
     #: "no paper chosen" means.
     page_size: tuple[float, float] | None = None
+    #: Absolute stroke scale for the medium this is drawn on -- see
+    #: `application/line_weight.py`. 1.0 leaves every width exactly as the
+    #: preset states it.
+    line_weight: float = 1.0
 
     def export(self, destination: Path) -> None:
-        renderer = _renderer_for(self.scene)
+        scene = scale_line_weights(self.scene, self.line_weight) if self.scene is not None else None
+        renderer = _renderer_for(scene)
         renderer.render_pdf(
             destination, self.width, self.height, page_size=self.page_size
         )
@@ -95,9 +106,14 @@ class PNGExporter:
     width: int = 2048
     height: int = 2048
     scale: float = 1.0
+    #: Absolute stroke scale for the medium this is drawn on -- see
+    #: `application/line_weight.py`. 1.0 leaves every width exactly as the
+    #: preset states it.
+    line_weight: float = 1.0
 
     def export(self, destination: Path) -> None:
-        renderer = _renderer_for(self.scene)
+        scene = scale_line_weights(self.scene, self.line_weight) if self.scene is not None else None
+        renderer = _renderer_for(scene)
         data = renderer.render_png(self.width, self.height, scale=self.scale)
         if not data:
             raise ValueError("the renderer produced no image")

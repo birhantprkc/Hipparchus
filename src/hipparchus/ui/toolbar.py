@@ -391,6 +391,7 @@ class ToolbarMixin:
             scene=self._current_scene,
             width=export_width,
             height=export_height,
+            line_weight=self._line_weight_var.get(),
         )
 
         self._set_busy("Writing SVG…")
@@ -453,7 +454,11 @@ class ToolbarMixin:
         self._set_busy(f"Writing {label}…")
         try:
             exporter(
-                scene=self._current_scene, width=width, height=height, **extra
+                scene=self._current_scene,
+                width=width,
+                height=height,
+                line_weight=self._line_weight_var.get(),
+                **extra,
             ).export(Path(target))
         except Exception as exc:  # noqa: BLE001
             self._status.set_message(f"{label} export failed: {exc}", error=True)

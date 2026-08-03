@@ -177,6 +177,10 @@ class MainWindow(FramePanelMixin, PagePanelMixin, ToolbarMixin):
         # On by default so what the preview shows is what the export contains.
         # Off gives a transparent SVG for compositing over other artwork.
         self._include_background_var = tk.BooleanVar(value=True)
+        # Absolute, not the preset's relative weights -- see
+        # application/line_weight.py. 1.0 leaves every export exactly as the
+        # preset states it.
+        self._line_weight_var = tk.DoubleVar(value=1.0)
         self._map_models = self.controller.data_source_manager.get_map_models()
         self._map_model_label_to_id = {str(model["label"]): str(model["id"]) for model in self._map_models}
         self._map_model_id_to_label = {str(model["id"]): str(model["label"]) for model in self._map_models}
