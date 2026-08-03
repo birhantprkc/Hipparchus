@@ -22,6 +22,7 @@ from hipparchus.application.style_catalogue import grid_columns
 from hipparchus.application.style_previews import Swatch, ring_geometry, swatch_for
 from hipparchus.rendering.models import RGBAColor, RenderScene
 from hipparchus.ui import theme, tooltip
+from hipparchus.ui.disclosure import Disclosure
 from hipparchus.ui.icons import IconButton
 
 
@@ -324,7 +325,12 @@ class LayersPanel:
         # interface should not ask for. In the heading itself rather than a
         # row of their own below it -- two words are a hint beside a title,
         # not a second toolbar the section has to make room for.
-        heading = section_heading(parent, "Layers in this map")
+        #
+        # A Disclosure rather than a plain section_heading: this is the
+        # longest section on the rail once a fetch has populated it, and
+        # collapsing it is what brings Style and Page back above the fold.
+        self._section = Disclosure(parent, "Layers in this map")
+        heading = self._section.header
         none_button = ttk.Button(heading, text="None", width=5, command=lambda: self.set_all(False))
         none_button.pack(side="right")
         tooltip.attach(none_button, "Hide every layer")
@@ -332,8 +338,7 @@ class LayersPanel:
         all_button.pack(side="right", padx=(0, 4))
         tooltip.attach(all_button, "Show every layer")
 
-        self._body = ttk.Frame(parent)
-        self._body.pack(fill="x")
+        self._body = self._section.body
         self._empty = ttk.Label(
             self._body,
             text="Fetch an area to see what it contains.",
