@@ -244,7 +244,9 @@ def scene() -> RenderScene:
 
 class ExportTests(SharesTheWindow):
     def setUp(self) -> None:
-        from hipparchus.ui import main_window as module
+        # Export moved to ui/toolbar.py (Phase 4); filedialog and reveal are
+        # patched where the export methods actually call them now.
+        from hipparchus.ui import toolbar as module
 
         self.module = module
         self.window._current_scene = scene()
