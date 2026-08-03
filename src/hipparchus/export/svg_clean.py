@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from xml.etree.ElementTree import Element, ElementTree, SubElement
 
+from hipparchus.application.attribution import attributions_for, sources_in, statement_for
 from hipparchus.export.profiles import ExportDiagnostics, SVGExportProfile
 from hipparchus.rendering.geometry_adapter import geometry_to_svg_path_data
 from hipparchus.rendering.models import RGBAColor, RenderScene
@@ -50,6 +51,16 @@ class CleanSVGExporter:
         diagnostics.bounds = bounds
         diagnostics.crs = dict(scene.metadata.get("projection", {})) if isinstance(scene.metadata.get("projection"), dict) else {}
         diagnostics.source_metadata = dict(scene.metadata)
+        diagnostics.attribution = [
+            {
+                "source_id": entry.source_id,
+                "name": entry.name,
+                "statement": entry.statement,
+                "licence": entry.licence,
+                "url": entry.url,
+            }
+            for entry in attributions_for(sources_in(scene.metadata or {}))
+        ]
         diagnostics.clipped_geometries = int(scene.diagnostics.get("clipped_geometries", 0))
         diagnostics.smoothed_geometries = int(scene.diagnostics.get("smoothed_geometries", 0))
         diagnostics.invalid_geometries_fixed = int(scene.diagnostics.get("invalid_geometries", 0))
@@ -80,6 +91,21 @@ class CleanSVGExporter:
                 svg.set("data-hipparchus-crs", str(projection.get("render_crs", "")))
         svg.set("data-hipparchus-paper", profile.composition.paper_preset)
         svg.set("data-hipparchus-orientation", profile.composition.orientation)
+
+        # The About window says the attributions travel with anything published
+        # from here, and for as long as no export carried a credit that sentence
+        # was simply untrue. This names only the sources that drew *this* sheet:
+        # a map of Everest does not owe EMODnet a line, and padding the list with
+        # sources that drew nothing makes the true entries harder to trust.
+        credit = statement_for(sources_in(scene.metadata or {}))
+        if credit:
+            svg.set("data-hipparchus-attribution", credit)
+            # A data attribute satisfies a machine and nobody else. `<metadata>`
+            # is where SVG puts a credit a person or an editor can find, and it
+            # survives a round trip through Illustrator — which matters, because
+            # the point of this exporter is that the file gets worked on
+            # somewhere else.
+            SubElement(svg, "metadata", {"id": "attribution"}).text = credit
 
         # Paint the ground first. Without it a dark preset exports pale strokes
         # onto a transparent canvas, which reads as blank on white paper.

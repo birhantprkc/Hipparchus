@@ -16,6 +16,13 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from hipparchus import __version__
+from hipparchus.application.attribution import (
+    ALIASES,
+    EXEMPT,
+    REGISTRY,
+    attribution_for,
+    legal_text,
+)
 
 #: The key art is the application's own output — Cyprus in Monochrome Figure
 #: Ground, drawn from real elevation and coastline data. The same picture the
@@ -41,17 +48,15 @@ ABOUT = (
     "generated map must never be mistaken for a survey."
 )
 
-#: The obligation. Every source that asks to be named is named here.
-LEGAL = (
-    "Map data © OpenStreetMap contributors, under the Open Database License "
-    "(ODbL). Elevation from Mapzen/AWS Terrain Tiles. Imagery from NASA GIBS. "
-    "Earthquakes from the U.S. Geological Survey. Satellite elements from "
-    "CelesTrak. Geocoding by Nominatim. Coastlines from Natural Earth. "
-    "Rendered with Skia and GEOS."
-    "\n\n"
-    "Maps you make are yours. The attributions above travel with anything you "
-    "publish from them."
-)
+#: The obligation, built from :mod:`hipparchus.application.attribution` rather
+#: than written out here.
+#:
+#: **This was prose, and that is why it was wrong.** EMODnet bathymetry was
+#: blended into the elevation grid and never named — it has no source id, so the
+#: test that every source in the stack has been considered could not see it, and
+#: it is the one source whose licence explicitly asks for a line. A paragraph
+#: somebody has to remember to edit is a licence breach waiting for a busy day.
+LEGAL = legal_text()
 
 CREDIT = "Created by Charis Tsevis, with the help of Claude Code."
 
@@ -60,20 +65,20 @@ LINKS: tuple[tuple[str, str], ...] = (
     ("github.com/tsevis", "https://github.com/tsevis"),
 )
 
-#: Every source of data this application can draw from, and the attribution it
-#: asks for. Checked against the source stack, so adding a source without
-#: naming its provider fails a test rather than shipping.
+#: Every source of data this application can draw from, and the name that must
+#: appear for it. Derived from the registry, so the two cannot drift: a source
+#: added there is credited here, and a source in the stack with neither an entry
+#: nor an exemption fails a test rather than shipping unattributed.
+#:
+#: An empty value means "owes nothing, and that is a decision" — kept as a value
+#: rather than an absence so the distinction between *exempt* and *forgotten*
+#: survives.
 ATTRIBUTED: dict[str, str] = {
-    "overpass": "OpenStreetMap",
-    "local_osm_pbf": "OpenStreetMap",
-    "vector_tiles": "OpenStreetMap",
-    "terrain_tiles": "Terrain Tiles",
-    "gibs_imagery": "NASA GIBS",
-    "usgs_earthquakes": "Geological Survey",
-    "satellite_tracks": "CelesTrak",
-    "natural_earth": "Natural Earth",
-    "overture": "OpenStreetMap",
-    "simulated_terrain": "",
+    **{entry.source_id: entry.name for entry in REGISTRY},
+    **{alias: attributed.name
+       for alias, target in ALIASES.items()
+       if (attributed := attribution_for(target)) is not None},
+    **{source_id: "" for source_id in EXEMPT},
 }
 
 

@@ -58,6 +58,12 @@ class ExportDiagnostics:
     smoothed_geometries: int = 0
     source_metadata: dict[str, object] = field(default_factory=dict)
     composition: dict[str, object] = field(default_factory=dict)
+    #: What this sheet owes, source by source.
+    #:
+    #: The diagnostics accompany *every* export, so a PNG or a PDF — neither of
+    #: which has anywhere to put a credit of its own — still has its attribution
+    #: written beside it.
+    attribution: list[dict[str, str]] = field(default_factory=list)
 
     def as_dict(self) -> dict[str, object]:
         return {
@@ -75,4 +81,5 @@ class ExportDiagnostics:
             "smoothed_geometries": self.smoothed_geometries,
             "source_metadata": dict(self.source_metadata),
             "composition": dict(self.composition),
+            "attribution": [dict(entry) for entry in self.attribution],
         }
