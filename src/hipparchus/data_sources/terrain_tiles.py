@@ -54,6 +54,20 @@ SUMMIT_LAYER = "summits"
 ELEVATION_BANDS_LAYER = "elevation_bands"
 HILLSHADE_LAYER = "terrain_hillshade"
 
+#: EMODnet Bathymetry's own coverage extent (its GetCapabilities), confirmed
+#: live 2026-08-03. A query outside it returns nothing useful, so a frame
+#: entirely outside it should cost no round trip at all.
+EMODNET_COVERAGE_EXTENT: tuple[float, float, float, float] = (-70.5, 11.0, 43.0, 90.0)
+DEFAULT_EMODNET_ENDPOINT = "https://ows.emodnet-bathymetry.eu/wcs"
+DEFAULT_EMODNET_COVERAGE = "emodnet:mean"
+#: How much wider than the frame to request. The feather has to fall outside
+#: the drawing: it ramps from the edge of whatever coverage comes back, and a
+#: frame sitting entirely inside EMODnet's coverage has nothing genuine to
+#: feather against if the request was only ever the frame itself -- a real
+#: area once measured 89% surveyed against a true figure of 100% for exactly
+#: this reason.
+EMODNET_REQUEST_MARGIN = 0.09
+
 TILE_PIXELS = 256
 # The mosaic's own limit; asking beyond it returns nothing useful.
 MAX_SOURCE_ZOOM = 15
@@ -118,6 +132,19 @@ class TerrainTileSettings:
     hillshade_sun_azimuth_degrees: float = 315.0
     hillshade_sun_altitude_degrees: float = 45.0
     hillshade_exaggeration: float = 1.0
+    # A finer sea floor, where EMODnet has one -- blended into the grid the
+    # contours, bands, hillshade and summits all read, so all four improve at
+    # once. On by default: a straight accuracy improvement over the AWS
+    # mosaic's own kilometre-scale ocean grid, not a new look.
+    use_emodnet_bathymetry: bool = True
+    emodnet_endpoint: str = DEFAULT_EMODNET_ENDPOINT
+    emodnet_coverage: str = DEFAULT_EMODNET_COVERAGE
+    emodnet_max_pixels: int = 1200
+    emodnet_timeout_seconds: float = 30.0
+    emodnet_max_attempts: int = 2
+    # How far in from the true edge of what EMODnet returned the blend ramps,
+    # as a fraction of the response's own shorter span.
+    emodnet_feather_fraction: float = 0.06
 
 
 @dataclass(slots=True)
@@ -148,6 +175,12 @@ class TerrainTileProvider:
         grid, window = _crop_to_bounds(mosaic, origin, zoom, bounds)
         if grid.size == 0:
             raise TerrainTileError("Elevation tiles covered no part of the area")
+
+        emodnet_cells = 0
+        sea_floor_surveyed_share = 0.0
+        if self.settings.use_emodnet_bathymetry:
+            grid, emodnet_cells, sea_floor_surveyed_share = self._blend_emodnet(grid, window, zoom, bounds)
+
         grid = _smooth(grid, self.settings.smoothing_passes)
 
         finite = grid[np.isfinite(grid)]
@@ -249,9 +282,53 @@ class TerrainTileProvider:
                 "elevation_max_metres": highest,
                 "contour_interval_metres": interval,
                 "index_every": self.settings.index_every,
+                # How much of the sea floor on this sheet is EMODnet's ~115 m
+                # rather than the mosaic's kilometre-scale ocean grid. A
+                # reader is entitled to know which of the two they are
+                # looking at, and a sheet that does not say cannot be told
+                # apart afterwards.
+                "bathymetry_source": "emodnet+terrarium" if emodnet_cells else "terrarium",
+                "emodnet_cells": emodnet_cells,
+                "sea_floor_surveyed_share": sea_floor_surveyed_share,
             },
             bbox=bounds,
         )
+
+    def _blend_emodnet(
+        self,
+        grid: np.ndarray,
+        window: "_Window",
+        zoom: int,
+        bounds: tuple[float, float, float, float],
+    ) -> tuple[np.ndarray, int, float]:
+        """A finer sea floor, where EMODnet has one.
+
+        Blended into the grid itself rather than emitted as a layer of its
+        own: the contours, the bands, the hillshade and the summits are all
+        downstream of this one array, so every one of them improves without
+        knowing anything happened.
+        """
+        finer = _fetch_emodnet_grid(
+            bounds,
+            grid.shape[0],
+            grid.shape[1],
+            self.settings,
+            self.http_get or _default_http_get_bytes,
+        )
+        if finer is None:
+            return grid, 0, 0.0
+        finer_grid, finer_bounds = finer
+        row_lats = _row_latitudes(window, zoom, grid.shape[0])
+        col_lons = _column_longitudes(window, zoom, grid.shape[1])
+        blended, surveyed, replaced = _blend_sea_floor(
+            grid,
+            row_lats,
+            col_lons,
+            finer_grid,
+            finer_bounds,
+            feather_fraction=self.settings.emodnet_feather_fraction,
+        )
+        return blended, replaced, _surveyed_share_of_sea(blended, surveyed)
 
     def _mosaic(self, bounds: tuple[float, float, float, float], zoom: int) -> tuple[np.ndarray, tuple[int, int]]:
         min_lon, min_lat, max_lon, max_lat = bounds
@@ -371,6 +448,30 @@ def _lonlat_for_pixel(x: float, y: float, zoom: int) -> tuple[float, float]:
     return (lon, lat)
 
 
+def _row_latitudes(window: "_Window", zoom: int, rows: int) -> np.ndarray:
+    """Each row's true latitude, vectorised -- `_lonlat_for_pixel`'s own
+    formula, not linear interpolation across the grid's bounds.
+
+    The grid is Web Mercator pixel space, so only its columns are evenly
+    spaced in longitude; a blend that assumed rows were evenly spaced in
+    latitude too would displace itself further from where it belongs the
+    further north or south the frame sits -- the same distortion this file's
+    own module docstring warns a contour tracer against.
+    """
+    world = (2**zoom) * TILE_PIXELS
+    y = window.top + np.arange(rows, dtype=float) + 0.5
+    return np.degrees(np.arctan(np.sinh(np.pi * (1.0 - 2.0 * y / world))))
+
+
+def _column_longitudes(window: "_Window", zoom: int, columns: int) -> np.ndarray:
+    """Each column's longitude, vectorised. Linear, unlike the rows: Mercator
+    x *is* proportional to longitude, which is the one direction this grid
+    does not need inverting."""
+    world = (2**zoom) * TILE_PIXELS
+    x = window.left + np.arange(columns, dtype=float) + 0.5
+    return x / world * 360.0 - 180.0
+
+
 @dataclass(slots=True, frozen=True)
 class _Window:
     """Where the cropped grid sits in the mosaic's global pixel space."""
@@ -463,6 +564,205 @@ def _box_blur(values: np.ndarray) -> np.ndarray:
     padded = np.pad(values, 1, mode="edge")
     horizontal = (padded[:, :-2] + padded[:, 1:-1] + padded[:, 2:]) / 3.0
     return (horizontal[:-2, :] + horizontal[1:-1, :] + horizontal[2:, :]) / 3.0
+
+
+# -- EMODnet: a finer sea floor, where one exists -----------------------------
+
+
+def _emodnet_covers(bounds: tuple[float, float, float, float]) -> bool:
+    """Whether it is worth asking EMODnet at all.
+
+    A frame entirely outside European waters gets nothing, and this is how it
+    costs nothing rather than a round trip and a parse failure.
+    """
+    min_lon, min_lat, max_lon, max_lat = bounds
+    cov_min_lon, cov_min_lat, cov_max_lon, cov_max_lat = EMODNET_COVERAGE_EXTENT
+    return max_lon > cov_min_lon and min_lon < cov_max_lon and max_lat > cov_min_lat and min_lat < cov_max_lat
+
+
+def _emodnet_widened_bounds(
+    bounds: tuple[float, float, float, float], margin: float
+) -> tuple[float, float, float, float]:
+    """The frame plus the margin the feather needs, clamped to the service's
+    own extent -- asking outside it returns a complaint rather than a
+    coverage."""
+    min_lon, min_lat, max_lon, max_lat = bounds
+    lon_margin = (max_lon - min_lon) * margin
+    lat_margin = (max_lat - min_lat) * margin
+    cov_min_lon, cov_min_lat, cov_max_lon, cov_max_lat = EMODNET_COVERAGE_EXTENT
+    return (
+        max(cov_min_lon, min_lon - lon_margin),
+        max(cov_min_lat, min_lat - lat_margin),
+        min(cov_max_lon, max_lon + lon_margin),
+        min(cov_max_lat, max_lat + lat_margin),
+    )
+
+
+def _emodnet_url(
+    bounds: tuple[float, float, float, float], width: int, height: int, settings: TerrainTileSettings
+) -> str:
+    min_lon, min_lat, max_lon, max_lat = bounds
+    return (
+        f"{settings.emodnet_endpoint}?service=WCS&version=1.0.0&request=GetCoverage"
+        f"&coverage={settings.emodnet_coverage}&crs=EPSG:4326"
+        # WCS 1.0.0 states a bbox as minx,miny,maxx,maxy -- longitude first,
+        # the opposite of the Overpass convention elsewhere in this codebase.
+        f"&bbox={min_lon},{min_lat},{max_lon},{max_lat}"
+        f"&width={width}&height={height}&format=GeoTIFF"
+    )
+
+
+def _fetch_emodnet_grid(
+    bounds: tuple[float, float, float, float],
+    rows: int,
+    columns: int,
+    settings: TerrainTileSettings,
+    http_get: HttpGetBytes,
+) -> tuple[np.ndarray, tuple[float, float, float, float]] | None:
+    """The EMODnet coverage over an area, at roughly the given grid size.
+
+    Returns ``None`` rather than raising when the service declines, cannot be
+    reached, or answers with something unreadable: this is an *improvement*
+    to a map that already works, and a sheet is better drawn from the global
+    mosaic than not drawn at all.
+    """
+    if not _emodnet_covers(bounds):
+        return None
+    wide_bounds = _emodnet_widened_bounds(bounds, EMODNET_REQUEST_MARGIN)
+    width = max(2, min(columns, settings.emodnet_max_pixels))
+    height = max(2, min(rows, settings.emodnet_max_pixels))
+    url = _emodnet_url(wide_bounds, width, height, settings)
+
+    attempts = max(1, int(settings.emodnet_max_attempts))
+    for attempt in range(attempts):
+        try:
+            data = http_get(url, settings.emodnet_timeout_seconds)
+        except Exception:  # noqa: BLE001 - an unreachable service is a hole, not a failure
+            if attempt + 1 < attempts:
+                continue
+            return None
+        # A WCS reports a bad request as an XML document with a 200, so the
+        # first two bytes decide whether this is a coverage or a complaint.
+        if len(data) < 8 or data[:2] not in (b"II", b"MM"):
+            return None
+        try:
+            return _read_emodnet_tiff(data)
+        except Exception:  # noqa: BLE001 - an unreadable response is a hole, not a failure
+            return None
+    return None
+
+
+def _read_emodnet_tiff(data: bytes) -> tuple[np.ndarray, tuple[float, float, float, float]] | None:
+    """Read a GeoTIFF depth grid, using rasterio rather than a hand-written
+    parser -- unlike the Swift sibling this was ported from, this codebase
+    already declares the dependency that reads arbitrary GeoTIFF for free."""
+    try:
+        from rasterio.io import MemoryFile
+    except ImportError:
+        return None
+    with MemoryFile(data) as memfile, memfile.open() as dataset:
+        values = dataset.read(1).astype(float)
+        nodata = dataset.nodata
+        if nodata is not None:
+            values = np.where(np.isclose(values, nodata, atol=1e-6), np.nan, values)
+        # Beyond the deepest trench and the highest summit by a wide margin.
+        # Services differ about their sentinel and some state none at all.
+        values = np.where((values > -12_000.0) & (values < 9_500.0), values, np.nan)
+        left, bottom, right, top = dataset.bounds
+    return values, (left, bottom, right, top)
+
+
+def _blend_sea_floor(
+    base: np.ndarray,
+    row_lats: np.ndarray,
+    col_lons: np.ndarray,
+    finer: np.ndarray,
+    finer_bounds: tuple[float, float, float, float],
+    *,
+    feather_fraction: float,
+) -> tuple[np.ndarray, np.ndarray, int]:
+    """Put a finer sea floor under a coarser one, without a seam.
+
+    The two grids are the same ground at different resolutions and rarely the
+    same size, so the finer one is sampled at each of the coarser one's cells
+    rather than either being resampled wholesale.
+
+    Three rules, and each is there because of a way this goes wrong:
+
+    - **Sea only.** EMODnet carries land too, and coarser land than SRTM's --
+      the guard is on the *base* grid's own sign, not the finer one's, or a
+      coastline where the two disagree would drag the sea up the beach.
+    - **Only where it has something to say.** A hole in the finer coverage
+      keeps whatever was in the base grid, rather than punching a hole in it.
+    - **Feathered at the edge of coverage.** A hard switch between two grids
+      that disagree by a few metres draws a straight line across open water,
+      and a straight line on a bathymetric sheet reads as a fault or a survey
+      track -- which is to say, as data. The blend ramps over a margin.
+    """
+    if base.size == 0 or finer.size == 0:
+        return base, np.zeros_like(base, dtype=float), 0
+
+    f_min_lon, f_min_lat, f_max_lon, f_max_lat = finer_bounds
+    lon_span = f_max_lon - f_min_lon
+    lat_span = f_max_lat - f_min_lat
+    if lon_span <= 0.0 or lat_span <= 0.0:
+        return base, np.zeros_like(base, dtype=float), 0
+
+    finer_rows, finer_cols = finer.shape
+    lat_grid, lon_grid = np.meshgrid(row_lats, col_lons, indexing="ij")
+
+    inside_bounds = (
+        (lon_grid >= f_min_lon) & (lon_grid <= f_max_lon) & (lat_grid >= f_min_lat) & (lat_grid <= f_max_lat)
+    )
+    # Fractional position in the finer grid's own regular lat/lon index space
+    # -- row 0 is north, matching this file's convention throughout.
+    sample_x = (lon_grid - f_min_lon) / lon_span * finer_cols
+    sample_y = (f_max_lat - lat_grid) / lat_span * finer_rows
+    sample_col = np.clip(sample_x.astype(int), 0, finer_cols - 1)
+    sample_row = np.clip(sample_y.astype(int), 0, finer_rows - 1)
+    depth = np.where(inside_bounds, finer[sample_row, sample_col], np.nan)
+
+    has_depth = np.isfinite(depth) & (depth < 0.0)
+    is_hole = ~np.isfinite(base)
+    is_sea = np.isfinite(base) & (base < 0.0)
+
+    feather = max(1e-9, min(lon_span, lat_span) * max(0.0, feather_fraction))
+    inside_distance = np.minimum(
+        np.minimum(lon_grid - f_min_lon, f_max_lon - lon_grid),
+        np.minimum(lat_grid - f_min_lat, f_max_lat - lat_grid),
+    )
+    weight = np.clip(inside_distance / feather, 0.0, 1.0)
+
+    values = base.copy()
+    surveyed = np.zeros_like(base, dtype=float)
+
+    # Nothing to disagree with: a hole in the mosaic is filled outright,
+    # because something is better than nothing.
+    fill_mask = has_depth & is_hole
+    values = np.where(fill_mask, depth, values)
+    surveyed = np.where(fill_mask, 1.0, surveyed)
+
+    blend_mask = has_depth & is_sea & (weight > 0.0)
+    values = np.where(blend_mask, base + (depth - base) * weight, values)
+    surveyed = np.where(blend_mask, weight, surveyed)
+
+    replaced = int(np.count_nonzero(fill_mask | blend_mask))
+    return values, surveyed, replaced
+
+
+def _surveyed_share_of_sea(grid: np.ndarray, surveyed: np.ndarray) -> float:
+    """What share of a frame's *sea floor* anybody surveyed.
+
+    Sea only, and that is the point: averaging the mask over the whole grid
+    would dilute the answer with land, which is not what the number is about
+    and would read lower the more coast a sheet contains.
+    """
+    if grid.shape != surveyed.shape or grid.size == 0:
+        return 0.0
+    sea = np.isfinite(grid) & (grid < 0.0)
+    if not np.any(sea):
+        return 0.0
+    return float(np.mean(surveyed[sea]))
 
 
 def _band_features(
