@@ -492,6 +492,9 @@ class MainWindow(FramePanelMixin, PagePanelMixin, ToolbarMixin):
         described = session_edit.describe(self._history.current.session, after)
         if described is None:
             return
+        announcement = session_edit.announcement_for(described, after)
+        if announcement is not None:
+            self._status.set_message(announcement)
         self._history.record(
             after, described.action, coalescing_key=described.coalescing_key
         )

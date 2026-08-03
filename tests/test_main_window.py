@@ -374,6 +374,35 @@ class ExportTests(SharesTheWindow):
         self.assertIn("failed", self.window._status.message)
 
 
+class StyleAndPaletteAnnouncementTests(SharesTheWindow):
+    """The rule is `session_edit.announcement_for`, tested headlessly there.
+    This only checks the one thing that needs a real window: that choosing a
+    style or a palette actually reaches the status bar."""
+
+    def setUp(self) -> None:
+        self._saved_preset = self.window._preset_var.get()
+        self._saved_palette = self.window._palette_var.get()
+        self.addCleanup(self._restore)
+
+    def _restore(self) -> None:
+        self.window._preset_var.set(self._saved_preset)
+        self.window._palette_var.set(self._saved_palette)
+
+    def test_choosing_a_style_says_so_on_the_bar(self) -> None:
+        self.window._preset_var.set("Contour Study")
+        self.assertEqual(
+            self.window._status.message,
+            "Style: Contour Study — Render map to draw it.",
+        )
+
+    def test_choosing_a_palette_says_so_on_the_bar(self) -> None:
+        self.window._palette_var.set("Admiralty")
+        self.assertEqual(
+            self.window._status.message,
+            "Palette: Admiralty — Render map to draw it.",
+        )
+
+
 
 
 if __name__ == "__main__":

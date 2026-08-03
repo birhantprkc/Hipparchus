@@ -11,7 +11,7 @@ from __future__ import annotations
 import unittest
 
 from hipparchus.application.session import Area, Session
-from hipparchus.application.session_edit import describe
+from hipparchus.application.session_edit import announcement_for, describe
 
 
 class NoChangeTests(unittest.TestCase):
@@ -175,3 +175,49 @@ class PaletteEditTests(unittest.TestCase):
         described = describe(before, after)
         assert described is not None
         self.assertEqual(described.action, "Change Preset")
+
+
+class AnnouncementTests(unittest.TestCase):
+    """Choosing a style or a palette says something, since neither moves the
+    map on its own — both wait for the next Render map by design."""
+
+    def test_a_new_style_names_itself_and_says_to_render(self) -> None:
+        before = Session()
+        after = before.with_changes(preset_name="Coastal Survey")
+        described = describe(before, after)
+        assert described is not None
+        self.assertEqual(
+            announcement_for(described, after),
+            "Style: Coastal Survey — Render map to draw it.",
+        )
+
+    def test_a_new_palette_names_itself_and_says_to_render(self) -> None:
+        before = Session()
+        after = before.with_changes(palette_name="Admiralty")
+        described = describe(before, after)
+        assert described is not None
+        self.assertEqual(
+            announcement_for(described, after),
+            "Palette: Admiralty — Render map to draw it.",
+        )
+
+    def test_adopting_a_style_and_its_colours_together_announces_the_style(self) -> None:
+        """One gesture, one action, one line — the same specificity rule
+        `describe` itself uses."""
+        before = Session()
+        after = before.with_changes(preset_name="Night", palette_name="Slate")
+        described = describe(before, after)
+        assert described is not None
+        self.assertEqual(
+            announcement_for(described, after),
+            "Style: Night — Render map to draw it.",
+        )
+
+    def test_everything_else_has_nothing_to_say_here(self) -> None:
+        """A source ticked or a layer hidden already shows on screen; saying
+        so again would be noise, not news."""
+        before = Session()
+        after = before.with_changes(enabled_sources=("overpass",))
+        described = describe(before, after)
+        assert described is not None
+        self.assertIsNone(announcement_for(described, after))

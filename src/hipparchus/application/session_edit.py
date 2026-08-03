@@ -68,6 +68,23 @@ def describe(
     return Description("Change Settings")
 
 
+def announcement_for(described: Description, after: Session) -> str | None:
+    """What to say about a change that would otherwise be a silent click.
+
+    Choosing a style or a palette moves nothing on screen until the next
+    Render map, by design — the swatch highlights, but the map does not
+    change and the bar does not speak, so the click reads as a no-op rather
+    than a choice waiting to be drawn. Everything else `describe` names is
+    either already visible (a source ticked, a layer hidden) or already
+    reported elsewhere, so only these two get a line here.
+    """
+    if described.action == "Change Preset":
+        return f"Style: {after.preset_name} — Render map to draw it."
+    if described.action == "Change Palette":
+        return f"Palette: {after.palette_name} — Render map to draw it."
+    return None
+
+
 # -- the pieces ---------------------------------------------------------------
 
 
