@@ -35,16 +35,6 @@ from hipparchus.ui.icons import IconButton
 SWATCH_W, SWATCH_H = 62, 46
 
 
-def section_heading(parent: tk.Widget, text: str, hint: str = "") -> ttk.Frame:
-    """A small-caps heading with an optional right-aligned hint."""
-    row = ttk.Frame(parent)
-    row.pack(fill="x", pady=(12, 6))
-    ttk.Label(row, text=text.upper(), font=theme.font("section")).pack(side="left")
-    if hint:
-        ttk.Label(row, text=hint, font=theme.font("caption")).pack(side="right")
-    return row
-
-
 class SourcesPanel:
     """The stack of sources, each with its provenance and its own settings."""
 

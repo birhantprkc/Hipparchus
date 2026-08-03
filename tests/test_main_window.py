@@ -457,6 +457,55 @@ class ToolbarOwesTests(SharesTheWindow):
                 menu.invoke(index)
 
 
+class ResizableRailTests(SharesTheWindow):
+    """Phase 7: the rail is resizable now, not just collapsible. Collapsing
+    (ui/disclosure.py, tested in test_disclosure.py and test_panels.py) is
+    what solves "the rail is too long"; a draggable sash is what solves "the
+    rail is too narrow"."""
+
+    def setUp(self) -> None:
+        from hipparchus.ui.main_window import LEFT_SIDEBAR_WIDTH, RIGHT_SIDEBAR_WIDTH
+
+        self.left_width = LEFT_SIDEBAR_WIDTH
+        self.right_width = RIGHT_SIDEBAR_WIDTH
+        self._saved_sashes = [self.window._panes.sashpos(i) for i in range(2)]
+        self.addCleanup(self._restore)
+
+    def _restore(self) -> None:
+        for index, position in enumerate(self._saved_sashes):
+            self.window._panes.sashpos(index, position)
+        self.root.update()
+
+    def test_the_window_has_three_panes(self) -> None:
+        self.assertEqual(len(self.window._panes.panes()), 3)
+
+    def test_the_initial_sashes_match_the_old_fixed_widths(self) -> None:
+        """The one visible change on first launch should be that a sash can
+        be dragged -- not that anything moved."""
+        left_sash = self.window._panes.sashpos(0)
+        self.assertAlmostEqual(left_sash, self.left_width, delta=2)
+
+    def test_a_sash_can_be_dragged_and_the_pane_actually_resizes(self) -> None:
+        wider = self.left_width + 80
+        self.window._panes.sashpos(0, wider)
+        self.root.update()
+        self.assertAlmostEqual(self.window._panes.sashpos(0), wider, delta=2)
+
+        left_outer = self.window._panes.panes()[0]
+        left_pane = self.root.nametowidget(left_outer)
+        self.assertAlmostEqual(left_pane.winfo_width(), wider, delta=4)
+
+    def test_the_scrollable_content_still_fills_a_resized_pane(self) -> None:
+        """The canvas inside the pane must track the pane's real width, not
+        the width it was constructed with, once a sash moves it. (Narrower
+        than the pane itself by the scrollbar's own width, which is why this
+        compares growth rather than an exact figure.)"""
+        before = self.window._left_sidebar_canvas.winfo_width()
+        wider = self.left_width + 80
+        self.window._panes.sashpos(0, wider)
+        self.root.update()
+        after = self.window._left_sidebar_canvas.winfo_width()
+        self.assertAlmostEqual(after - before, 80, delta=6)
 
 
 if __name__ == "__main__":

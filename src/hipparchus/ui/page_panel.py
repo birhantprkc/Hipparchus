@@ -25,7 +25,7 @@ from hipparchus.application.line_weight import MAX_LINE_WEIGHT, MIN_LINE_WEIGHT
 from hipparchus.application.page_size import PageSpec, PaperSize, Resolution
 from hipparchus.export.profiles import MapComposition
 from hipparchus.ui import theme, tooltip
-from hipparchus.ui.panels import section_heading
+from hipparchus.ui.disclosure import Disclosure
 
 
 class PagePanelMixin:
@@ -44,9 +44,9 @@ class PagePanelMixin:
         than remembered as map state — the map is the product, and nothing here
         changes it, which is why none of it lands in the session or in undo.
         """
-        section_heading(parent, "Page", "paper, and what rides on it")
+        body = Disclosure(parent, "Page", hint="paper, and what rides on it").body
 
-        row = ttk.Frame(parent)
+        row = ttk.Frame(body)
         row.pack(fill="x", pady=2)
         ttk.Label(row, text="Paper", width=11, font=theme.font("caption")).pack(side="left")
         ttk.OptionMenu(
@@ -54,7 +54,7 @@ class PagePanelMixin:
             *PaperSize.names(), command=lambda _: self._refresh_page_cost(),
         ).pack(side="left", fill="x", expand=True)
 
-        row = ttk.Frame(parent)
+        row = ttk.Frame(body)
         row.pack(fill="x", pady=2)
         ttk.Label(row, text="Orientation", width=11, font=theme.font("caption")).pack(side="left")
         ttk.OptionMenu(
@@ -62,7 +62,7 @@ class PagePanelMixin:
             *PageSpec.ORIENTATIONS, command=lambda _: self._refresh_page_cost(),
         ).pack(side="left", fill="x", expand=True)
 
-        row = ttk.Frame(parent)
+        row = ttk.Frame(body)
         row.pack(fill="x", pady=2)
         ttk.Label(row, text="Resolution", width=11, font=theme.font("caption")).pack(side="left")
         ttk.OptionMenu(
@@ -74,7 +74,7 @@ class PagePanelMixin:
         # Absolute, not the preset's relative weights: a highway still reads
         # heavier than a footpath at either end, but a poster wants both
         # heavier than a screen preview does.
-        row = ttk.Frame(parent)
+        row = ttk.Frame(body)
         row.pack(fill="x", pady=2)
         ttk.Label(row, text="Line weight", width=11, font=theme.font("caption")).pack(side="left")
         ttk.Scale(
@@ -96,19 +96,19 @@ class PagePanelMixin:
         # What it costs, before it is spent. A PDF ignores this line entirely —
         # it carries physical size and no pixels — which is why it says so.
         ttk.Label(
-            parent, textvariable=self._page_cost_var, font=theme.font("caption"),
+            body, textvariable=self._page_cost_var, font=theme.font("caption"),
             foreground=theme.current().muted, wraplength=260, justify="left",
         ).pack(anchor="w", pady=(1, 4))
         self._refresh_page_cost()
 
         ttk.Checkbutton(
-            parent, text="Title block", variable=self._include_title_var,
+            body, text="Title block", variable=self._include_title_var,
             command=self._refresh_title_fields,
         ).pack(anchor="w", pady=1)
 
         # The title fields appear with the title block, because two empty boxes
         # for a block that is switched off are two questions nobody asked.
-        self._title_fields = ttk.Frame(parent)
+        self._title_fields = ttk.Frame(body)
         for label, var in (("Title", self._map_title_var), ("Subtitle", self._map_subtitle_var)):
             row = ttk.Frame(self._title_fields)
             row.pack(fill="x", pady=1)
@@ -125,7 +125,7 @@ class PagePanelMixin:
             ("Background", self._include_background_var,
              "Off exports a transparent SVG for compositing. Dark presets need it on."),
         ):
-            check = ttk.Checkbutton(parent, text=text, variable=var)
+            check = ttk.Checkbutton(body, text=text, variable=var)
             check.pack(anchor="w", pady=1)
             if why:
                 tooltip.attach(check, why)

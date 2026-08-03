@@ -26,6 +26,7 @@ from hipparchus.core.fetch_progress import CancellationToken, FetchReporter
 from hipparchus.application.source_stack import SourceStack
 from hipparchus.ui import actions, icons, menubar, theme, tooltip
 from hipparchus.ui.about_window import AboutWindow
+from hipparchus.ui.disclosure import Disclosure
 from hipparchus.ui.frame_panel import FramePanelMixin
 from hipparchus.ui.icons import IconButton
 from hipparchus.ui.settings_window import SettingsWindow
@@ -33,7 +34,7 @@ from hipparchus.ui.map_canvas import MapCanvas
 from hipparchus.ui.page_panel import PagePanelMixin
 from hipparchus.ui.status_bar import StatusBar
 from hipparchus.ui.toolbar import ToolbarMixin
-from hipparchus.ui.panels import LayersPanel, SourcesPanel, StylePicker, section_heading
+from hipparchus.ui.panels import LayersPanel, SourcesPanel, StylePicker
 from hipparchus.application.presets import (
     ArtisticPreset,
     GeometryPipelineProfile,
@@ -379,12 +380,11 @@ class MainWindow(FramePanelMixin, PagePanelMixin, ToolbarMixin):
         root = self._root
         root.grid_rowconfigure(0, weight=0)  # Top bar - fixed height
         root.grid_rowconfigure(1, weight=1)  # Main content - expands
-        root.grid_columnconfigure(0, weight=0, minsize=LEFT_SIDEBAR_WIDTH)  # Left sidebar - fixed width
-        root.grid_columnconfigure(1, weight=1)  # Center canvas - expands
-        root.grid_columnconfigure(2, weight=0, minsize=RIGHT_SIDEBAR_WIDTH)  # Right sidebar - fixed width
+        root.grid_rowconfigure(2, weight=0)  # Status bar - fixed height
+        root.grid_columnconfigure(0, weight=1)
 
         top = ttk.Frame(root, padding=(14, 10, 14, 10))
-        top.grid(row=0, column=0, columnspan=3, sticky="ew")
+        top.grid(row=0, column=0, sticky="ew")
         top.grid_columnconfigure(0, weight=1)
         top.grid_columnconfigure(1, weight=0)
 
@@ -393,16 +393,26 @@ class MainWindow(FramePanelMixin, PagePanelMixin, ToolbarMixin):
 
         self._build_toolbar_controls(top)
 
-        left_outer, self._left_sidebar_canvas, left = self._create_scrollable_frame(root, LEFT_SIDEBAR_WIDTH)
-        left_outer.grid(row=1, column=0, sticky="ns")
+        # Resizable, not the fixed-width columns this used to be: a sash
+        # between each pane rather than a width set once at launch and never
+        # touched again. Collapsible sections (ui/disclosure.py) solve "the
+        # rail is too long"; this solves "the rail is too narrow" — the style
+        # picker sat below the fold at the 1100-wide default because there
+        # was no way to ask for more room, only to scroll past what a
+        # populated Layers panel put in the way.
+        self._panes = ttk.PanedWindow(root, orient="horizontal")
+        self._panes.grid(row=1, column=0, sticky="nsew")
 
-        center = ttk.Frame(root, padding=12)
-        center.grid(row=1, column=1, sticky="nsew")
+        left_outer, self._left_sidebar_canvas, left = self._create_scrollable_frame(self._panes, LEFT_SIDEBAR_WIDTH)
+        self._panes.add(left_outer, weight=0)
+
+        center = ttk.Frame(self._panes, padding=12)
         center.grid_rowconfigure(1, weight=1)
         center.grid_columnconfigure(0, weight=1)
+        self._panes.add(center, weight=1)
 
-        right_outer, self._right_sidebar_canvas, right = self._create_scrollable_frame(root, RIGHT_SIDEBAR_WIDTH)
-        right_outer.grid(row=1, column=2, sticky="ns")
+        right_outer, self._right_sidebar_canvas, right = self._create_scrollable_frame(self._panes, RIGHT_SIDEBAR_WIDTH)
+        self._panes.add(right_outer, weight=0)
 
         # One row per source rather than one line for the lot: a fetch can take
         # five minutes while a single line says "Idle", and a failure that looks
@@ -410,11 +420,18 @@ class MainWindow(FramePanelMixin, PagePanelMixin, ToolbarMixin):
         self._status = StatusBar(
             root, on_cancel=self._on_cancel_fetch, mark_path=self.config.makers_mark
         )
-        self._status.grid(row=2, column=0, columnspan=3, sticky="ew")
+        self._status.grid(row=2, column=0, sticky="ew")
 
         self._build_left_sidebar(left)
         self._build_center_canvas(center)
         self._build_right_sidebar(right)
+
+        # Sash positions matching the widths this used to be fixed at, set
+        # once every pane holds real content so the panes have something to
+        # measure the split against.
+        root.update_idletasks()
+        self._panes.sashpos(0, LEFT_SIDEBAR_WIDTH)
+        self._panes.sashpos(1, max(LEFT_SIDEBAR_WIDTH + 200, root.winfo_width() - RIGHT_SIDEBAR_WIDTH))
 
     # -- the session, and undo ------------------------------------------------
 
@@ -684,9 +701,9 @@ class MainWindow(FramePanelMixin, PagePanelMixin, ToolbarMixin):
         )
 
     def _build_right_sidebar(self, parent: ttk.Frame) -> None:
-        section_heading(parent, "Sources", "they stack")
+        sources_section = Disclosure(parent, "Sources", hint="they stack")
         self._sources_panel = SourcesPanel(
-            parent,
+            sources_section.body,
             self.source_stack,
             on_toggle=self._on_source_toggled,
             on_setting=self._on_source_setting_changed,
@@ -698,23 +715,24 @@ class MainWindow(FramePanelMixin, PagePanelMixin, ToolbarMixin):
         # The layer panel owns visibility now, so the renderer reads its vars.
         self._layer_visibility_vars = self._layers_panel.visibility_vars()
 
-        section_heading(parent, "Style", "see it, don't read it")
+        style_section = Disclosure(parent, "Style", hint="see it, don't read it")
+        style_body = style_section.body
         # All sixteen. With nothing to scroll there is no reason to decide for
         # someone which looks they are allowed to see.
         self._style_picker = StylePicker(
-            parent, tuple(preset_names()), on_select=self._on_style_selected
+            style_body, tuple(preset_names()), on_select=self._on_style_selected
         )
         self._style_picker.set_selected(self._preset_var.get())
 
         # Still here, because a name is the faster way in when you already know
         # which one you want — and because a saved style has no swatch.
-        row = ttk.Frame(parent)
+        row = ttk.Frame(style_body)
         row.pack(fill="x", pady=(6, 0))
         ttk.Label(row, text="All styles", font=theme.font("caption")).pack(side="left")
         self._preset_menu = ttk.OptionMenu(row, self._preset_var, self._preset_var.get(), *self._preset_options)
         self._preset_menu.pack(side="left", fill="x", expand=True, padx=(6, 0))
 
-        row = ttk.Frame(parent)
+        row = ttk.Frame(style_body)
         row.pack(fill="x", pady=(4, 0))
         ttk.Label(row, text="Palette", font=theme.font("caption")).pack(side="left")
         self._palette_menu = ttk.OptionMenu(
@@ -734,7 +752,7 @@ class MainWindow(FramePanelMixin, PagePanelMixin, ToolbarMixin):
         # Quality belongs with Style, not in the toolbar: a preset says what the
         # map should look like, quality says how much work to spend getting
         # there, and the second question only arises once the first is answered.
-        row = ttk.Frame(parent)
+        row = ttk.Frame(style_body)
         row.pack(fill="x", pady=(4, 0))
         ttk.Label(row, text="Quality", font=theme.font("caption")).pack(side="left")
         quality_labels = quality_menu_labels()
@@ -746,7 +764,7 @@ class MainWindow(FramePanelMixin, PagePanelMixin, ToolbarMixin):
             "work to spend getting there.",
         )
 
-        self._build_saved_styles(parent)
+        self._build_saved_styles(style_body)
 
         ttk.Separator(parent, orient="horizontal").pack(fill="x", pady=12)
         self._build_page_panel(parent)
@@ -969,13 +987,12 @@ class MainWindow(FramePanelMixin, PagePanelMixin, ToolbarMixin):
         """Put away, behind a disclosure.
 
         Genuinely useful and genuinely not part of making a map, so it stops
-        occupying the rail between the styles and the export.
+        occupying the rail between the styles and the export. Starts
+        collapsed, unlike the sections above it -- this is the one part of
+        the rail that is not about the map at all.
         """
-        self._diagnostics_shown = tk.BooleanVar(value=False)
-        ttk.Button(parent, text="Diagnostics", command=self._toggle_diagnostics).pack(
-            fill="x", pady=(10, 0)
-        )
-        self._diagnostics = ttk.Frame(parent)
+        section = Disclosure(parent, "Diagnostics", start_expanded=False)
+        self._diagnostics = section.body
         ttk.Checkbutton(
             self._diagnostics, text="Enable diagnostics logging",
             variable=self._debug_enabled_var,
@@ -996,13 +1013,6 @@ class MainWindow(FramePanelMixin, PagePanelMixin, ToolbarMixin):
             self._diagnostics, textvariable=self._perf_summary_var, justify="left",
             wraplength=250, font=theme.font("caption2"),
         ).pack(anchor="w", pady=(4, 0))
-
-    def _toggle_diagnostics(self) -> None:
-        if self._diagnostics_shown.get():
-            self._diagnostics.pack_forget()
-        else:
-            self._diagnostics.pack(fill="x")
-        self._diagnostics_shown.set(not self._diagnostics_shown.get())
 
     def _open_about(self) -> None:
         """What this is, and what it owes. Reachable whenever it is wanted."""
