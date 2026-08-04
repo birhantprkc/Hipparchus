@@ -29,6 +29,7 @@ convert to geographic coordinates afterwards.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from enum import Enum
 import math
 
 import numpy as np
@@ -126,6 +127,82 @@ def band_boundaries(minimum: float, maximum: float, count: int) -> list[float]:
         return []
     step = (maximum - minimum) / count
     return [minimum + step * index for index in range(count + 1)]
+
+
+class DepthBandMode(str, Enum):
+    """How the sea floor is divided."""
+
+    #: Evenly, across whatever depth the frame holds. Right for looking at the
+    #: shape of a basin, where the question is "how does this ground vary".
+    EVEN = "even"
+    #: At the depths a chart states. Right for reading, where the question is
+    #: "how much water is there", and the answer wants to be a round number.
+    CHART = "chart"
+
+    @property
+    def label(self) -> str:
+        return "Even" if self is DepthBandMode.EVEN else "Chart depths"
+
+
+#: The depths a chart prints, shallowest first, in metres below the surface.
+#:
+#: Not an even division of anything. These are the numbers a mariner already has
+#: in their head, and the shallow end is where they matter — the difference
+#: between five metres and ten is a decision, the difference between two thousand
+#: and three is a colour.
+STATED_DEPTHS: tuple[float, ...] = (2, 5, 10, 20, 30, 50, 100, 200, 500, 1000, 2000, 5000, 10000)
+
+
+def land_band_boundaries(minimum: float, maximum: float, count: int) -> list[float]:
+    """Boundaries for the land half of a field, from the waterline up.
+
+    ``elevation_bands`` has always spanned the whole measured range, so a coastal
+    sheet banded its sea floor in the land's own ramp — a trench drawn as a kind
+    of valley. Splitting at zero is the same division the bathymetry layer
+    already makes for contours, one level up.
+
+    Returns nothing when the frame is all water: there is no land to band, and an
+    empty list says so more clearly than one band spanning nothing.
+    """
+    if not math.isfinite(maximum) or maximum <= 0:
+        return []
+    return band_boundaries(max(0.0, minimum), maximum, count)
+
+
+def depth_band_boundaries(
+    minimum: float,
+    maximum: float,
+    count: int,
+    mode: DepthBandMode = DepthBandMode.EVEN,
+) -> list[float]:
+    """Boundaries for the sea half of a field, from the deepest water up to the
+    waterline.
+
+    Returns nothing when the frame is all land.
+    """
+    if not math.isfinite(minimum) or minimum >= 0:
+        return []
+    floor = minimum
+    surface = min(0.0, maximum)
+    if surface <= floor:
+        return []
+
+    if mode is DepthBandMode.EVEN:
+        return band_boundaries(floor, surface, count)
+
+    # Every stated depth the frame actually reaches, deep to shallow, and the
+    # waterline itself. Deliberately *not* extended down to the deepest sounding:
+    # a harbour sheet should not carry a 200 m band it has no ground for, and a
+    # boundary at a depth nobody states is the thing this mode exists to avoid.
+    chosen = sorted(-depth for depth in STATED_DEPTHS if -depth > floor)
+    chosen.append(surface)
+    if len(chosen) < 2:
+        return []
+    # If the ladder offers more bands than were asked for, the deep end goes
+    # first — the shallow end is the half a reader is making decisions with.
+    if len(chosen) > count + 1:
+        chosen = chosen[-(count + 1):]
+    return chosen
 
 
 def map_coordinates(geometry: BaseGeometry, mapper) -> BaseGeometry:

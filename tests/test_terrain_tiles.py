@@ -728,12 +728,12 @@ class EmodnetIntegrationTests(unittest.TestCase):
         bathymetry = result.features_by_layer["bathymetry"]
         self.assertTrue(bathymetry)
         self.assertTrue(all(feature["properties"]["measured"] for feature in bathymetry))
-        sea_bands = [
-            band
-            for band in result.features_by_layer["elevation_bands"]
-            if band["properties"]["elevation_high"] <= 0.0
-        ]
+        # Sub-sea bands are their own layer now rather than the deep end of the
+        # land's ramp, so this reads `depth_bands`. The claim is unchanged: a
+        # band standing on surveyed ground says so.
+        sea_bands = result.features_by_layer["depth_bands"]
         self.assertTrue(sea_bands)
+        self.assertTrue(all(band["properties"]["elevation_high"] <= 0.0 for band in sea_bands))
         self.assertTrue(all(band["properties"]["measured"] for band in sea_bands))
 
     def test_bathymetry_features_default_to_measured_with_emodnet_off(self) -> None:

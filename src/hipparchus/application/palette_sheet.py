@@ -37,6 +37,10 @@ def _style(
     stroke_color: RGBAColor | None = None,
     fill: RGBAColor | None = None,
     fill_alpha: int = 255,
+    #: The far end of a two-stop ramp, for layers whose fill varies by
+    #: ``band_index`` rather than being one colour. Only the band layers use it,
+    #: and a palette has to state it for ``depth_bands``, which no preset knows.
+    fill_high: RGBAColor | None = None,
     opacity: float = 1.0,
     cap: str = "round",
     casing: float = 0.0,
@@ -58,6 +62,8 @@ def _style(
     )
     if fill is not None:
         style.fill_color = RGBAColor(fill.r, fill.g, fill.b, fill_alpha)
+    if fill_high is not None:
+        style.fill_color_high = RGBAColor(fill_high.r, fill_high.g, fill_high.b, fill_alpha)
     if casing_color is not None:
         style.casing_color = casing_color
     if halo is not None:
@@ -196,6 +202,21 @@ def style_profile(palette: Palette) -> StyleProfile:
     )
     styles["power"] = _style(stroke=0.4, stroke_color=mix(ground, ink, 0.30), opacity=0.6)
     styles["elevation_bands"] = _style(fill=mix(ground, contour, 0.18), opacity=0.6)
+    # The sea floor's own ramp, in the palette's water rather than the land's
+    # ground.
+    #
+    # **Deep is darker, and which mix *is* darker depends on the palette.** On a
+    # dark sheet the ink is pale and the paper is near-black, so naming the ends
+    # "toward ink" and "toward ground" inverts the ramp and draws the deep water
+    # bright — every colour still defensible, the sea floor read inside out. So
+    # the two mixes are computed and then sorted by luminance rather than
+    # assigned by name. A test across all seventeen palettes caught this; on a
+    # light palette the two orderings agree, which is why it survived being
+    # looked at.
+    toward_ink = mix(water, ink, 0.5)
+    toward_ground = mix(water, ground, 0.55)
+    deep, shallow = sorted((toward_ink, toward_ground), key=_luma)
+    styles["depth_bands"] = _style(fill=deep, fill_high=shallow, opacity=0.9)
     styles["terrain_hillshade"] = _hillshade(palette)
     styles["terrain_contours"] = _style(
         stroke=0.3 * palette.contourWeight, stroke_color=contour, opacity=0.7

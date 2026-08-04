@@ -33,7 +33,15 @@ from hipparchus.data_sources.optional_providers import _collection_from_layers, 
 from hipparchus.data_sources.provider import BBoxQuery, FeatureCollection
 from shapely.geometry import mapping
 
-from hipparchus.geometry.bands import ElevationBand, band_boundaries, elevation_bands, map_coordinates
+from hipparchus.geometry.bands import (
+    DepthBandMode,
+    ElevationBand,
+    band_boundaries,
+    depth_band_boundaries,
+    elevation_bands,
+    land_band_boundaries,
+    map_coordinates,
+)
 from hipparchus.geometry.contours import contour_levels, contour_polylines, orient_uphill_left
 from hipparchus.geometry.hillshade import SunPosition, hillshade
 from hipparchus.geometry.projection import EARTH_RADIUS_M, MAX_MERCATOR_LAT
@@ -52,6 +60,11 @@ INDEX_CONTOUR_LAYER = "terrain_index_contours"
 BATHYMETRY_LAYER = "bathymetry"
 SUMMIT_LAYER = "summits"
 ELEVATION_BANDS_LAYER = "elevation_bands"
+# The sea floor's own mass. `elevation_bands` always spanned the whole measured
+# range, so a coastal sheet banded its sea floor in the land's ramp -- a trench
+# drawn as a kind of valley. The sea got contours where the land got mass, and
+# what mass it did get was wearing the wrong clothes.
+DEPTH_BANDS_LAYER = "depth_bands"
 HILLSHADE_LAYER = "terrain_hillshade"
 
 #: EMODnet Bathymetry's own coverage extent (its GetCapabilities), confirmed
@@ -116,6 +129,12 @@ class TerrainTileSettings:
     emit_elevation_bands: bool = True
     elevation_band_count: int = 10
     band_grid_max_pixels: int = 520
+    # The sea floor gets its own ramp rather than borrowing the land's. Off
+    # gives the single ramp across the whole range that every sheet had before,
+    # kept so an old render and a new one can be compared.
+    separate_depth_bands: bool = True
+    depth_band_count: int = 6
+    depth_band_mode: str = DepthBandMode.EVEN.value
     # Real DEMs carry step noise from their source resolution; one light pass
     # settles it without moving the landforms.
     smoothing_passes: int = 1
@@ -247,15 +266,40 @@ class TerrainTileProvider:
                     )
 
         if self.settings.emit_elevation_bands:
-            features_by_layer[ELEVATION_BANDS_LAYER] = _band_features(
-                grid,
-                window,
-                zoom,
+            finite = grid[np.isfinite(grid)]
+            low = float(finite.min()) if finite.size else 0.0
+            high = float(finite.max()) if finite.size else 0.0
+            common = dict(
                 provider_id=self.provider_id,
-                count=self.settings.elevation_band_count,
                 max_pixels=self.settings.band_grid_max_pixels,
                 surveyed=surveyed_grid,
             )
+
+            if not self.settings.separate_depth_bands:
+                # One ramp across the whole range, sea floor included: what every
+                # sheet did before the split.
+                features_by_layer[ELEVATION_BANDS_LAYER] = _band_features(
+                    grid, window, zoom, count=self.settings.elevation_band_count, **common
+                )
+            else:
+                features_by_layer[ELEVATION_BANDS_LAYER] = _band_features(
+                    grid, window, zoom,
+                    count=self.settings.elevation_band_count,
+                    boundaries=land_band_boundaries(
+                        low, high, self.settings.elevation_band_count
+                    ),
+                    **common,
+                )
+                features_by_layer[DEPTH_BANDS_LAYER] = _band_features(
+                    grid, window, zoom,
+                    count=self.settings.depth_band_count,
+                    layer=DEPTH_BANDS_LAYER,
+                    boundaries=depth_band_boundaries(
+                        low, high, self.settings.depth_band_count,
+                        _depth_band_mode(self.settings.depth_band_mode),
+                    ),
+                    **common,
+                )
 
         if self.settings.emit_hillshade:
             features_by_layer[HILLSHADE_LAYER] = _hillshade_features(
@@ -853,6 +897,19 @@ def _band_is_measured(
     return bool(np.all(coarse_measured[mask] >= MEASURED_THRESHOLD))
 
 
+def _depth_band_mode(value: str) -> DepthBandMode:
+    """A settings string, read back as a mode.
+
+    Settings travel as plain values through the session file and the source
+    panel, so an unknown one is a stale file rather than a reason to refuse to
+    draw: it falls back to even rather than raising.
+    """
+    try:
+        return DepthBandMode(str(value).strip().lower())
+    except ValueError:
+        return DepthBandMode.EVEN
+
+
 def _band_features(
     grid: np.ndarray,
     window: "_Window",
@@ -862,8 +919,14 @@ def _band_features(
     count: int,
     max_pixels: int,
     surveyed: np.ndarray | None = None,
+    layer: str = ELEVATION_BANDS_LAYER,
+    boundaries: list[float] | None = None,
 ) -> list[dict[str, Any]]:
-    """Filled hypsometric bands, low to high."""
+    """Filled hypsometric bands, low to high.
+
+    ``boundaries`` overrides the even division of the whole range, which is how
+    the land and the sea floor get their own ramps instead of sharing one.
+    """
     if count < 2:
         return []
 
@@ -874,7 +937,10 @@ def _band_features(
     if finite.size == 0:
         return []
 
-    boundaries = band_boundaries(float(finite.min()), float(finite.max()), count)
+    if boundaries is None:
+        boundaries = band_boundaries(float(finite.min()), float(finite.max()), count)
+    if len(boundaries) < 2:
+        return []
     bands = elevation_bands(coarse, boundaries)
     if not bands:
         return []
@@ -891,14 +957,14 @@ def _band_features(
         features.append(
             {
                 "type": "Feature",
-                "id": f"{provider_id}/{ELEVATION_BANDS_LAYER}/{index}",
+                "id": f"{provider_id}/{layer}/{index}",
                 "geometry": mapping(geometry),
                 "properties": {
                     "elevation_low": band.lower,
                     "elevation_high": band.upper,
                     "band_index": index,
                     "band_count": len(bands),
-                    "hipparchus_layer": ELEVATION_BANDS_LAYER,
+                    "hipparchus_layer": layer,
                     "hipparchus_source": provider_id,
                     "measured": _band_is_measured(coarse, coarse_surveyed, band),
                 },

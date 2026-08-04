@@ -68,6 +68,7 @@ def fetch_layers(is_visible: Callable[[str], bool]) -> tuple[str, ...]:
 # road hierarchy, which is one idea to a reader and eight layers to the renderer.
 LAYER_LABELS: dict[str, str] = {
     "elevation_bands": "Elevation bands",
+    "depth_bands": "Depth bands",
     "terrain_contours": "Contours",
     "terrain_index_contours": "Index contours",
     "terrain_hillshade": "Hillshade",
@@ -113,6 +114,7 @@ GROUP_ORDER: tuple[str, ...] = (
 
 _GROUPS: dict[str, str] = {
     "elevation_bands": "Terrain",
+    "depth_bands": "Terrain",
     "terrain_contours": "Terrain",
     "terrain_index_contours": "Terrain",
     "terrain_hillshade": "Terrain",

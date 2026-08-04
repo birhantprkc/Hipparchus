@@ -31,6 +31,7 @@ EXTRA_LAYERS = (
     "terrain_index_contours",
     "terrain_hillshade",
     "elevation_bands",
+    "depth_bands",
     "night_lights",
     "earthquakes_shallow",
     "earthquakes_intermediate",
