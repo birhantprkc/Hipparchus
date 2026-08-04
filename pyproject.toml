@@ -19,6 +19,12 @@ dependencies = [
 dev = [
   "pytest>=7.0",
   "ruff>=0.1.0",
+  # Used unguarded by three test files (test_status_bar.py, test_about.py,
+  # test_raster_not_for_navigation.py) and by scripts/smoke_render.py and
+  # scripts/make_about_art.py, but never declared anywhere -- every local
+  # gated run happened to have it already, until a clean container without
+  # it made the gap visible.
+  "Pillow>=10.0",
 ]
 maps = [
   "fiona>=1.9",

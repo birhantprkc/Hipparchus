@@ -1,0 +1,36 @@
+FROM python:3.12-slim
+
+# tk is the point; xvfb is the screen that isn't one. The fonts matter because
+# the renderer draws labels and a bare image has no typefaces at all. xauth
+# isn't optional despite not being mentioned anywhere in the plan this
+# Dockerfile comes from -- `xvfb-run` shells out to it to manage the X
+# authority cookie and refuses to start at all without it ("xauth command
+# not found"), found only by actually running it, not by reading its docs.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        python3-tk tk8.6 xvfb xauth fonts-dejavu-core libgl1 \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+# The source has to exist before an editable install: this project is
+# src/-layout (`package-dir = {"" = "src"}`), so `pip install -e .` needs
+# `src/hipparchus` on disk to build against -- copying just pyproject.toml
+# first for cache-friendliness, the usual Docker pattern, fails here with
+# "error in 'egg_base' option: 'src' does not exist or is not a directory".
+COPY . .
+# `maps` (fiona/rasterio/osmium) tried and rolled back, 2026-08-04: fiona has
+# no arm64 manylinux wheel and needs a system GDAL to build from source,
+# which this slim image doesn't have -- exactly the risk this plan called
+# out, and its own advice applies ("stop and reconsider"). `dev` alone is
+# what the smallest first step actually needs: it does not touch fiona,
+# rasterio or osmium. Whether `maps` can be added cleanly (a heavier base
+# image, or GDAL installed explicitly) is a separate, later question.
+#
+# pip's default 15s read timeout was too tight for files.pythonhosted.org
+# from this machine's Docker VM -- three separate builds hit
+# ReadTimeoutError on a large wheel (scipy/skia-python) mid-download, not
+# because anything was actually broken, just slow. A longer timeout, not a
+# retry loop, is the fix for a connection that works but is slow.
+RUN pip install --no-cache-dir --timeout 300 -e ".[dev]"
+
+ENV HIPPARCHUS_GUI_TESTS=1
+CMD ["xvfb-run", "-a", "-s", "-screen 0 1600x1200x24", "python", "-m", "pytest"]
