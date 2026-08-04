@@ -33,7 +33,7 @@ from hipparchus.data_sources.optional_providers import _collection_from_layers, 
 from hipparchus.data_sources.provider import BBoxQuery, FeatureCollection
 from shapely.geometry import mapping
 
-from hipparchus.geometry.bands import band_boundaries, elevation_bands, map_coordinates
+from hipparchus.geometry.bands import ElevationBand, band_boundaries, elevation_bands, map_coordinates
 from hipparchus.geometry.contours import contour_levels, contour_polylines, orient_uphill_left
 from hipparchus.geometry.hillshade import SunPosition, hillshade
 from hipparchus.geometry.projection import EARTH_RADIUS_M, MAX_MERCATOR_LAT
@@ -178,8 +178,17 @@ class TerrainTileProvider:
 
         emodnet_cells = 0
         sea_floor_surveyed_share = 0.0
+        # Per-cell "does this read as measured ground" (`None` when EMODnet
+        # wasn't used or had nothing to add), carried through the smoothing
+        # pass below -- it doesn't change shape -- so bathymetry contours and
+        # elevation bands can tell measured ground from the coarse global
+        # grid they replaced. Land is already folded in as measured; see
+        # `_effective_measured_grid`.
+        surveyed_grid: np.ndarray | None = None
         if self.settings.use_emodnet_bathymetry:
-            grid, emodnet_cells, sea_floor_surveyed_share = self._blend_emodnet(grid, window, zoom, bounds)
+            grid, surveyed_grid, emodnet_cells, sea_floor_surveyed_share = self._blend_emodnet(
+                grid, window, zoom, bounds
+            )
 
         grid = _smooth(grid, self.settings.smoothing_passes)
 
@@ -210,8 +219,14 @@ class TerrainTileProvider:
                         continue
                     coordinates = orient_uphill_left(coordinates, sample=sample, level=level, probe=probe)
                     target = layer
+                    # Land contours are always measured ground (SRTM and
+                    # friends); only a bathymetry contour can cross from
+                    # EMODnet's real survey back onto the coarse global grid.
+                    measured = True
                     if self.settings.separate_bathymetry and level < 0.0:
                         target = BATHYMETRY_LAYER
+                        if surveyed_grid is not None:
+                            measured = _measured_along_polyline(surveyed_grid, polyline)
                     features_by_layer[target].append(
                         {
                             "type": "Feature",
@@ -226,7 +241,7 @@ class TerrainTileProvider:
                                 "index_contour": layer == INDEX_CONTOUR_LAYER,
                                 "hipparchus_layer": target,
                                 "hipparchus_source": self.provider_id,
-                                "measured": True,
+                                "measured": measured,
                             },
                         }
                     )
@@ -239,6 +254,7 @@ class TerrainTileProvider:
                 provider_id=self.provider_id,
                 count=self.settings.elevation_band_count,
                 max_pixels=self.settings.band_grid_max_pixels,
+                surveyed=surveyed_grid,
             )
 
         if self.settings.emit_hillshade:
@@ -300,13 +316,17 @@ class TerrainTileProvider:
         window: "_Window",
         zoom: int,
         bounds: tuple[float, float, float, float],
-    ) -> tuple[np.ndarray, int, float]:
+    ) -> tuple[np.ndarray, np.ndarray | None, int, float]:
         """A finer sea floor, where EMODnet has one.
 
         Blended into the grid itself rather than emitted as a layer of its
         own: the contours, the bands, the hillshade and the summits are all
         downstream of this one array, so every one of them improves without
-        knowing anything happened.
+        knowing anything happened. A per-cell "measured ground" grid is
+        handed back too (`None` when there was nothing to blend), so a
+        bathymetry contour or elevation band can tell EMODnet's real survey
+        apart from the coarse global grid it may still be sitting on in
+        part.
         """
         finer = _fetch_emodnet_grid(
             bounds,
@@ -316,7 +336,7 @@ class TerrainTileProvider:
             self.http_get or _default_http_get_bytes,
         )
         if finer is None:
-            return grid, 0, 0.0
+            return grid, None, 0, 0.0
         finer_grid, finer_bounds = finer
         row_lats = _row_latitudes(window, zoom, grid.shape[0])
         col_lons = _column_longitudes(window, zoom, grid.shape[1])
@@ -328,7 +348,12 @@ class TerrainTileProvider:
             finer_bounds,
             feather_fraction=self.settings.emodnet_feather_fraction,
         )
-        return blended, replaced, _surveyed_share_of_sea(blended, surveyed)
+        # Folded against *this*, unsmoothed grid -- the smoothing pass still
+        # ahead of it can blur a coastal cell's sign across zero, and a
+        # feature built afterwards has no way back to which side of the
+        # coast a cell started on.
+        measured_grid = _effective_measured_grid(blended, surveyed)
+        return blended, measured_grid, replaced, _surveyed_share_of_sea(blended, surveyed)
 
     def _mosaic(self, bounds: tuple[float, float, float, float], zoom: int) -> tuple[np.ndarray, tuple[int, int]]:
         min_lon, min_lat, max_lon, max_lat = bounds
@@ -765,6 +790,69 @@ def _surveyed_share_of_sea(grid: np.ndarray, surveyed: np.ndarray) -> float:
     return float(np.mean(surveyed[sea]))
 
 
+def _effective_measured_grid(blended: np.ndarray, surveyed: np.ndarray) -> np.ndarray:
+    """`surveyed`, with land folded in as fully measured.
+
+    `surveyed` only ever describes the sea floor -- land is never touched by
+    the blend and stays `0` there by construction, which is correct for the
+    sea-only aggregate in `_surveyed_share_of_sea` but wrong for a
+    per-feature check: land is always measured ground (SRTM and friends),
+    so it should never count against a feature that happens to touch it.
+    Computed once, here, against the grid at blend time -- a later smoothing
+    pass can shift a coastal cell's value across zero, and a feature built
+    downstream of that has no way back to which side it started on.
+    """
+    is_sea = np.isfinite(blended) & (blended < 0.0)
+    return np.where(is_sea, surveyed, 1.0)
+
+
+#: Below this, a cell counts as still sitting on the coarse global grid
+#: rather than EMODnet's own survey -- matching the Mac's own
+#: `BlendedSeaFloor.claim(forSamples:)`, not a threshold invented here.
+MEASURED_THRESHOLD = 0.999
+
+
+def _measured_along_polyline(measured: np.ndarray, polyline: list[tuple[float, float]]) -> bool:
+    """Whether a traced line reads as measured ground -- all of it.
+
+    Sampled at each vertex rather than integrated along the path -- a
+    contour is already densely vertexed enough that the two agree, and this
+    is simpler to test. Every sampled cell has to clear `MEASURED_THRESHOLD`;
+    one still sitting on the coarse global grid is enough to call the whole
+    line approximate, the same way the Mac's port target does -- not a
+    majority vote, and not "nearly all."
+    """
+    if not polyline:
+        return True
+    rows, cols = measured.shape
+    if rows == 0 or cols == 0:
+        return True
+    for row, col in polyline:
+        sample_row = min(max(int(round(row)), 0), rows - 1)
+        sample_col = min(max(int(round(col)), 0), cols - 1)
+        if measured[sample_row, sample_col] < MEASURED_THRESHOLD:
+            return False
+    return True
+
+
+def _band_is_measured(
+    coarse: np.ndarray, coarse_measured: np.ndarray | None, band: ElevationBand
+) -> bool:
+    """Whether a band reads as measured ground overall -- every cell in it,
+    not most of them; see `_measured_along_polyline`.
+
+    `coarse_measured` already has land folded in as fully measured (see
+    `_effective_measured_grid`); this only has to find which cells belong to
+    the band.
+    """
+    if coarse_measured is None:
+        return True
+    mask = (coarse >= band.lower) & (coarse <= band.upper)
+    if not np.any(mask):
+        return True
+    return bool(np.all(coarse_measured[mask] >= MEASURED_THRESHOLD))
+
+
 def _band_features(
     grid: np.ndarray,
     window: "_Window",
@@ -773,6 +861,7 @@ def _band_features(
     provider_id: str,
     count: int,
     max_pixels: int,
+    surveyed: np.ndarray | None = None,
 ) -> list[dict[str, Any]]:
     """Filled hypsometric bands, low to high."""
     if count < 2:
@@ -780,6 +869,7 @@ def _band_features(
 
     step = max(1, int(math.ceil(max(grid.shape) / max(16, max_pixels))))
     coarse = grid[::step, ::step]
+    coarse_surveyed = surveyed[::step, ::step] if surveyed is not None else None
     finite = coarse[np.isfinite(coarse)]
     if finite.size == 0:
         return []
@@ -810,7 +900,7 @@ def _band_features(
                     "band_count": len(bands),
                     "hipparchus_layer": ELEVATION_BANDS_LAYER,
                     "hipparchus_source": provider_id,
-                    "measured": True,
+                    "measured": _band_is_measured(coarse, coarse_surveyed, band),
                 },
             }
         )

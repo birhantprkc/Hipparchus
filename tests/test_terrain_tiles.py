@@ -24,14 +24,17 @@ from hipparchus.data_sources.terrain_tiles import (
     TerrainTileError,
     TerrainTileSettings,
     _Window,
+    _band_is_measured,
     _blend_sea_floor,
     _choose_zoom,
     _column_longitudes,
     _decode_terrarium,
+    _effective_measured_grid,
     _emodnet_covers,
     _emodnet_widened_bounds,
     _ground_resolution_metres,
     _lonlat_for_pixel,
+    _measured_along_polyline,
     _pixel_for,
     _read_emodnet_tiff,
     _row_latitudes,
@@ -39,7 +42,9 @@ from hipparchus.data_sources.terrain_tiles import (
     _tile_for,
     terrain_tile_provider,
 )
+from hipparchus.geometry.bands import ElevationBand
 from hipparchus.geometry.projection import MAX_MERCATOR_LAT
+from shapely.geometry import Point
 
 try:
     from rasterio.io import MemoryFile
@@ -595,6 +600,97 @@ class ReadEmodnetTiffTests(unittest.TestCase):
         self.assertTrue(np.isnan(values[0, 1]))
 
 
+class EffectiveMeasuredGridTests(unittest.TestCase):
+    """Land folded in as fully measured -- computed once, against the grid
+    at blend time, before a later smoothing pass can blur a coastal cell's
+    sign across zero out from under a feature built downstream of it."""
+
+    def test_land_reads_fully_measured_regardless_of_surveyed(self) -> None:
+        blended = np.array([[10.0, 20.0]])
+        surveyed = np.array([[0.0, 0.0]])
+        np.testing.assert_array_equal(_effective_measured_grid(blended, surveyed), [[1.0, 1.0]])
+
+    def test_sea_keeps_its_own_surveyed_value(self) -> None:
+        blended = np.array([[-10.0, -20.0]])
+        surveyed = np.array([[1.0, 0.3]])
+        np.testing.assert_array_equal(_effective_measured_grid(blended, surveyed), [[1.0, 0.3]])
+
+    def test_a_hole_reads_as_measured_too(self) -> None:
+        blended = np.array([[np.nan]])
+        surveyed = np.array([[0.0]])
+        np.testing.assert_array_equal(_effective_measured_grid(blended, surveyed), [[1.0]])
+
+
+class MeasuredProvenanceTests(unittest.TestCase):
+    """A bathymetry contour or elevation band should say whether it is
+    EMODnet's real survey or the coarse global grid it may still be sitting
+    on in part -- not the blanket `True` every terrain feature used to get."""
+
+    def test_a_polyline_entirely_over_measured_cells_reads_measured(self) -> None:
+        measured = np.ones((4, 4))
+        polyline = [(1.0, 1.0), (1.0, 2.0), (2.0, 2.0)]
+        self.assertTrue(_measured_along_polyline(measured, polyline))
+
+    def test_a_polyline_mostly_off_the_measured_area_reads_unmeasured(self) -> None:
+        measured = np.zeros((4, 4))
+        measured[0, 0] = 1.0
+        polyline = [(0.0, 0.0), (3.0, 3.0), (3.0, 2.0), (2.0, 3.0)]
+        self.assertFalse(_measured_along_polyline(measured, polyline))
+
+    def test_an_empty_polyline_defaults_to_measured(self) -> None:
+        self.assertTrue(_measured_along_polyline(np.ones((2, 2)), []))
+
+    def test_out_of_range_vertices_clamp_rather_than_crash(self) -> None:
+        measured = np.ones((2, 2))
+        self.assertTrue(_measured_along_polyline(measured, [(-5.0, -5.0), (50.0, 50.0)]))
+
+    def test_a_single_unmeasured_vertex_disqualifies_the_whole_line(self) -> None:
+        """All-or-nothing, matching the Mac's own `claim(forSamples:)` --
+        not a majority vote. Three of four vertices fully measured still
+        reads False."""
+        measured = np.array([[1.0, 1.0], [1.0, 0.0]])
+        polyline = [(0.0, 0.0), (0.0, 1.0), (1.0, 0.0), (1.0, 1.0)]
+        self.assertFalse(_measured_along_polyline(measured, polyline))
+
+    def test_a_land_only_band_reads_measured_regardless_of_coverage(self) -> None:
+        """`coarse_measured` already has land folded in as fully measured --
+        a band that never touches sea has nothing to be unmeasured about."""
+        coarse = np.array([[100.0, 200.0], [150.0, 300.0]])
+        coarse_measured = np.ones_like(coarse)  # land, per _effective_measured_grid
+        band = ElevationBand(lower=50.0, upper=350.0, geometry=Point(0, 0))
+        self.assertTrue(_band_is_measured(coarse, coarse_measured, band))
+
+    def test_a_sea_band_fully_surveyed_reads_measured(self) -> None:
+        coarse = np.array([[-50.0, -60.0], [-40.0, -70.0]])
+        coarse_measured = np.ones_like(coarse)
+        band = ElevationBand(lower=-100.0, upper=0.0, geometry=Point(0, 0))
+        self.assertTrue(_band_is_measured(coarse, coarse_measured, band))
+
+    def test_a_sea_band_mostly_unsurveyed_reads_unmeasured(self) -> None:
+        coarse = np.array([[-50.0, -60.0], [-40.0, -70.0]])
+        coarse_measured = np.zeros_like(coarse)
+        band = ElevationBand(lower=-100.0, upper=0.0, geometry=Point(0, 0))
+        self.assertFalse(_band_is_measured(coarse, coarse_measured, band))
+
+    def test_a_single_unmeasured_cell_disqualifies_the_whole_band(self) -> None:
+        coarse = np.array([[-50.0, -60.0], [-40.0, -70.0]])
+        coarse_measured = np.array([[1.0, 1.0], [1.0, 0.5]])
+        band = ElevationBand(lower=-100.0, upper=0.0, geometry=Point(0, 0))
+        self.assertFalse(_band_is_measured(coarse, coarse_measured, band))
+
+    def test_no_measured_grid_defaults_to_measured(self) -> None:
+        """EMODnet switched off, or nothing to blend: unchanged behaviour."""
+        coarse = np.array([[-50.0, -60.0]])
+        band = ElevationBand(lower=-100.0, upper=0.0, geometry=Point(0, 0))
+        self.assertTrue(_band_is_measured(coarse, None, band))
+
+    def test_a_band_with_no_matching_cells_defaults_to_measured(self) -> None:
+        coarse = np.array([[100.0, 200.0]])
+        coarse_measured = np.zeros_like(coarse)
+        band = ElevationBand(lower=-100.0, upper=-50.0, geometry=Point(0, 0))
+        self.assertTrue(_band_is_measured(coarse, coarse_measured, band))
+
+
 @unittest.skipUnless(SKIA_AVAILABLE and RASTERIO_AVAILABLE, "skia-python and rasterio both needed")
 class EmodnetIntegrationTests(unittest.TestCase):
     """`fetch_bbox` end to end: the AWS mosaic and an EMODnet response,
@@ -623,6 +719,35 @@ class EmodnetIntegrationTests(unittest.TestCase):
         self.assertEqual(result.metadata["bathymetry_source"], "emodnet+terrarium")
         self.assertGreater(result.metadata["emodnet_cells"], 0)
         self.assertGreater(result.metadata["sea_floor_surveyed_share"], 0.0)
+
+    def test_bathymetry_features_read_measured_when_fully_inside_emodnet(self) -> None:
+        """Not just the aggregate metadata -- the individual contour and band
+        features a reader actually sees on the sheet."""
+        settings = TerrainTileSettings(max_tiles=8, target_pixels=512, use_emodnet_bathymetry=True)
+        result = terrain_tile_provider(settings, self._fake_http()).fetch_bbox(ATHENS)
+        bathymetry = result.features_by_layer["bathymetry"]
+        self.assertTrue(bathymetry)
+        self.assertTrue(all(feature["properties"]["measured"] for feature in bathymetry))
+        sea_bands = [
+            band
+            for band in result.features_by_layer["elevation_bands"]
+            if band["properties"]["elevation_high"] <= 0.0
+        ]
+        self.assertTrue(sea_bands)
+        self.assertTrue(all(band["properties"]["measured"] for band in sea_bands))
+
+    def test_bathymetry_features_default_to_measured_with_emodnet_off(self) -> None:
+        """Unchanged legacy behaviour when there is no `surveyed` grid to
+        consult at all."""
+        settings = TerrainTileSettings(max_tiles=8, target_pixels=512, use_emodnet_bathymetry=False)
+
+        def get(url: str, timeout: float) -> bytes:
+            return self._sea_and_land_tile()
+
+        result = terrain_tile_provider(settings, get).fetch_bbox(ATHENS)
+        bathymetry = result.features_by_layer["bathymetry"]
+        self.assertTrue(bathymetry)
+        self.assertTrue(all(feature["properties"]["measured"] for feature in bathymetry))
 
     def test_switched_off_makes_no_emodnet_request(self) -> None:
         def get(url: str, timeout: float) -> bytes:
