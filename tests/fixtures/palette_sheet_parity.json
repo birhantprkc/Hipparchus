@@ -619,6 +619,114 @@
    "stroke_width": 0.6,
    "visible": true
   },
+  "seamark_areas": {
+   "casing_width": 0.0,
+   "fill_color": {
+    "a": 255,
+    "b": 210,
+    "g": 198,
+    "r": 161
+   },
+   "fill_enabled": true,
+   "line_cap": "round",
+   "opacity": 0.45,
+   "stroke_color": {
+    "a": 255,
+    "b": 181,
+    "g": 167,
+    "r": 131
+   },
+   "stroke_width": 0.5,
+   "visible": true
+  },
+  "seamark_beacons": {
+   "casing_width": 0.0,
+   "fill_color": {
+    "a": 255,
+    "b": 224,
+    "g": 226,
+    "r": 208
+   },
+   "fill_enabled": true,
+   "line_cap": "round",
+   "opacity": 0.95,
+   "stroke_color": {
+    "a": 255,
+    "b": 136,
+    "g": 117,
+    "r": 83
+   },
+   "stroke_width": 1.0,
+   "visible": true
+  },
+  "seamark_buoys": {
+   "casing_width": 0.0,
+   "fill_color": {
+    "a": 255,
+    "b": 224,
+    "g": 223,
+    "r": 201
+   },
+   "fill_enabled": true,
+   "line_cap": "round",
+   "opacity": 0.95,
+   "stroke_color": {
+    "a": 255,
+    "b": 136,
+    "g": 117,
+    "r": 83
+   },
+   "stroke_width": 1.0,
+   "visible": true
+  },
+  "seamark_harbours": {
+   "casing_width": 0.0,
+   "fill_enabled": false,
+   "line_cap": "round",
+   "opacity": 0.75,
+   "stroke_color": {
+    "a": 255,
+    "b": 167,
+    "g": 152,
+    "r": 116
+   },
+   "stroke_width": 0.7,
+   "visible": true
+  },
+  "seamark_hazards": {
+   "casing_width": 0.0,
+   "fill_enabled": false,
+   "line_cap": "round",
+   "opacity": 1.0,
+   "stroke_color": {
+    "a": 255,
+    "b": 113,
+    "g": 92,
+    "r": 59
+   },
+   "stroke_width": 1.1,
+   "visible": true
+  },
+  "seamark_lights": {
+   "casing_width": 0.0,
+   "fill_color": {
+    "a": 255,
+    "b": 224,
+    "g": 229,
+    "r": 215
+   },
+   "fill_enabled": true,
+   "line_cap": "round",
+   "opacity": 0.95,
+   "stroke_color": {
+    "a": 255,
+    "b": 136,
+    "g": 117,
+    "r": 83
+   },
+   "stroke_width": 1.0,
+   "visible": true
+  },
   "shops": {
    "casing_width": 0.0,
    "fill_enabled": false,
@@ -1368,6 +1476,114 @@
     "r": 122
    },
    "stroke_width": 0.6,
+   "visible": true
+  },
+  "seamark_areas": {
+   "casing_width": 0.0,
+   "fill_color": {
+    "a": 255,
+    "b": 180,
+    "g": 180,
+    "r": 146
+   },
+   "fill_enabled": true,
+   "line_cap": "round",
+   "opacity": 0.45,
+   "stroke_color": {
+    "a": 255,
+    "b": 149,
+    "g": 152,
+    "r": 122
+   },
+   "stroke_width": 0.5,
+   "visible": true
+  },
+  "seamark_beacons": {
+   "casing_width": 0.0,
+   "fill_color": {
+    "a": 255,
+    "b": 214,
+    "g": 217,
+    "r": 198
+   },
+   "fill_enabled": true,
+   "line_cap": "round",
+   "opacity": 0.95,
+   "stroke_color": {
+    "a": 255,
+    "b": 99,
+    "g": 107,
+    "r": 84
+   },
+   "stroke_width": 1.0,
+   "visible": true
+  },
+  "seamark_buoys": {
+   "casing_width": 0.0,
+   "fill_color": {
+    "a": 255,
+    "b": 210,
+    "g": 212,
+    "r": 189
+   },
+   "fill_enabled": true,
+   "line_cap": "round",
+   "opacity": 0.95,
+   "stroke_color": {
+    "a": 255,
+    "b": 99,
+    "g": 107,
+    "r": 84
+   },
+   "stroke_width": 1.0,
+   "visible": true
+  },
+  "seamark_harbours": {
+   "casing_width": 0.0,
+   "fill_enabled": false,
+   "line_cap": "round",
+   "opacity": 0.75,
+   "stroke_color": {
+    "a": 255,
+    "b": 134,
+    "g": 138,
+    "r": 110
+   },
+   "stroke_width": 0.7,
+   "visible": true
+  },
+  "seamark_hazards": {
+   "casing_width": 0.0,
+   "fill_enabled": false,
+   "line_cap": "round",
+   "opacity": 1.0,
+   "stroke_color": {
+    "a": 255,
+    "b": 74,
+    "g": 85,
+    "r": 64
+   },
+   "stroke_width": 1.1,
+   "visible": true
+  },
+  "seamark_lights": {
+   "casing_width": 0.0,
+   "fill_color": {
+    "a": 255,
+    "b": 218,
+    "g": 222,
+    "r": 207
+   },
+   "fill_enabled": true,
+   "line_cap": "round",
+   "opacity": 0.95,
+   "stroke_color": {
+    "a": 255,
+    "b": 99,
+    "g": 107,
+    "r": 84
+   },
+   "stroke_width": 1.0,
    "visible": true
   },
   "shops": {
@@ -2121,6 +2337,114 @@
    "stroke_width": 0.6,
    "visible": true
   },
+  "seamark_areas": {
+   "casing_width": 0.0,
+   "fill_color": {
+    "a": 255,
+    "b": 178,
+    "g": 91,
+    "r": 27
+   },
+   "fill_enabled": true,
+   "line_cap": "round",
+   "opacity": 0.45,
+   "stroke_color": {
+    "a": 255,
+    "b": 178,
+    "g": 86,
+    "r": 26
+   },
+   "stroke_width": 0.5,
+   "visible": true
+  },
+  "seamark_beacons": {
+   "casing_width": 0.0,
+   "fill_color": {
+    "a": 255,
+    "b": 205,
+    "g": 160,
+    "r": 128
+   },
+   "fill_enabled": true,
+   "line_cap": "round",
+   "opacity": 0.95,
+   "stroke_color": {
+    "a": 255,
+    "b": 177,
+    "g": 77,
+    "r": 24
+   },
+   "stroke_width": 1.0,
+   "visible": true
+  },
+  "seamark_buoys": {
+   "casing_width": 0.0,
+   "fill_color": {
+    "a": 255,
+    "b": 199,
+    "g": 145,
+    "r": 106
+   },
+   "fill_enabled": true,
+   "line_cap": "round",
+   "opacity": 0.95,
+   "stroke_color": {
+    "a": 255,
+    "b": 177,
+    "g": 77,
+    "r": 24
+   },
+   "stroke_width": 1.0,
+   "visible": true
+  },
+  "seamark_harbours": {
+   "casing_width": 0.0,
+   "fill_enabled": false,
+   "line_cap": "round",
+   "opacity": 0.75,
+   "stroke_color": {
+    "a": 255,
+    "b": 178,
+    "g": 83,
+    "r": 26
+   },
+   "stroke_width": 0.7,
+   "visible": true
+  },
+  "seamark_hazards": {
+   "casing_width": 0.0,
+   "fill_enabled": false,
+   "line_cap": "round",
+   "opacity": 1.0,
+   "stroke_color": {
+    "a": 255,
+    "b": 177,
+    "g": 73,
+    "r": 23
+   },
+   "stroke_width": 1.1,
+   "visible": true
+  },
+  "seamark_lights": {
+   "casing_width": 0.0,
+   "fill_color": {
+    "a": 255,
+    "b": 211,
+    "g": 174,
+    "r": 151
+   },
+   "fill_enabled": true,
+   "line_cap": "round",
+   "opacity": 0.95,
+   "stroke_color": {
+    "a": 255,
+    "b": 177,
+    "g": 77,
+    "r": 24
+   },
+   "stroke_width": 1.0,
+   "visible": true
+  },
   "shops": {
    "casing_width": 0.0,
    "fill_enabled": false,
@@ -2870,6 +3194,114 @@
     "r": 123
    },
    "stroke_width": 0.6,
+   "visible": true
+  },
+  "seamark_areas": {
+   "casing_width": 0.0,
+   "fill_color": {
+    "a": 255,
+    "b": 134,
+    "g": 122,
+    "r": 125
+   },
+   "fill_enabled": true,
+   "line_cap": "round",
+   "opacity": 0.45,
+   "stroke_color": {
+    "a": 255,
+    "b": 118,
+    "g": 104,
+    "r": 108
+   },
+   "stroke_width": 0.5,
+   "visible": true
+  },
+  "seamark_beacons": {
+   "casing_width": 0.0,
+   "fill_color": {
+    "a": 255,
+    "b": 179,
+    "g": 178,
+    "r": 181
+   },
+   "fill_enabled": true,
+   "line_cap": "round",
+   "opacity": 0.95,
+   "stroke_color": {
+    "a": 255,
+    "b": 92,
+    "g": 76,
+    "r": 79
+   },
+   "stroke_width": 1.0,
+   "visible": true
+  },
+  "seamark_buoys": {
+   "casing_width": 0.0,
+   "fill_color": {
+    "a": 255,
+    "b": 171,
+    "g": 167,
+    "r": 171
+   },
+   "fill_enabled": true,
+   "line_cap": "round",
+   "opacity": 0.95,
+   "stroke_color": {
+    "a": 255,
+    "b": 92,
+    "g": 76,
+    "r": 79
+   },
+   "stroke_width": 1.0,
+   "visible": true
+  },
+  "seamark_harbours": {
+   "casing_width": 0.0,
+   "fill_enabled": false,
+   "line_cap": "round",
+   "opacity": 0.75,
+   "stroke_color": {
+    "a": 255,
+    "b": 110,
+    "g": 95,
+    "r": 99
+   },
+   "stroke_width": 0.7,
+   "visible": true
+  },
+  "seamark_hazards": {
+   "casing_width": 0.0,
+   "fill_enabled": false,
+   "line_cap": "round",
+   "opacity": 1.0,
+   "stroke_color": {
+    "a": 255,
+    "b": 79,
+    "g": 62,
+    "r": 65
+   },
+   "stroke_width": 1.1,
+   "visible": true
+  },
+  "seamark_lights": {
+   "casing_width": 0.0,
+   "fill_color": {
+    "a": 255,
+    "b": 187,
+    "g": 188,
+    "r": 192
+   },
+   "fill_enabled": true,
+   "line_cap": "round",
+   "opacity": 0.95,
+   "stroke_color": {
+    "a": 255,
+    "b": 92,
+    "g": 76,
+    "r": 79
+   },
+   "stroke_width": 1.0,
    "visible": true
   },
   "shops": {
@@ -3623,6 +4055,114 @@
    "stroke_width": 0.6,
    "visible": true
   },
+  "seamark_areas": {
+   "casing_width": 0.0,
+   "fill_color": {
+    "a": 255,
+    "b": 89,
+    "g": 89,
+    "r": 89
+   },
+   "fill_enabled": true,
+   "line_cap": "round",
+   "opacity": 0.45,
+   "stroke_color": {
+    "a": 255,
+    "b": 126,
+    "g": 126,
+    "r": 126
+   },
+   "stroke_width": 0.5,
+   "visible": true
+  },
+  "seamark_beacons": {
+   "casing_width": 0.0,
+   "fill_color": {
+    "a": 255,
+    "b": 39,
+    "g": 39,
+    "r": 39
+   },
+   "fill_enabled": true,
+   "line_cap": "round",
+   "opacity": 0.95,
+   "stroke_color": {
+    "a": 255,
+    "b": 185,
+    "g": 185,
+    "r": 185
+   },
+   "stroke_width": 1.0,
+   "visible": true
+  },
+  "seamark_buoys": {
+   "casing_width": 0.0,
+   "fill_color": {
+    "a": 255,
+    "b": 46,
+    "g": 46,
+    "r": 46
+   },
+   "fill_enabled": true,
+   "line_cap": "round",
+   "opacity": 0.95,
+   "stroke_color": {
+    "a": 255,
+    "b": 185,
+    "g": 185,
+    "r": 185
+   },
+   "stroke_width": 1.0,
+   "visible": true
+  },
+  "seamark_harbours": {
+   "casing_width": 0.0,
+   "fill_enabled": false,
+   "line_cap": "round",
+   "opacity": 0.75,
+   "stroke_color": {
+    "a": 255,
+    "b": 145,
+    "g": 145,
+    "r": 145
+   },
+   "stroke_width": 0.7,
+   "visible": true
+  },
+  "seamark_hazards": {
+   "casing_width": 0.0,
+   "fill_enabled": false,
+   "line_cap": "round",
+   "opacity": 1.0,
+   "stroke_color": {
+    "a": 255,
+    "b": 215,
+    "g": 215,
+    "r": 215
+   },
+   "stroke_width": 1.1,
+   "visible": true
+  },
+  "seamark_lights": {
+   "casing_width": 0.0,
+   "fill_color": {
+    "a": 255,
+    "b": 32,
+    "g": 32,
+    "r": 32
+   },
+   "fill_enabled": true,
+   "line_cap": "round",
+   "opacity": 0.95,
+   "stroke_color": {
+    "a": 255,
+    "b": 185,
+    "g": 185,
+    "r": 185
+   },
+   "stroke_width": 1.0,
+   "visible": true
+  },
   "shops": {
    "casing_width": 0.0,
    "fill_enabled": false,
@@ -4372,6 +4912,114 @@
     "r": 102
    },
    "stroke_width": 0.6,
+   "visible": true
+  },
+  "seamark_areas": {
+   "casing_width": 0.0,
+   "fill_color": {
+    "a": 255,
+    "b": 166,
+    "g": 166,
+    "r": 166
+   },
+   "fill_enabled": true,
+   "line_cap": "round",
+   "opacity": 0.45,
+   "stroke_color": {
+    "a": 255,
+    "b": 129,
+    "g": 129,
+    "r": 129
+   },
+   "stroke_width": 0.5,
+   "visible": true
+  },
+  "seamark_beacons": {
+   "casing_width": 0.0,
+   "fill_color": {
+    "a": 255,
+    "b": 216,
+    "g": 216,
+    "r": 216
+   },
+   "fill_enabled": true,
+   "line_cap": "round",
+   "opacity": 0.95,
+   "stroke_color": {
+    "a": 255,
+    "b": 70,
+    "g": 70,
+    "r": 70
+   },
+   "stroke_width": 1.0,
+   "visible": true
+  },
+  "seamark_buoys": {
+   "casing_width": 0.0,
+   "fill_color": {
+    "a": 255,
+    "b": 209,
+    "g": 209,
+    "r": 209
+   },
+   "fill_enabled": true,
+   "line_cap": "round",
+   "opacity": 0.95,
+   "stroke_color": {
+    "a": 255,
+    "b": 70,
+    "g": 70,
+    "r": 70
+   },
+   "stroke_width": 1.0,
+   "visible": true
+  },
+  "seamark_harbours": {
+   "casing_width": 0.0,
+   "fill_enabled": false,
+   "line_cap": "round",
+   "opacity": 0.75,
+   "stroke_color": {
+    "a": 255,
+    "b": 110,
+    "g": 110,
+    "r": 110
+   },
+   "stroke_width": 0.7,
+   "visible": true
+  },
+  "seamark_hazards": {
+   "casing_width": 0.0,
+   "fill_enabled": false,
+   "line_cap": "round",
+   "opacity": 1.0,
+   "stroke_color": {
+    "a": 255,
+    "b": 40,
+    "g": 40,
+    "r": 40
+   },
+   "stroke_width": 1.1,
+   "visible": true
+  },
+  "seamark_lights": {
+   "casing_width": 0.0,
+   "fill_color": {
+    "a": 255,
+    "b": 223,
+    "g": 223,
+    "r": 223
+   },
+   "fill_enabled": true,
+   "line_cap": "round",
+   "opacity": 0.95,
+   "stroke_color": {
+    "a": 255,
+    "b": 70,
+    "g": 70,
+    "r": 70
+   },
+   "stroke_width": 1.0,
    "visible": true
   },
   "shops": {
@@ -5125,6 +5773,114 @@
    "stroke_width": 0.6,
    "visible": true
   },
+  "seamark_areas": {
+   "casing_width": 0.0,
+   "fill_color": {
+    "a": 255,
+    "b": 141,
+    "g": 127,
+    "r": 52
+   },
+   "fill_enabled": true,
+   "line_cap": "round",
+   "opacity": 0.45,
+   "stroke_color": {
+    "a": 255,
+    "b": 114,
+    "g": 104,
+    "r": 46
+   },
+   "stroke_width": 0.5,
+   "visible": true
+  },
+  "seamark_beacons": {
+   "casing_width": 0.0,
+   "fill_color": {
+    "a": 255,
+    "b": 176,
+    "g": 179,
+    "r": 122
+   },
+   "fill_enabled": true,
+   "line_cap": "round",
+   "opacity": 0.95,
+   "stroke_color": {
+    "a": 255,
+    "b": 72,
+    "g": 66,
+    "r": 38
+   },
+   "stroke_width": 1.0,
+   "visible": true
+  },
+  "seamark_buoys": {
+   "casing_width": 0.0,
+   "fill_color": {
+    "a": 255,
+    "b": 171,
+    "g": 170,
+    "r": 107
+   },
+   "fill_enabled": true,
+   "line_cap": "round",
+   "opacity": 0.95,
+   "stroke_color": {
+    "a": 255,
+    "b": 72,
+    "g": 66,
+    "r": 38
+   },
+   "stroke_width": 1.0,
+   "visible": true
+  },
+  "seamark_harbours": {
+   "casing_width": 0.0,
+   "fill_enabled": false,
+   "line_cap": "round",
+   "opacity": 0.75,
+   "stroke_color": {
+    "a": 255,
+    "b": 101,
+    "g": 92,
+    "r": 44
+   },
+   "stroke_width": 0.7,
+   "visible": true
+  },
+  "seamark_hazards": {
+   "casing_width": 0.0,
+   "fill_enabled": false,
+   "line_cap": "round",
+   "opacity": 1.0,
+   "stroke_color": {
+    "a": 255,
+    "b": 51,
+    "g": 47,
+    "r": 34
+   },
+   "stroke_width": 1.1,
+   "visible": true
+  },
+  "seamark_lights": {
+   "casing_width": 0.0,
+   "fill_color": {
+    "a": 255,
+    "b": 180,
+    "g": 187,
+    "r": 137
+   },
+   "fill_enabled": true,
+   "line_cap": "round",
+   "opacity": 0.95,
+   "stroke_color": {
+    "a": 255,
+    "b": 72,
+    "g": 66,
+    "r": 38
+   },
+   "stroke_width": 1.0,
+   "visible": true
+  },
   "shops": {
    "casing_width": 0.0,
    "fill_enabled": false,
@@ -5874,6 +6630,114 @@
     "r": 104
    },
    "stroke_width": 0.6,
+   "visible": true
+  },
+  "seamark_areas": {
+   "casing_width": 0.0,
+   "fill_color": {
+    "a": 255,
+    "b": 209,
+    "g": 148,
+    "r": 89
+   },
+   "fill_enabled": true,
+   "line_cap": "round",
+   "opacity": 0.45,
+   "stroke_color": {
+    "a": 255,
+    "b": 165,
+    "g": 116,
+    "r": 72
+   },
+   "stroke_width": 0.5,
+   "visible": true
+  },
+  "seamark_beacons": {
+   "casing_width": 0.0,
+   "fill_color": {
+    "a": 255,
+    "b": 232,
+    "g": 198,
+    "r": 164
+   },
+   "fill_enabled": true,
+   "line_cap": "round",
+   "opacity": 0.95,
+   "stroke_color": {
+    "a": 255,
+    "b": 95,
+    "g": 65,
+    "r": 44
+   },
+   "stroke_width": 1.0,
+   "visible": true
+  },
+  "seamark_buoys": {
+   "casing_width": 0.0,
+   "fill_color": {
+    "a": 255,
+    "b": 232,
+    "g": 190,
+    "r": 149
+   },
+   "fill_enabled": true,
+   "line_cap": "round",
+   "opacity": 0.95,
+   "stroke_color": {
+    "a": 255,
+    "b": 95,
+    "g": 65,
+    "r": 44
+   },
+   "stroke_width": 1.0,
+   "visible": true
+  },
+  "seamark_harbours": {
+   "casing_width": 0.0,
+   "fill_enabled": false,
+   "line_cap": "round",
+   "opacity": 0.75,
+   "stroke_color": {
+    "a": 255,
+    "b": 143,
+    "g": 100,
+    "r": 63
+   },
+   "stroke_width": 0.7,
+   "visible": true
+  },
+  "seamark_hazards": {
+   "casing_width": 0.0,
+   "fill_enabled": false,
+   "line_cap": "round",
+   "opacity": 1.0,
+   "stroke_color": {
+    "a": 255,
+    "b": 59,
+    "g": 39,
+    "r": 30
+   },
+   "stroke_width": 1.1,
+   "visible": true
+  },
+  "seamark_lights": {
+   "casing_width": 0.0,
+   "fill_color": {
+    "a": 255,
+    "b": 232,
+    "g": 205,
+    "r": 178
+   },
+   "fill_enabled": true,
+   "line_cap": "round",
+   "opacity": 0.95,
+   "stroke_color": {
+    "a": 255,
+    "b": 95,
+    "g": 65,
+    "r": 44
+   },
+   "stroke_width": 1.0,
    "visible": true
   },
   "shops": {
@@ -6627,6 +7491,114 @@
    "stroke_width": 0.6,
    "visible": true
   },
+  "seamark_areas": {
+   "casing_width": 0.0,
+   "fill_color": {
+    "a": 255,
+    "b": 183,
+    "g": 41,
+    "r": 64
+   },
+   "fill_enabled": true,
+   "line_cap": "round",
+   "opacity": 0.45,
+   "stroke_color": {
+    "a": 255,
+    "b": 193,
+    "g": 86,
+    "r": 105
+   },
+   "stroke_width": 0.5,
+   "visible": true
+  },
+  "seamark_beacons": {
+   "casing_width": 0.0,
+   "fill_color": {
+    "a": 255,
+    "b": 103,
+    "g": 10,
+    "r": 25
+   },
+   "fill_enabled": true,
+   "line_cap": "round",
+   "opacity": 0.95,
+   "stroke_color": {
+    "a": 255,
+    "b": 210,
+    "g": 158,
+    "r": 170
+   },
+   "stroke_width": 1.0,
+   "visible": true
+  },
+  "seamark_buoys": {
+   "casing_width": 0.0,
+   "fill_color": {
+    "a": 255,
+    "b": 120,
+    "g": 12,
+    "r": 29
+   },
+   "fill_enabled": true,
+   "line_cap": "round",
+   "opacity": 0.95,
+   "stroke_color": {
+    "a": 255,
+    "b": 210,
+    "g": 158,
+    "r": 170
+   },
+   "stroke_width": 1.0,
+   "visible": true
+  },
+  "seamark_harbours": {
+   "casing_width": 0.0,
+   "fill_enabled": false,
+   "line_cap": "round",
+   "opacity": 0.75,
+   "stroke_color": {
+    "a": 255,
+    "b": 198,
+    "g": 108,
+    "r": 125
+   },
+   "stroke_width": 0.7,
+   "visible": true
+  },
+  "seamark_hazards": {
+   "casing_width": 0.0,
+   "fill_enabled": false,
+   "line_cap": "round",
+   "opacity": 1.0,
+   "stroke_color": {
+    "a": 255,
+    "b": 218,
+    "g": 194,
+    "r": 202
+   },
+   "stroke_width": 1.1,
+   "visible": true
+  },
+  "seamark_lights": {
+   "casing_width": 0.0,
+   "fill_color": {
+    "a": 255,
+    "b": 86,
+    "g": 8,
+    "r": 21
+   },
+   "fill_enabled": true,
+   "line_cap": "round",
+   "opacity": 0.95,
+   "stroke_color": {
+    "a": 255,
+    "b": 210,
+    "g": 158,
+    "r": 170
+   },
+   "stroke_width": 1.0,
+   "visible": true
+  },
   "shops": {
    "casing_width": 0.0,
    "fill_enabled": false,
@@ -7376,6 +8348,114 @@
     "r": 127
    },
    "stroke_width": 0.6,
+   "visible": true
+  },
+  "seamark_areas": {
+   "casing_width": 0.0,
+   "fill_color": {
+    "a": 255,
+    "b": 56,
+    "g": 150,
+    "r": 202
+   },
+   "fill_enabled": true,
+   "line_cap": "round",
+   "opacity": 0.45,
+   "stroke_color": {
+    "a": 255,
+    "b": 73,
+    "g": 135,
+    "r": 167
+   },
+   "stroke_width": 0.5,
+   "visible": true
+  },
+  "seamark_beacons": {
+   "casing_width": 0.0,
+   "fill_color": {
+    "a": 255,
+    "b": 132,
+    "g": 197,
+    "r": 232
+   },
+   "fill_enabled": true,
+   "line_cap": "round",
+   "opacity": 0.95,
+   "stroke_color": {
+    "a": 255,
+    "b": 100,
+    "g": 110,
+    "r": 112
+   },
+   "stroke_width": 1.0,
+   "visible": true
+  },
+  "seamark_buoys": {
+   "casing_width": 0.0,
+   "fill_color": {
+    "a": 255,
+    "b": 113,
+    "g": 188,
+    "r": 229
+   },
+   "fill_enabled": true,
+   "line_cap": "round",
+   "opacity": 0.95,
+   "stroke_color": {
+    "a": 255,
+    "b": 100,
+    "g": 110,
+    "r": 112
+   },
+   "stroke_width": 1.0,
+   "visible": true
+  },
+  "seamark_harbours": {
+   "casing_width": 0.0,
+   "fill_enabled": false,
+   "line_cap": "round",
+   "opacity": 0.75,
+   "stroke_color": {
+    "a": 255,
+    "b": 81,
+    "g": 127,
+    "r": 150
+   },
+   "stroke_width": 0.7,
+   "visible": true
+  },
+  "seamark_hazards": {
+   "casing_width": 0.0,
+   "fill_enabled": false,
+   "line_cap": "round",
+   "opacity": 1.0,
+   "stroke_color": {
+    "a": 255,
+    "b": 114,
+    "g": 98,
+    "r": 84
+   },
+   "stroke_width": 1.1,
+   "visible": true
+  },
+  "seamark_lights": {
+   "casing_width": 0.0,
+   "fill_color": {
+    "a": 255,
+    "b": 150,
+    "g": 205,
+    "r": 235
+   },
+   "fill_enabled": true,
+   "line_cap": "round",
+   "opacity": 0.95,
+   "stroke_color": {
+    "a": 255,
+    "b": 100,
+    "g": 110,
+    "r": 112
+   },
+   "stroke_width": 1.0,
    "visible": true
   },
   "shops": {
@@ -8129,6 +9209,114 @@
    "stroke_width": 0.6,
    "visible": true
   },
+  "seamark_areas": {
+   "casing_width": 0.0,
+   "fill_color": {
+    "a": 255,
+    "b": 97,
+    "g": 105,
+    "r": 230
+   },
+   "fill_enabled": true,
+   "line_cap": "round",
+   "opacity": 0.45,
+   "stroke_color": {
+    "a": 255,
+    "b": 104,
+    "g": 110,
+    "r": 180
+   },
+   "stroke_width": 0.5,
+   "visible": true
+  },
+  "seamark_beacons": {
+   "casing_width": 0.0,
+   "fill_color": {
+    "a": 255,
+    "b": 159,
+    "g": 167,
+    "r": 253
+   },
+   "fill_enabled": true,
+   "line_cap": "round",
+   "opacity": 0.95,
+   "stroke_color": {
+    "a": 255,
+    "b": 114,
+    "g": 118,
+    "r": 99
+   },
+   "stroke_width": 1.0,
+   "visible": true
+  },
+  "seamark_buoys": {
+   "casing_width": 0.0,
+   "fill_color": {
+    "a": 255,
+    "b": 144,
+    "g": 152,
+    "r": 253
+   },
+   "fill_enabled": true,
+   "line_cap": "round",
+   "opacity": 0.95,
+   "stroke_color": {
+    "a": 255,
+    "b": 114,
+    "g": 118,
+    "r": 99
+   },
+   "stroke_width": 1.0,
+   "visible": true
+  },
+  "seamark_harbours": {
+   "casing_width": 0.0,
+   "fill_enabled": false,
+   "line_cap": "round",
+   "opacity": 0.75,
+   "stroke_color": {
+    "a": 255,
+    "b": 107,
+    "g": 112,
+    "r": 155
+   },
+   "stroke_width": 0.7,
+   "visible": true
+  },
+  "seamark_hazards": {
+   "casing_width": 0.0,
+   "fill_enabled": false,
+   "line_cap": "round",
+   "opacity": 1.0,
+   "stroke_color": {
+    "a": 255,
+    "b": 120,
+    "g": 122,
+    "r": 59
+   },
+   "stroke_width": 1.1,
+   "visible": true
+  },
+  "seamark_lights": {
+   "casing_width": 0.0,
+   "fill_color": {
+    "a": 255,
+    "b": 173,
+    "g": 181,
+    "r": 252
+   },
+   "fill_enabled": true,
+   "line_cap": "round",
+   "opacity": 0.95,
+   "stroke_color": {
+    "a": 255,
+    "b": 114,
+    "g": 118,
+    "r": 99
+   },
+   "stroke_width": 1.0,
+   "visible": true
+  },
   "shops": {
    "casing_width": 0.0,
    "fill_enabled": false,
@@ -8878,6 +10066,114 @@
     "r": 137
    },
    "stroke_width": 0.6,
+   "visible": true
+  },
+  "seamark_areas": {
+   "casing_width": 0.0,
+   "fill_color": {
+    "a": 255,
+    "b": 158,
+    "g": 176,
+    "r": 177
+   },
+   "fill_enabled": true,
+   "line_cap": "round",
+   "opacity": 0.45,
+   "stroke_color": {
+    "a": 255,
+    "b": 130,
+    "g": 147,
+    "r": 152
+   },
+   "stroke_width": 0.5,
+   "visible": true
+  },
+  "seamark_beacons": {
+   "casing_width": 0.0,
+   "fill_color": {
+    "a": 255,
+    "b": 194,
+    "g": 212,
+    "r": 215
+   },
+   "fill_enabled": true,
+   "line_cap": "round",
+   "opacity": 0.95,
+   "stroke_color": {
+    "a": 255,
+    "b": 85,
+    "g": 101,
+    "r": 112
+   },
+   "stroke_width": 1.0,
+   "visible": true
+  },
+  "seamark_buoys": {
+   "casing_width": 0.0,
+   "fill_color": {
+    "a": 255,
+    "b": 190,
+    "g": 207,
+    "r": 210
+   },
+   "fill_enabled": true,
+   "line_cap": "round",
+   "opacity": 0.95,
+   "stroke_color": {
+    "a": 255,
+    "b": 85,
+    "g": 101,
+    "r": 112
+   },
+   "stroke_width": 1.0,
+   "visible": true
+  },
+  "seamark_harbours": {
+   "casing_width": 0.0,
+   "fill_enabled": false,
+   "line_cap": "round",
+   "opacity": 0.75,
+   "stroke_color": {
+    "a": 255,
+    "b": 116,
+    "g": 132,
+    "r": 140
+   },
+   "stroke_width": 0.7,
+   "visible": true
+  },
+  "seamark_hazards": {
+   "casing_width": 0.0,
+   "fill_enabled": false,
+   "line_cap": "round",
+   "opacity": 1.0,
+   "stroke_color": {
+    "a": 255,
+    "b": 63,
+    "g": 78,
+    "r": 92
+   },
+   "stroke_width": 1.1,
+   "visible": true
+  },
+  "seamark_lights": {
+   "casing_width": 0.0,
+   "fill_color": {
+    "a": 255,
+    "b": 200,
+    "g": 216,
+    "r": 221
+   },
+   "fill_enabled": true,
+   "line_cap": "round",
+   "opacity": 0.95,
+   "stroke_color": {
+    "a": 255,
+    "b": 85,
+    "g": 101,
+    "r": 112
+   },
+   "stroke_width": 1.0,
    "visible": true
   },
   "shops": {
@@ -9631,6 +10927,114 @@
    "stroke_width": 0.6,
    "visible": true
   },
+  "seamark_areas": {
+   "casing_width": 0.0,
+   "fill_color": {
+    "a": 255,
+    "b": 106,
+    "g": 92,
+    "r": 69
+   },
+   "fill_enabled": true,
+   "line_cap": "round",
+   "opacity": 0.45,
+   "stroke_color": {
+    "a": 255,
+    "b": 135,
+    "g": 123,
+    "r": 104
+   },
+   "stroke_width": 0.5,
+   "visible": true
+  },
+  "seamark_beacons": {
+   "casing_width": 0.0,
+   "fill_color": {
+    "a": 255,
+    "b": 68,
+    "g": 57,
+    "r": 42
+   },
+   "fill_enabled": true,
+   "line_cap": "round",
+   "opacity": 0.95,
+   "stroke_color": {
+    "a": 255,
+    "b": 181,
+    "g": 173,
+    "r": 160
+   },
+   "stroke_width": 1.0,
+   "visible": true
+  },
+  "seamark_buoys": {
+   "casing_width": 0.0,
+   "fill_color": {
+    "a": 255,
+    "b": 73,
+    "g": 61,
+    "r": 44
+   },
+   "fill_enabled": true,
+   "line_cap": "round",
+   "opacity": 0.95,
+   "stroke_color": {
+    "a": 255,
+    "b": 181,
+    "g": 173,
+    "r": 160
+   },
+   "stroke_width": 1.0,
+   "visible": true
+  },
+  "seamark_harbours": {
+   "casing_width": 0.0,
+   "fill_enabled": false,
+   "line_cap": "round",
+   "opacity": 0.75,
+   "stroke_color": {
+    "a": 255,
+    "b": 150,
+    "g": 138,
+    "r": 122
+   },
+   "stroke_width": 0.7,
+   "visible": true
+  },
+  "seamark_hazards": {
+   "casing_width": 0.0,
+   "fill_enabled": false,
+   "line_cap": "round",
+   "opacity": 1.0,
+   "stroke_color": {
+    "a": 255,
+    "b": 204,
+    "g": 198,
+    "r": 188
+   },
+   "stroke_width": 1.1,
+   "visible": true
+  },
+  "seamark_lights": {
+   "casing_width": 0.0,
+   "fill_color": {
+    "a": 255,
+    "b": 62,
+    "g": 53,
+    "r": 40
+   },
+   "fill_enabled": true,
+   "line_cap": "round",
+   "opacity": 0.95,
+   "stroke_color": {
+    "a": 255,
+    "b": 181,
+    "g": 173,
+    "r": 160
+   },
+   "stroke_width": 1.0,
+   "visible": true
+  },
   "shops": {
    "casing_width": 0.0,
    "fill_enabled": false,
@@ -10380,6 +11784,114 @@
     "r": 125
    },
    "stroke_width": 0.6,
+   "visible": true
+  },
+  "seamark_areas": {
+   "casing_width": 0.0,
+   "fill_color": {
+    "a": 255,
+    "b": 159,
+    "g": 200,
+    "r": 108
+   },
+   "fill_enabled": true,
+   "line_cap": "round",
+   "opacity": 0.45,
+   "stroke_color": {
+    "a": 255,
+    "b": 130,
+    "g": 161,
+    "r": 94
+   },
+   "stroke_width": 0.5,
+   "visible": true
+  },
+  "seamark_beacons": {
+   "casing_width": 0.0,
+   "fill_color": {
+    "a": 255,
+    "b": 201,
+    "g": 229,
+    "r": 177
+   },
+   "fill_enabled": true,
+   "line_cap": "round",
+   "opacity": 0.95,
+   "stroke_color": {
+    "a": 255,
+    "b": 83,
+    "g": 99,
+    "r": 70
+   },
+   "stroke_width": 1.0,
+   "visible": true
+  },
+  "seamark_buoys": {
+   "casing_width": 0.0,
+   "fill_color": {
+    "a": 255,
+    "b": 195,
+    "g": 227,
+    "r": 163
+   },
+   "fill_enabled": true,
+   "line_cap": "round",
+   "opacity": 0.95,
+   "stroke_color": {
+    "a": 255,
+    "b": 83,
+    "g": 99,
+    "r": 70
+   },
+   "stroke_width": 1.0,
+   "visible": true
+  },
+  "seamark_harbours": {
+   "casing_width": 0.0,
+   "fill_enabled": false,
+   "line_cap": "round",
+   "opacity": 0.75,
+   "stroke_color": {
+    "a": 255,
+    "b": 116,
+    "g": 141,
+    "r": 86
+   },
+   "stroke_width": 0.7,
+   "visible": true
+  },
+  "seamark_hazards": {
+   "casing_width": 0.0,
+   "fill_enabled": false,
+   "line_cap": "round",
+   "opacity": 1.0,
+   "stroke_color": {
+    "a": 255,
+    "b": 60,
+    "g": 68,
+    "r": 58
+   },
+   "stroke_width": 1.1,
+   "visible": true
+  },
+  "seamark_lights": {
+   "casing_width": 0.0,
+   "fill_color": {
+    "a": 255,
+    "b": 208,
+    "g": 232,
+    "r": 190
+   },
+   "fill_enabled": true,
+   "line_cap": "round",
+   "opacity": 0.95,
+   "stroke_color": {
+    "a": 255,
+    "b": 83,
+    "g": 99,
+    "r": 70
+   },
+   "stroke_width": 1.0,
    "visible": true
   },
   "shops": {
@@ -11133,6 +12645,114 @@
    "stroke_width": 0.6,
    "visible": true
   },
+  "seamark_areas": {
+   "casing_width": 0.0,
+   "fill_color": {
+    "a": 255,
+    "b": 158,
+    "g": 164,
+    "r": 27
+   },
+   "fill_enabled": true,
+   "line_cap": "round",
+   "opacity": 0.45,
+   "stroke_color": {
+    "a": 255,
+    "b": 146,
+    "g": 141,
+    "r": 28
+   },
+   "stroke_width": 0.5,
+   "visible": true
+  },
+  "seamark_beacons": {
+   "casing_width": 0.0,
+   "fill_color": {
+    "a": 255,
+    "b": 204,
+    "g": 208,
+    "r": 125
+   },
+   "fill_enabled": true,
+   "line_cap": "round",
+   "opacity": 0.95,
+   "stroke_color": {
+    "a": 255,
+    "b": 125,
+    "g": 105,
+    "r": 31
+   },
+   "stroke_width": 1.0,
+   "visible": true
+  },
+  "seamark_buoys": {
+   "casing_width": 0.0,
+   "fill_color": {
+    "a": 255,
+    "b": 195,
+    "g": 201,
+    "r": 103
+   },
+   "fill_enabled": true,
+   "line_cap": "round",
+   "opacity": 0.95,
+   "stroke_color": {
+    "a": 255,
+    "b": 125,
+    "g": 105,
+    "r": 31
+   },
+   "stroke_width": 1.0,
+   "visible": true
+  },
+  "seamark_harbours": {
+   "casing_width": 0.0,
+   "fill_enabled": false,
+   "line_cap": "round",
+   "opacity": 0.75,
+   "stroke_color": {
+    "a": 255,
+    "b": 139,
+    "g": 130,
+    "r": 29
+   },
+   "stroke_width": 0.7,
+   "visible": true
+  },
+  "seamark_hazards": {
+   "casing_width": 0.0,
+   "fill_enabled": false,
+   "line_cap": "round",
+   "opacity": 1.0,
+   "stroke_color": {
+    "a": 255,
+    "b": 114,
+    "g": 87,
+    "r": 32
+   },
+   "stroke_width": 1.1,
+   "visible": true
+  },
+  "seamark_lights": {
+   "casing_width": 0.0,
+   "fill_color": {
+    "a": 255,
+    "b": 212,
+    "g": 216,
+    "r": 148
+   },
+   "fill_enabled": true,
+   "line_cap": "round",
+   "opacity": 0.95,
+   "stroke_color": {
+    "a": 255,
+    "b": 125,
+    "g": 105,
+    "r": 31
+   },
+   "stroke_width": 1.0,
+   "visible": true
+  },
   "shops": {
    "casing_width": 0.0,
    "fill_enabled": false,
@@ -11884,6 +13504,114 @@
    "stroke_width": 0.6,
    "visible": true
   },
+  "seamark_areas": {
+   "casing_width": 0.0,
+   "fill_color": {
+    "a": 255,
+    "b": 120,
+    "g": 117,
+    "r": 38
+   },
+   "fill_enabled": true,
+   "line_cap": "round",
+   "opacity": 0.45,
+   "stroke_color": {
+    "a": 255,
+    "b": 144,
+    "g": 142,
+    "r": 71
+   },
+   "stroke_width": 0.5,
+   "visible": true
+  },
+  "seamark_beacons": {
+   "casing_width": 0.0,
+   "fill_color": {
+    "a": 255,
+    "b": 97,
+    "g": 81,
+    "r": 25
+   },
+   "fill_enabled": true,
+   "line_cap": "round",
+   "opacity": 0.95,
+   "stroke_color": {
+    "a": 255,
+    "b": 182,
+    "g": 183,
+    "r": 124
+   },
+   "stroke_width": 1.0,
+   "visible": true
+  },
+  "seamark_buoys": {
+   "casing_width": 0.0,
+   "fill_color": {
+    "a": 255,
+    "b": 100,
+    "g": 86,
+    "r": 24
+   },
+   "fill_enabled": true,
+   "line_cap": "round",
+   "opacity": 0.95,
+   "stroke_color": {
+    "a": 255,
+    "b": 182,
+    "g": 183,
+    "r": 124
+   },
+   "stroke_width": 1.0,
+   "visible": true
+  },
+  "seamark_harbours": {
+   "casing_width": 0.0,
+   "fill_enabled": false,
+   "line_cap": "round",
+   "opacity": 0.75,
+   "stroke_color": {
+    "a": 255,
+    "b": 156,
+    "g": 155,
+    "r": 88
+   },
+   "stroke_width": 0.7,
+   "visible": true
+  },
+  "seamark_hazards": {
+   "casing_width": 0.0,
+   "fill_enabled": false,
+   "line_cap": "round",
+   "opacity": 1.0,
+   "stroke_color": {
+    "a": 255,
+    "b": 202,
+    "g": 203,
+    "r": 150
+   },
+   "stroke_width": 1.1,
+   "visible": true
+  },
+  "seamark_lights": {
+   "casing_width": 0.0,
+   "fill_color": {
+    "a": 255,
+    "b": 95,
+    "g": 76,
+    "r": 25
+   },
+   "fill_enabled": true,
+   "line_cap": "round",
+   "opacity": 0.95,
+   "stroke_color": {
+    "a": 255,
+    "b": 182,
+    "g": 183,
+    "r": 124
+   },
+   "stroke_width": 1.0,
+   "visible": true
+  },
   "shops": {
    "casing_width": 0.0,
    "fill_enabled": false,
@@ -12633,6 +14361,114 @@
     "r": 148
    },
    "stroke_width": 0.6,
+   "visible": true
+  },
+  "seamark_areas": {
+   "casing_width": 0.0,
+   "fill_color": {
+    "a": 255,
+    "b": 164,
+    "g": 122,
+    "r": 77
+   },
+   "fill_enabled": true,
+   "line_cap": "round",
+   "opacity": 0.45,
+   "stroke_color": {
+    "a": 255,
+    "b": 147,
+    "g": 127,
+    "r": 109
+   },
+   "stroke_width": 0.5,
+   "visible": true
+  },
+  "seamark_beacons": {
+   "casing_width": 0.0,
+   "fill_color": {
+    "a": 255,
+    "b": 107,
+    "g": 77,
+    "r": 52
+   },
+   "fill_enabled": true,
+   "line_cap": "round",
+   "opacity": 0.95,
+   "stroke_color": {
+    "a": 255,
+    "b": 121,
+    "g": 134,
+    "r": 160
+   },
+   "stroke_width": 1.0,
+   "visible": true
+  },
+  "seamark_buoys": {
+   "casing_width": 0.0,
+   "fill_color": {
+    "a": 255,
+    "b": 122,
+    "g": 87,
+    "r": 54
+   },
+   "fill_enabled": true,
+   "line_cap": "round",
+   "opacity": 0.95,
+   "stroke_color": {
+    "a": 255,
+    "b": 121,
+    "g": 134,
+    "r": 160
+   },
+   "stroke_width": 1.0,
+   "visible": true
+  },
+  "seamark_harbours": {
+   "casing_width": 0.0,
+   "fill_enabled": false,
+   "line_cap": "round",
+   "opacity": 0.75,
+   "stroke_color": {
+    "a": 255,
+    "b": 139,
+    "g": 129,
+    "r": 125
+   },
+   "stroke_width": 0.7,
+   "visible": true
+  },
+  "seamark_hazards": {
+   "casing_width": 0.0,
+   "fill_enabled": false,
+   "line_cap": "round",
+   "opacity": 1.0,
+   "stroke_color": {
+    "a": 255,
+    "b": 108,
+    "g": 138,
+    "r": 185
+   },
+   "stroke_width": 1.1,
+   "visible": true
+  },
+  "seamark_lights": {
+   "casing_width": 0.0,
+   "fill_color": {
+    "a": 255,
+    "b": 93,
+    "g": 68,
+    "r": 50
+   },
+   "fill_enabled": true,
+   "line_cap": "round",
+   "opacity": 0.95,
+   "stroke_color": {
+    "a": 255,
+    "b": 121,
+    "g": 134,
+    "r": 160
+   },
+   "stroke_width": 1.0,
    "visible": true
   },
   "shops": {

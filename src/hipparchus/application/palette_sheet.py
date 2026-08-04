@@ -142,6 +142,36 @@ def style_profile(palette: Palette) -> StyleProfile:
         stroke_color=mix(water, ground, 0.4),
         opacity=0.9,
     )
+    # Sea marks, from each palette's own eight colours rather than chart red and
+    # green. **Shape carries the meaning here and colour does not** — a can is
+    # square and a cone is pointed whatever they are painted — so the marks can
+    # stay in the palette without losing what they say.
+    #
+    # The stroke is ordinary linework, ~1.0. These were 3–4pt in the macOS port
+    # while they were still dots, because a point *is* its stroke to a renderer;
+    # the moment they became shapes those numbers closed the light flare into a
+    # blob and thickened every mast into a smudge. Symbols are outlines, and
+    # outlines want an outline's weight.
+    mark_ink = mix(water, ink, 0.62)
+    styles["seamark_lights"] = _style(
+        stroke=1.0, stroke_color=mark_ink, fill=mix(water, ground, 0.55), opacity=0.95
+    )
+    styles["seamark_buoys"] = _style(
+        stroke=1.0, stroke_color=mark_ink, fill=mix(water, ground, 0.35), opacity=0.95
+    )
+    styles["seamark_beacons"] = _style(
+        stroke=1.0, stroke_color=mark_ink, fill=mix(water, ground, 0.45), opacity=0.95
+    )
+    styles["seamark_hazards"] = _style(stroke=1.1, stroke_color=mix(water, ink, 0.78))
+    styles["seamark_harbours"] = _style(
+        stroke=0.7, stroke_color=mix(water, ink, 0.4), opacity=0.75
+    )
+    # Rules drawn as ground, so they sit under everything and read as an area
+    # rather than as another object competing with the marks.
+    styles["seamark_areas"] = _style(
+        stroke=0.5, stroke_color=mix(water, ink, 0.3),
+        fill=mix(water, ink, 0.10), opacity=0.45,
+    )
     styles["buildings"] = _style(
         stroke=0.35, stroke_color=mix(land, ink, 0.4), fill=land, opacity=0.95
     )

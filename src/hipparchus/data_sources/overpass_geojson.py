@@ -3,9 +3,17 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Sequence
 
 from hipparchus.data_sources.provider import FeatureCollection, GeoJSONMapping
+from hipparchus.data_sources.seamark_symbols import (
+    SIZE_FRACTION,
+    parts_for,
+    placed,
+    span_degrees,
+)
+from hipparchus.data_sources.seamarks import ALL_LAYERS as SEAMARK_LAYERS
+from hipparchus.data_sources.seamarks import layer_for_tags as seamark_layer_for_tags
 
 
 @dataclass(slots=True)
@@ -15,8 +23,16 @@ class OverpassConversionResult:
     feature_collection: FeatureCollection
 
 
-def convert_overpass_to_feature_collection(payload: dict[str, Any]) -> OverpassConversionResult:
-    """Normalize Overpass JSON elements to GeoJSON compatible structures."""
+def convert_overpass_to_feature_collection(
+    payload: dict[str, Any], bbox: Sequence[float] | None = None
+) -> OverpassConversionResult:
+    """Normalize Overpass JSON elements to GeoJSON compatible structures.
+
+    ``bbox`` is ``(min_lon, min_lat, max_lon, max_lat)`` and is what sea mark
+    symbols are sized against — a symbol stated in degrees is a speck across a
+    sea and a monster across a harbour. Without it a mark stays the bare point
+    Overpass sent, which is drawable but says only "something is here".
+    """
     elements = payload.get("elements", [])
     features_by_layer: dict[str, list[GeoJSONMapping]] = {
         "roads": [],
@@ -34,10 +50,13 @@ def convert_overpass_to_feature_collection(payload: dict[str, Any]) -> OverpassC
         "landuse": [],
         "barriers": [],
         "power": [],
+        **{layer: [] for layer in SEAMARK_LAYERS},
     }
+    symbol_size = SIZE_FRACTION * span_degrees(bbox) if bbox is not None else None
 
     for element in elements:
-        layer = _classify_layer(element.get("tags", {}))
+        tags = element.get("tags", {})
+        layer = _classify_layer(tags)
         if layer is None:
             continue
 
@@ -45,11 +64,14 @@ def convert_overpass_to_feature_collection(payload: dict[str, Any]) -> OverpassC
         if geometry is None:
             continue
 
+        if layer in SEAMARK_LAYERS and symbol_size is not None:
+            geometry = _symbol_geometry(geometry, tags, symbol_size) or geometry
+
         feature = {
             "type": "Feature",
             "id": f"{element.get('type', 'element')}/{element.get('id', 'unknown')}",
             "geometry": geometry,
-            "properties": element.get("tags", {}),
+            "properties": tags,
         }
         features_by_layer[layer].append(feature)
 
@@ -69,7 +91,54 @@ def convert_overpass_to_feature_collection(payload: dict[str, Any]) -> OverpassC
     return OverpassConversionResult(feature_collection=collection)
 
 
+def _symbol_geometry(
+    geometry: GeoJSONMapping, tags: dict[str, Any], size: float
+) -> GeoJSONMapping | None:
+    """Replace a mark's bare point with its chart symbol.
+
+    Only points. A fairway is a way and a restricted area is a relation, and both
+    already have a shape that means something — stamping a symbol on the middle
+    of them would replace real geometry with a decoration.
+
+    **The symbol is emitted as geometry rather than as a point with a style.**
+    That is the lesson the macOS port paid for: a renderer that turns points into
+    labels drops the ones with no name, and twenty-one buoys were fetched and
+    none drawn. Geometry cannot be dropped that way.
+    """
+    if geometry.get("type") != "Point":
+        return None
+    parts = parts_for(tags)
+    if not parts:
+        return None
+
+    coordinates = geometry.get("coordinates") or []
+    if len(coordinates) < 2:
+        return None
+    lon, lat = float(coordinates[0]), float(coordinates[1])
+
+    shapes: list[GeoJSONMapping] = []
+    for part in parts:
+        ring = placed(part, lon, lat, size)
+        if part.closed:
+            shapes.append({"type": "Polygon", "coordinates": [ring + [ring[0]]]})
+        else:
+            shapes.append({"type": "LineString", "coordinates": ring})
+
+    if len(shapes) == 1:
+        return shapes[0]
+    return {"type": "GeometryCollection", "geometries": shapes}
+
+
 def _classify_layer(tags: dict[str, Any]) -> str | None:
+    # **First, and deliberately.** A lighthouse has a `name`, and the rule
+    # further down sends anything named to `places` — so classified later, every
+    # named seamark would have become a town label and the six marine layers
+    # would have come back empty on exactly the coastlines that have the best
+    # coverage. A buoy is not a place.
+    seamark = seamark_layer_for_tags(tags)
+    if seamark is not None:
+        return seamark
+
     if "railway" in tags:
         return "railways"
     if "highway" in tags:

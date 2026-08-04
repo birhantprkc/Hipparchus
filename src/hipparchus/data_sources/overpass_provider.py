@@ -83,6 +83,10 @@ class OverpassMapProvider:
 
     async def fetch_bbox_async(self, query: BBoxQuery, force_refresh: bool = False) -> FeatureCollection:
         cache_key = self._cache_key(query)
+        # Sea mark symbols are sized against the frame, so the decoder needs it.
+        # A symbol stated in degrees is a speck across a sea and a monster across
+        # a harbour.
+        bbox = (query.min_lon, query.min_lat, query.max_lon, query.max_lat)
         if not force_refresh:
             hot = self._feature_hot_cache.get(cache_key)
             if hot is not None:
@@ -94,7 +98,7 @@ class OverpassMapProvider:
             cached = self._cache.get(cache_key)
             if cached is not None:
                 payload = json.loads(cached.decode("utf-8"))
-                converted = convert_overpass_to_feature_collection(payload).feature_collection
+                converted = convert_overpass_to_feature_collection(payload, bbox).feature_collection
                 converted.metadata["cache"] = "hit"
                 self._remember_hot(cache_key, converted)
                 self._touch_index(cache_key, query)
@@ -104,7 +108,7 @@ class OverpassMapProvider:
         payload = await self._execute_with_retries(query_text)
         self._cache.set(cache_key, json.dumps(payload, sort_keys=True).encode("utf-8"))
 
-        converted = convert_overpass_to_feature_collection(payload).feature_collection
+        converted = convert_overpass_to_feature_collection(payload, bbox).feature_collection
         converted.metadata["cache"] = "refresh" if force_refresh else "miss"
         converted.bbox = (query.min_lon, query.min_lat, query.max_lon, query.max_lat)
         self._remember_hot(cache_key, converted)

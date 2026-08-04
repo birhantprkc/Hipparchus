@@ -8,6 +8,8 @@ from typing import Iterable
 from shapely.geometry import LineString, LinearRing, MultiLineString, MultiPolygon, Point, Polygon
 from shapely.geometry.base import BaseGeometry
 
+from hipparchus.data_sources.seamarks import ALL_LAYERS as SEAMARK_LAYERS
+
 
 @dataclass(slots=True, frozen=True)
 class LayerSmoothingRule:
@@ -32,7 +34,16 @@ LINE_SMOOTHING_LAYERS = {
     "bathymetry",
 }
 POLYGON_SMOOTHING_LAYERS = {"water", "parks", "forests", "fields", "natural", "landuse", "coastline"}
-NEVER_SMOOTH_LAYERS = {"buildings", "barriers", "power", "shops", "amenities", "places"}
+#: Sea mark symbols are a vocabulary, and smoothing destroys the vocabulary.
+#:
+#: A can and a cone differ by their corners; rounding both turns them into the
+#: same blob, and the whole point of the shapes is that they survive being small.
+#: The cardinal topmarks fail worst — the egg and the wine glass are *made* of
+#: the points where two cones meet.
+NEVER_SMOOTH_LAYERS = {
+    "buildings", "barriers", "power", "shops", "amenities", "places",
+    *SEAMARK_LAYERS,
+}
 
 
 def smoothing_rule_for_layer(layer_name: str, base_iterations: int) -> LayerSmoothingRule:

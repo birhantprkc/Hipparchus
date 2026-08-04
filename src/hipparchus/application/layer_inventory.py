@@ -65,6 +65,12 @@ LAYER_LABELS: dict[str, str] = {
     "terrain_index_contours": "Index contours",
     "terrain_hillshade": "Hillshade",
     "bathymetry": "Bathymetry",
+    "seamark_lights": "Lights",
+    "seamark_buoys": "Buoys",
+    "seamark_beacons": "Beacons",
+    "seamark_hazards": "Wrecks & hazards",
+    "seamark_harbours": "Harbours & anchorages",
+    "seamark_areas": "Restricted & routed areas",
     "summits": "Summit heights",
     "night_lights": "Night lights",
     "earthquakes_shallow": "Earthquakes, shallow",
@@ -94,7 +100,9 @@ LAYER_LABELS: dict[str, str] = {
 }
 
 # Order the panel reads in: terrain under the built environment, labels last.
-GROUP_ORDER: tuple[str, ...] = ("Terrain", "Water & land", "Built", "Movement", "Labels", "Derived")
+GROUP_ORDER: tuple[str, ...] = (
+    "Terrain", "Water & land", "Sea marks", "Built", "Movement", "Labels", "Derived",
+)
 
 _GROUPS: dict[str, str] = {
     "elevation_bands": "Terrain",
@@ -104,6 +112,15 @@ _GROUPS: dict[str, str] = {
     "bathymetry": "Terrain",
     "summits": "Terrain",
     "night_lights": "Terrain",
+    # A group of their own rather than folded into "Water & land": a shoreline
+    # is geography and a buoy is a statement about navigation, and the
+    # not-for-navigation notice fires on one and not the other.
+    "seamark_lights": "Sea marks",
+    "seamark_buoys": "Sea marks",
+    "seamark_beacons": "Sea marks",
+    "seamark_hazards": "Sea marks",
+    "seamark_harbours": "Sea marks",
+    "seamark_areas": "Sea marks",
     "coastline": "Water & land",
     "water": "Water & land",
     "parks": "Water & land",

@@ -29,6 +29,7 @@ supersample factor on :class:`RenderScene`.
 
 from __future__ import annotations
 
+from hipparchus.data_sources.seamarks import ALL_LAYERS as SEAMARK_LAYERS
 from hipparchus.rendering.models import RenderScene
 
 #: The layers whose presence means the sheet is making a claim about the sea
@@ -38,11 +39,11 @@ from hipparchus.rendering.models import RenderScene
 #: geography, and a street map of Amsterdam is not pretending to be a chart. It
 #: is the depths that do that.
 #:
-#: The macOS application fires on more than this — sea marks in six layers,
-#: filled depth bands and current streamlines, none of which this one draws yet.
-#: **Add them here in the same commit that adds the layer**, because the failure
-#: is silent: the sheet simply stops warning, and looks perfectly fine doing it.
-MARINE_LAYERS: frozenset[str] = frozenset({"bathymetry"})
+#: The macOS application also fires on filled depth bands and current
+#: streamlines, neither of which this one draws yet. **Add them here in the same
+#: commit that adds the layer**, because the failure is silent: the sheet simply
+#: stops warning, and looks perfectly fine doing it.
+MARINE_LAYERS: frozenset[str] = frozenset({"bathymetry", *SEAMARK_LAYERS})
 
 #: The words. Short enough to sit in a margin, specific enough to mean something
 #: — "not for navigation" alone reads as boilerplate, and the second clause is
