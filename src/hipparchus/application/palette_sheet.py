@@ -168,9 +168,16 @@ def style_profile(palette: Palette) -> StyleProfile:
     )
     # Rules drawn as ground, so they sit under everything and read as an area
     # rather than as another object competing with the marks.
+    #
+    # **A tenth of the way from water to ink, at 0.45 opacity, was water.** Sixty
+    # restricted and routed areas drew nothing at all over the Elbe, which the
+    # feature count could not show and the render did in one look. An area that
+    # is a *rule* has to be visible enough to be obeyed; it is the edge that
+    # matters, so the stroke carries most of the increase and the fill only
+    # enough to tell inside from out.
     styles["seamark_areas"] = _style(
-        stroke=0.5, stroke_color=mix(water, ink, 0.3),
-        fill=mix(water, ink, 0.10), opacity=0.45,
+        stroke=0.8, stroke_color=mix(water, ink, 0.52),
+        fill=mix(water, ink, 0.24), opacity=0.6,
     )
     styles["buildings"] = _style(
         stroke=0.35, stroke_color=mix(land, ink, 0.4), fill=land, opacity=0.95

@@ -75,6 +75,21 @@ class Plate:
 
 PLATES: tuple[Plate, ...] = (
     Plate(
+        slug="cuxhaven-seamarks",
+        title="Cuxhaven and the Elbe fairway, Germany",
+        # The densest sea mark coverage in OSM that I have found: the fairway
+        # into the Elbe is buoyed, beaconed and lit the whole way, which is what
+        # makes it the honest test of the symbols. A sparse coast proves
+        # nothing — the marks have to be checked where they crowd each other.
+        min_lon=8.5800,
+        min_lat=53.8300,
+        max_lon=8.8200,
+        max_lat=53.9300,
+        preset="Coastal Survey",
+        palette="Admiralty",
+        sources=("overpass", "terrain_tiles"),
+    ),
+    Plate(
         slug="cartagena-coastal-survey",
         title="Cartagena de Indias, Colombia",
         # The walled city and Bocagrande, between the Caribbean and the bay.
@@ -185,6 +200,18 @@ def build_scene(plate_spec: Plate) -> RenderScene:
     )
     counts = {name: len(features) for name, features in collection.features_by_layer.items() if features}
     print(f"  fetched {sum(counts.values())} features across {len(counts)} layers", flush=True)
+    # Per-layer counts for the marine layers, because a total cannot tell "the
+    # sea is empty" from "the land is busy". The first render of this plate came
+    # back with no sea marks at all and a perfectly healthy-looking total of
+    # thirty-four thousand features.
+    marine = {
+        name: count for name, count in sorted(counts.items())
+        if name.startswith("seamark_") or name == "bathymetry"
+    }
+    if marine:
+        print("   " + "  ".join(f"{name}={count}" for name, count in marine.items()), flush=True)
+    else:
+        print("   no marine layers in this sheet", flush=True)
 
     return RenderSceneBuilder().build(
         feature_collection=collection,

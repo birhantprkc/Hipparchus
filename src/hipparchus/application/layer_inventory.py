@@ -14,6 +14,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 
+from hipparchus.data_sources.seamarks import ALL_LAYERS as SEAMARK_LAYERS
 from hipparchus.rendering.models import RenderScene
 
 
@@ -45,6 +46,12 @@ BASE_FETCH_LAYERS: tuple[str, ...] = (
     "landuse",
     "barriers",
     "power",
+    # **A layer that is not on this list is never fetched**, whatever else is
+    # wired up for it. The sea marks were classified, symbolised, styled, given
+    # a panel group and a place in the draw order, and every test passed —
+    # because the tests drove the decoder with a hand-made payload. The first
+    # real render of the Elbe fairway came back with an empty sea.
+    *SEAMARK_LAYERS,
 )
 
 

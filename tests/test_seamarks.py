@@ -262,6 +262,25 @@ class DecodingTests(unittest.TestCase):
 
 
 class IntegrationTests(unittest.TestCase):
+    def test_every_layer_is_actually_asked_for(self) -> None:
+        """**The one that would have caught the real bug.**
+
+        The marks were classified, symbolised, styled, given a panel group and a
+        place in the draw order, and every test here passed — because they all
+        drove the decoder with a hand-made payload. `BASE_FETCH_LAYERS` is what
+        a real fetch requests, the six layers were missing from it, and the first
+        render of the Elbe fairway came back with an empty sea and a perfectly
+        healthy total of thirty-four thousand features.
+
+        A layer that is not on that list is never fetched, whatever else is
+        wired up for it.
+        """
+        from hipparchus.application.layer_inventory import BASE_FETCH_LAYERS
+
+        for layer in ALL_LAYERS:
+            with self.subTest(layer=layer):
+                self.assertIn(layer, BASE_FETCH_LAYERS)
+
     def test_symbols_are_never_smoothed(self) -> None:
         """A can and a cone differ by their corners. Rounding both turns them
         into the same blob, and the cardinal topmarks fail worst — the egg and

@@ -623,20 +623,20 @@
    "casing_width": 0.0,
    "fill_color": {
     "a": 255,
-    "b": 210,
-    "g": 198,
-    "r": 161
+    "b": 190,
+    "g": 177,
+    "r": 140
    },
    "fill_enabled": true,
    "line_cap": "round",
-   "opacity": 0.45,
+   "opacity": 0.6,
    "stroke_color": {
     "a": 255,
-    "b": 181,
-    "g": 167,
-    "r": 131
+    "b": 150,
+    "g": 133,
+    "r": 98
    },
-   "stroke_width": 0.5,
+   "stroke_width": 0.8,
    "visible": true
   },
   "seamark_beacons": {
@@ -1482,20 +1482,20 @@
    "casing_width": 0.0,
    "fill_color": {
     "a": 255,
-    "b": 180,
-    "g": 180,
-    "r": 146
+    "b": 159,
+    "g": 160,
+    "r": 129
    },
    "fill_enabled": true,
    "line_cap": "round",
-   "opacity": 0.45,
+   "opacity": 0.6,
    "stroke_color": {
     "a": 255,
-    "b": 149,
-    "g": 152,
-    "r": 122
+    "b": 115,
+    "g": 121,
+    "r": 96
    },
-   "stroke_width": 0.5,
+   "stroke_width": 0.8,
    "visible": true
   },
   "seamark_beacons": {
@@ -2342,19 +2342,19 @@
    "fill_color": {
     "a": 255,
     "b": 178,
-    "g": 91,
+    "g": 88,
     "r": 27
    },
    "fill_enabled": true,
    "line_cap": "round",
-   "opacity": 0.45,
+   "opacity": 0.6,
    "stroke_color": {
     "a": 255,
-    "b": 178,
-    "g": 86,
-    "r": 26
+    "b": 177,
+    "g": 80,
+    "r": 25
    },
-   "stroke_width": 0.5,
+   "stroke_width": 0.8,
    "visible": true
   },
   "seamark_beacons": {
@@ -3200,20 +3200,20 @@
    "casing_width": 0.0,
    "fill_color": {
     "a": 255,
-    "b": 134,
-    "g": 122,
-    "r": 125
+    "b": 123,
+    "g": 110,
+    "r": 113
    },
    "fill_enabled": true,
    "line_cap": "round",
-   "opacity": 0.45,
+   "opacity": 0.6,
    "stroke_color": {
     "a": 255,
-    "b": 118,
-    "g": 104,
-    "r": 108
+    "b": 100,
+    "g": 85,
+    "r": 88
    },
-   "stroke_width": 0.5,
+   "stroke_width": 0.8,
    "visible": true
   },
   "seamark_beacons": {
@@ -4059,20 +4059,20 @@
    "casing_width": 0.0,
    "fill_color": {
     "a": 255,
-    "b": 89,
-    "g": 89,
-    "r": 89
+    "b": 115,
+    "g": 115,
+    "r": 115
    },
    "fill_enabled": true,
    "line_cap": "round",
-   "opacity": 0.45,
+   "opacity": 0.6,
    "stroke_color": {
     "a": 255,
-    "b": 126,
-    "g": 126,
-    "r": 126
+    "b": 167,
+    "g": 167,
+    "r": 167
    },
-   "stroke_width": 0.5,
+   "stroke_width": 0.8,
    "visible": true
   },
   "seamark_beacons": {
@@ -4918,20 +4918,20 @@
    "casing_width": 0.0,
    "fill_color": {
     "a": 255,
-    "b": 166,
-    "g": 166,
-    "r": 166
+    "b": 140,
+    "g": 140,
+    "r": 140
    },
    "fill_enabled": true,
    "line_cap": "round",
-   "opacity": 0.45,
+   "opacity": 0.6,
    "stroke_color": {
     "a": 255,
-    "b": 129,
-    "g": 129,
-    "r": 129
+    "b": 88,
+    "g": 88,
+    "r": 88
    },
-   "stroke_width": 0.5,
+   "stroke_width": 0.8,
    "visible": true
   },
   "seamark_beacons": {
@@ -5777,20 +5777,20 @@
    "casing_width": 0.0,
    "fill_color": {
     "a": 255,
-    "b": 141,
-    "g": 127,
-    "r": 52
+    "b": 122,
+    "g": 111,
+    "r": 48
    },
    "fill_enabled": true,
    "line_cap": "round",
-   "opacity": 0.45,
+   "opacity": 0.6,
    "stroke_color": {
     "a": 255,
-    "b": 114,
-    "g": 104,
-    "r": 46
+    "b": 85,
+    "g": 78,
+    "r": 41
    },
-   "stroke_width": 0.5,
+   "stroke_width": 0.8,
    "visible": true
   },
   "seamark_beacons": {
@@ -6636,20 +6636,20 @@
    "casing_width": 0.0,
    "fill_color": {
     "a": 255,
-    "b": 209,
-    "g": 148,
-    "r": 89
+    "b": 178,
+    "g": 126,
+    "r": 77
    },
    "fill_enabled": true,
    "line_cap": "round",
-   "opacity": 0.45,
+   "opacity": 0.6,
    "stroke_color": {
     "a": 255,
-    "b": 165,
-    "g": 116,
-    "r": 72
+    "b": 117,
+    "g": 81,
+    "r": 53
    },
-   "stroke_width": 0.5,
+   "stroke_width": 0.8,
    "visible": true
   },
   "seamark_beacons": {
@@ -7495,20 +7495,20 @@
    "casing_width": 0.0,
    "fill_color": {
     "a": 255,
-    "b": 183,
-    "g": 41,
-    "r": 64
+    "b": 190,
+    "g": 72,
+    "r": 93
    },
    "fill_enabled": true,
    "line_cap": "round",
-   "opacity": 0.45,
+   "opacity": 0.6,
    "stroke_color": {
     "a": 255,
-    "b": 193,
-    "g": 86,
-    "r": 105
+    "b": 205,
+    "g": 136,
+    "r": 150
    },
-   "stroke_width": 0.5,
+   "stroke_width": 0.8,
    "visible": true
   },
   "seamark_beacons": {
@@ -8354,20 +8354,20 @@
    "casing_width": 0.0,
    "fill_color": {
     "a": 255,
-    "b": 56,
-    "g": 150,
-    "r": 202
+    "b": 68,
+    "g": 140,
+    "r": 177
    },
    "fill_enabled": true,
    "line_cap": "round",
-   "opacity": 0.45,
+   "opacity": 0.6,
    "stroke_color": {
     "a": 255,
-    "b": 73,
-    "g": 135,
-    "r": 167
+    "b": 92,
+    "g": 118,
+    "r": 129
    },
-   "stroke_width": 0.5,
+   "stroke_width": 0.8,
    "visible": true
   },
   "seamark_beacons": {
@@ -9213,20 +9213,20 @@
    "casing_width": 0.0,
    "fill_color": {
     "a": 255,
-    "b": 97,
-    "g": 105,
-    "r": 230
+    "b": 102,
+    "g": 108,
+    "r": 195
    },
    "fill_enabled": true,
    "line_cap": "round",
-   "opacity": 0.45,
+   "opacity": 0.6,
    "stroke_color": {
     "a": 255,
-    "b": 104,
-    "g": 110,
-    "r": 180
+    "b": 111,
+    "g": 116,
+    "r": 124
    },
-   "stroke_width": 0.5,
+   "stroke_width": 0.8,
    "visible": true
   },
   "seamark_beacons": {
@@ -10072,20 +10072,20 @@
    "casing_width": 0.0,
    "fill_color": {
     "a": 255,
-    "b": 158,
-    "g": 176,
-    "r": 177
+    "b": 138,
+    "g": 155,
+    "r": 160
    },
    "fill_enabled": true,
    "line_cap": "round",
-   "opacity": 0.45,
+   "opacity": 0.6,
    "stroke_color": {
     "a": 255,
-    "b": 130,
-    "g": 147,
-    "r": 152
+    "b": 99,
+    "g": 115,
+    "r": 124
    },
-   "stroke_width": 0.5,
+   "stroke_width": 0.8,
    "visible": true
   },
   "seamark_beacons": {
@@ -10931,20 +10931,20 @@
    "casing_width": 0.0,
    "fill_color": {
     "a": 255,
-    "b": 106,
-    "g": 92,
-    "r": 69
+    "b": 127,
+    "g": 113,
+    "r": 94
    },
    "fill_enabled": true,
    "line_cap": "round",
-   "opacity": 0.45,
+   "opacity": 0.6,
    "stroke_color": {
     "a": 255,
-    "b": 135,
-    "g": 123,
-    "r": 104
+    "b": 167,
+    "g": 157,
+    "r": 142
    },
-   "stroke_width": 0.5,
+   "stroke_width": 0.8,
    "visible": true
   },
   "seamark_beacons": {
@@ -11790,20 +11790,20 @@
    "casing_width": 0.0,
    "fill_color": {
     "a": 255,
-    "b": 159,
-    "g": 200,
-    "r": 108
+    "b": 139,
+    "g": 172,
+    "r": 98
    },
    "fill_enabled": true,
    "line_cap": "round",
-   "opacity": 0.45,
+   "opacity": 0.6,
    "stroke_color": {
     "a": 255,
-    "b": 130,
-    "g": 161,
-    "r": 94
+    "b": 98,
+    "g": 118,
+    "r": 77
    },
-   "stroke_width": 0.5,
+   "stroke_width": 0.8,
    "visible": true
   },
   "seamark_beacons": {
@@ -12649,20 +12649,20 @@
    "casing_width": 0.0,
    "fill_color": {
     "a": 255,
-    "b": 158,
-    "g": 164,
-    "r": 27
+    "b": 149,
+    "g": 148,
+    "r": 28
    },
    "fill_enabled": true,
    "line_cap": "round",
-   "opacity": 0.45,
+   "opacity": 0.6,
    "stroke_color": {
     "a": 255,
-    "b": 146,
-    "g": 141,
-    "r": 28
+    "b": 131,
+    "g": 116,
+    "r": 30
    },
-   "stroke_width": 0.5,
+   "stroke_width": 0.8,
    "visible": true
   },
   "seamark_beacons": {
@@ -13508,20 +13508,20 @@
    "casing_width": 0.0,
    "fill_color": {
     "a": 255,
-    "b": 120,
-    "g": 117,
-    "r": 38
+    "b": 137,
+    "g": 134,
+    "r": 61
    },
    "fill_enabled": true,
    "line_cap": "round",
-   "opacity": 0.45,
+   "opacity": 0.6,
    "stroke_color": {
     "a": 255,
-    "b": 144,
-    "g": 142,
-    "r": 71
+    "b": 170,
+    "g": 170,
+    "r": 107
    },
-   "stroke_width": 0.5,
+   "stroke_width": 0.8,
    "visible": true
   },
   "seamark_beacons": {
@@ -14367,20 +14367,20 @@
    "casing_width": 0.0,
    "fill_color": {
     "a": 255,
-    "b": 164,
-    "g": 122,
-    "r": 77
+    "b": 152,
+    "g": 126,
+    "r": 99
    },
    "fill_enabled": true,
    "line_cap": "round",
-   "opacity": 0.45,
+   "opacity": 0.6,
    "stroke_color": {
     "a": 255,
-    "b": 147,
-    "g": 127,
-    "r": 109
+    "b": 129,
+    "g": 132,
+    "r": 144
    },
-   "stroke_width": 0.5,
+   "stroke_width": 0.8,
    "visible": true
   },
   "seamark_beacons": {
