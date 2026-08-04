@@ -40,6 +40,7 @@ EXTRA_LAYERS = (
     "satellite_footprints",
     "bathymetry",
     "summits",
+    "current_streamlines",
 )
 ALL_OPTIONAL_LAYERS = tuple(dict.fromkeys((*SUPPORTED_LAYERS, *EXTRA_LAYERS)))
 

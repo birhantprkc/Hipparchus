@@ -89,6 +89,14 @@ class RenderSceneBuilder:
         layer_geometries: dict[str, list[BaseGeometry]] = {}
         # Where each banded geometry sits in its ramp, 0 at the lowest band.
         band_ramp_positions: dict[str, list[float]] = {}
+        # Per-feature stroke multipliers a provider asked for, parallel to the
+        # geometries as they were read. **Used only if the count still matches
+        # after clipping and simplification** — those are order-preserving
+        # filters, so an equal length means alignment held, and an unequal one
+        # means it did not. Falling back to a flat width there is uniform but
+        # right; a misaligned list would draw the wrong weight on every line and
+        # look entirely plausible.
+        feature_scales: dict[str, list[float]] = {}
         max_n = geometry_profile.max_on_screen_features_per_layer
         max_n = max(1, int(max_n * profile.geometry_cap_scale))
         raw_cap = max_n
@@ -154,6 +162,7 @@ class RenderSceneBuilder:
                     band_ramp_positions[layer_name] = band_positions[:max_n]
             else:
                 geoms: list[BaseGeometry] = []
+                scales: list[float] = []
                 for feature in features.get("features", []):
                     if len(geoms) >= raw_cap:
                         break
@@ -165,6 +174,11 @@ class RenderSceneBuilder:
                     except Exception:
                         diagnostics["invalid_geometries"] = int(diagnostics["invalid_geometries"]) + 1
                         continue
+                    scales.append(
+                        float(feature.get("properties", {}).get("stroke_scale", 1.0))
+                    )
+                if any(scale != 1.0 for scale in scales):
+                    feature_scales[layer_name] = scales
                 if geoms:
                     # Clip geometries to bbox to prevent rendering outside visible area
                     if clip_bbox is not None:
@@ -299,6 +313,18 @@ class RenderSceneBuilder:
                 fill_colors = [_blend(style.fill_color, high, position) for position in positions]
 
             weights: list[float] = []
+            # A per-feature stroke multiplier the provider asked for.
+            #
+            # **A feature carrying `stroke_scale` that nothing reads draws at one
+            # flat width**, which for the currents means a field that says where
+            # the water goes and nothing about how fast — the entire second half
+            # of what a current chart is for, silently absent. Illumination
+            # produces its weights the same way, further down; this is the same
+            # channel used by a provider rather than by a style.
+            scales = feature_scales.get(layer_name)
+            if scales and len(scales) == len(geoms):
+                weights = scales
+
             if style.illumination > 0.0 and geoms:
                 # Last step in the pipeline on purpose: geometry and weight are
                 # produced together, so nothing downstream can desynchronise them.

@@ -75,6 +75,20 @@ class Plate:
 
 PLATES: tuple[Plate, ...] = (
     Plate(
+        slug="aegean-currents",
+        title="The Aegean and the Levantine, surface currents",
+        # A sea-sized frame on purpose: the geostrophic field is 0.25°, so a bay
+        # is four cells across and yields nothing. This is the frame the macOS
+        # port used, so the two can be compared.
+        min_lon=22.0,
+        min_lat=34.0,
+        max_lon=29.0,
+        max_lat=41.0,
+        preset="Coastal Survey",
+        palette="Admiralty",
+        sources=("terrain_tiles", "erddap_current"),
+    ),
+    Plate(
         slug="cuxhaven-seamarks",
         title="Cuxhaven and the Elbe fairway, Germany",
         # The densest sea mark coverage in OSM that I have found: the fairway
@@ -206,7 +220,8 @@ def build_scene(plate_spec: Plate) -> RenderScene:
     # thirty-four thousand features.
     marine = {
         name: count for name, count in sorted(counts.items())
-        if name.startswith("seamark_") or name in {"bathymetry", "depth_bands"}
+        if name.startswith("seamark_")
+        or name in {"bathymetry", "depth_bands", "current_streamlines"}
     }
     if marine:
         print("   " + "  ".join(f"{name}={count}" for name, count in marine.items()), flush=True)

@@ -97,6 +97,20 @@
    "stroke_width": 1.6,
    "visible": true
   },
+  "current_streamlines": {
+   "casing_width": 0.0,
+   "fill_enabled": false,
+   "line_cap": "round",
+   "opacity": 0.85,
+   "stroke_color": {
+    "a": 255,
+    "b": 136,
+    "g": 117,
+    "r": 83
+   },
+   "stroke_width": 1.1,
+   "visible": true
+  },
   "depth_bands": {
    "casing_width": 0.0,
    "fill_color": {
@@ -980,6 +994,20 @@
     "r": 104
    },
    "stroke_width": 1.6,
+   "visible": true
+  },
+  "current_streamlines": {
+   "casing_width": 0.0,
+   "fill_enabled": false,
+   "line_cap": "round",
+   "opacity": 0.85,
+   "stroke_color": {
+    "a": 255,
+    "b": 99,
+    "g": 107,
+    "r": 84
+   },
+   "stroke_width": 1.1,
    "visible": true
   },
   "depth_bands": {
@@ -1867,6 +1895,20 @@
    "stroke_width": 1.6,
    "visible": true
   },
+  "current_streamlines": {
+   "casing_width": 0.0,
+   "fill_enabled": false,
+   "line_cap": "round",
+   "opacity": 0.85,
+   "stroke_color": {
+    "a": 255,
+    "b": 177,
+    "g": 77,
+    "r": 24
+   },
+   "stroke_width": 1.1,
+   "visible": true
+  },
   "depth_bands": {
    "casing_width": 0.0,
    "fill_color": {
@@ -2750,6 +2792,20 @@
     "r": 94
    },
    "stroke_width": 1.6,
+   "visible": true
+  },
+  "current_streamlines": {
+   "casing_width": 0.0,
+   "fill_enabled": false,
+   "line_cap": "round",
+   "opacity": 0.85,
+   "stroke_color": {
+    "a": 255,
+    "b": 92,
+    "g": 76,
+    "r": 79
+   },
+   "stroke_width": 1.1,
    "visible": true
   },
   "depth_bands": {
@@ -3637,6 +3693,20 @@
    "stroke_width": 1.6,
    "visible": true
   },
+  "current_streamlines": {
+   "casing_width": 0.0,
+   "fill_enabled": false,
+   "line_cap": "round",
+   "opacity": 0.85,
+   "stroke_color": {
+    "a": 255,
+    "b": 185,
+    "g": 185,
+    "r": 185
+   },
+   "stroke_width": 1.1,
+   "visible": true
+  },
   "depth_bands": {
    "casing_width": 0.0,
    "fill_color": {
@@ -4520,6 +4590,20 @@
     "r": 101
    },
    "stroke_width": 1.6,
+   "visible": true
+  },
+  "current_streamlines": {
+   "casing_width": 0.0,
+   "fill_enabled": false,
+   "line_cap": "round",
+   "opacity": 0.85,
+   "stroke_color": {
+    "a": 255,
+    "b": 70,
+    "g": 70,
+    "r": 70
+   },
+   "stroke_width": 1.1,
    "visible": true
   },
   "depth_bands": {
@@ -5407,6 +5491,20 @@
    "stroke_width": 1.6,
    "visible": true
   },
+  "current_streamlines": {
+   "casing_width": 0.0,
+   "fill_enabled": false,
+   "line_cap": "round",
+   "opacity": 0.85,
+   "stroke_color": {
+    "a": 255,
+    "b": 72,
+    "g": 66,
+    "r": 38
+   },
+   "stroke_width": 1.1,
+   "visible": true
+  },
   "depth_bands": {
    "casing_width": 0.0,
    "fill_color": {
@@ -6290,6 +6388,20 @@
     "r": 59
    },
    "stroke_width": 1.6,
+   "visible": true
+  },
+  "current_streamlines": {
+   "casing_width": 0.0,
+   "fill_enabled": false,
+   "line_cap": "round",
+   "opacity": 0.85,
+   "stroke_color": {
+    "a": 255,
+    "b": 95,
+    "g": 65,
+    "r": 44
+   },
+   "stroke_width": 1.1,
    "visible": true
   },
   "depth_bands": {
@@ -7177,6 +7289,20 @@
    "stroke_width": 1.6,
    "visible": true
   },
+  "current_streamlines": {
+   "casing_width": 0.0,
+   "fill_enabled": false,
+   "line_cap": "round",
+   "opacity": 0.85,
+   "stroke_color": {
+    "a": 255,
+    "b": 210,
+    "g": 158,
+    "r": 170
+   },
+   "stroke_width": 1.1,
+   "visible": true
+  },
   "depth_bands": {
    "casing_width": 0.0,
    "fill_color": {
@@ -8060,6 +8186,20 @@
     "r": 141
    },
    "stroke_width": 1.6,
+   "visible": true
+  },
+  "current_streamlines": {
+   "casing_width": 0.0,
+   "fill_enabled": false,
+   "line_cap": "round",
+   "opacity": 0.85,
+   "stroke_color": {
+    "a": 255,
+    "b": 100,
+    "g": 110,
+    "r": 112
+   },
+   "stroke_width": 1.1,
    "visible": true
   },
   "depth_bands": {
@@ -8947,6 +9087,20 @@
    "stroke_width": 1.6,
    "visible": true
   },
+  "current_streamlines": {
+   "casing_width": 0.0,
+   "fill_enabled": false,
+   "line_cap": "round",
+   "opacity": 0.85,
+   "stroke_color": {
+    "a": 255,
+    "b": 114,
+    "g": 118,
+    "r": 99
+   },
+   "stroke_width": 1.1,
+   "visible": true
+  },
   "depth_bands": {
    "casing_width": 0.0,
    "fill_color": {
@@ -9830,6 +9984,20 @@
     "r": 133
    },
    "stroke_width": 1.6,
+   "visible": true
+  },
+  "current_streamlines": {
+   "casing_width": 0.0,
+   "fill_enabled": false,
+   "line_cap": "round",
+   "opacity": 0.85,
+   "stroke_color": {
+    "a": 255,
+    "b": 85,
+    "g": 101,
+    "r": 112
+   },
+   "stroke_width": 1.1,
    "visible": true
   },
   "depth_bands": {
@@ -10717,6 +10885,20 @@
    "stroke_width": 1.6,
    "visible": true
   },
+  "current_streamlines": {
+   "casing_width": 0.0,
+   "fill_enabled": false,
+   "line_cap": "round",
+   "opacity": 0.85,
+   "stroke_color": {
+    "a": 255,
+    "b": 181,
+    "g": 173,
+    "r": 160
+   },
+   "stroke_width": 1.1,
+   "visible": true
+  },
   "depth_bands": {
    "casing_width": 0.0,
    "fill_color": {
@@ -11600,6 +11782,20 @@
     "r": 82
    },
    "stroke_width": 1.6,
+   "visible": true
+  },
+  "current_streamlines": {
+   "casing_width": 0.0,
+   "fill_enabled": false,
+   "line_cap": "round",
+   "opacity": 0.85,
+   "stroke_color": {
+    "a": 255,
+    "b": 83,
+    "g": 99,
+    "r": 70
+   },
+   "stroke_width": 1.1,
    "visible": true
   },
   "depth_bands": {
@@ -12487,6 +12683,20 @@
    "stroke_width": 1.6,
    "visible": true
   },
+  "current_streamlines": {
+   "casing_width": 0.0,
+   "fill_enabled": false,
+   "line_cap": "round",
+   "opacity": 0.85,
+   "stroke_color": {
+    "a": 255,
+    "b": 125,
+    "g": 105,
+    "r": 31
+   },
+   "stroke_width": 1.1,
+   "visible": true
+  },
   "depth_bands": {
    "casing_width": 0.0,
    "fill_color": {
@@ -13372,6 +13582,20 @@
    "stroke_width": 1.6,
    "visible": true
   },
+  "current_streamlines": {
+   "casing_width": 0.0,
+   "fill_enabled": false,
+   "line_cap": "round",
+   "opacity": 0.85,
+   "stroke_color": {
+    "a": 255,
+    "b": 182,
+    "g": 183,
+    "r": 124
+   },
+   "stroke_width": 1.1,
+   "visible": true
+  },
   "depth_bands": {
    "casing_width": 0.0,
    "fill_color": {
@@ -14255,6 +14479,20 @@
     "r": 133
    },
    "stroke_width": 1.6,
+   "visible": true
+  },
+  "current_streamlines": {
+   "casing_width": 0.0,
+   "fill_enabled": false,
+   "line_cap": "round",
+   "opacity": 0.85,
+   "stroke_color": {
+    "a": 255,
+    "b": 121,
+    "g": 134,
+    "r": 160
+   },
+   "stroke_width": 1.1,
    "visible": true
   },
   "depth_bands": {

@@ -34,6 +34,7 @@ PROVIDER_MODELS: dict[str, str] = {
     "night_lights": "night_lights",
     "gibs_imagery": "night_lights_online",
     "usgs_earthquakes": "seismicity",
+    "erddap_current": "surface_currents",
     "satellite_tracks": "satellite_tracks",
     "simulated_terrain": "simulated_terrain",
     "simulated_relief_sheet": "relief_sheet",
@@ -166,6 +167,24 @@ def default_sources() -> tuple[SourceDefinition, ...]:
             settings=(
                 SourceSetting("days", "Window", "number", 1825, suffix="days", attribute="days"),
                 SourceSetting("magnitude", "Minimum", "number", 2.5, suffix="M", attribute="min_magnitude"),
+            ),
+        ),
+        SourceDefinition(
+            source_id="erddap_current",
+            label="Surface currents",
+            subtitle="NOAA ERDDAP · geostrophic streamlines",
+            # Derived from measured sea surface height rather than measured
+            # directly. Calling it `measured` would launder a model into an
+            # observation.
+            provenance="approximate",
+            settings=(
+                # The one number that decides whether this reads as a field or
+                # as a tangle, so it goes first.
+                SourceSetting("spacing", "Line spacing", "number", 1.6,
+                              suffix="cells", attribute="separation"),
+                SourceSetting("bands", "Weight bands", "number", 5, attribute="speed_bands"),
+                SourceSetting("samples", "Samples across", "number", 160,
+                              attribute="target_samples"),
             ),
         ),
         SourceDefinition(

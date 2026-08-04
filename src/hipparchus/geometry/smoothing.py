@@ -42,6 +42,10 @@ POLYGON_SMOOTHING_LAYERS = {"water", "parks", "forests", "fields", "natural", "l
 #: the points where two cones meet.
 NEVER_SMOOTH_LAYERS = {
     "buildings", "barriers", "power", "shops", "amenities", "places",
+    # Streamlines come out of an RK4 integrator at a third of a cell a step:
+    # they are already as smooth as the field they describe, and smoothing them
+    # would round off the eddies, which are the shape worth having.
+    "current_streamlines",
     *SEAMARK_LAYERS,
 }
 

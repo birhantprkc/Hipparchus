@@ -39,11 +39,13 @@ from hipparchus.rendering.models import RenderScene
 #: geography, and a street map of Amsterdam is not pretending to be a chart. It
 #: is the depths that do that.
 #:
-#: The macOS application also fires on current streamlines, which this one does
-#: not draw yet. **Add them here in the same commit that adds the layer**,
-#: because the failure is silent: the sheet simply stops warning, and looks
-#: perfectly fine doing it.
-MARINE_LAYERS: frozenset[str] = frozenset({"bathymetry", "depth_bands", *SEAMARK_LAYERS})
+#: **Add a marine layer here in the same commit that adds the layer**, because
+#: the failure is silent: the sheet simply stops warning, and looks perfectly
+#: fine doing it. A drawing of where the water goes is at least as actionable as
+#: a depth — more so, for anything under way.
+MARINE_LAYERS: frozenset[str] = frozenset(
+    {"bathymetry", "depth_bands", "current_streamlines", *SEAMARK_LAYERS}
+)
 
 #: The words. Short enough to sit in a margin, specific enough to mean something
 #: — "not for navigation" alone reads as boilerplate, and the second clause is

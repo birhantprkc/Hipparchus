@@ -185,6 +185,14 @@ def style_profile(palette: Palette) -> StyleProfile:
         stroke=0.8, stroke_color=mix(water, ink, 0.52),
         fill=mix(water, ink, 0.24), opacity=0.6,
     )
+    # Surface currents. Drawn in the sea's own ink rather than an accent: the
+    # streamlines cross the whole sheet, and a second accent colour on top of a
+    # chart is one competing claim too many. The weight varies per feature —
+    # `stroke_scale` on each run — so this is the middle of the range rather
+    # than the whole of it.
+    styles["current_streamlines"] = _style(
+        stroke=1.1, stroke_color=mix(water, ink, 0.62), opacity=0.85, cap="round"
+    )
     styles["buildings"] = _style(
         stroke=0.35, stroke_color=mix(land, ink, 0.4), fill=land, opacity=0.95
     )

@@ -79,6 +79,7 @@ LAYER_LABELS: dict[str, str] = {
     "seamark_hazards": "Wrecks & hazards",
     "seamark_harbours": "Harbours & anchorages",
     "seamark_areas": "Restricted & routed areas",
+    "current_streamlines": "Surface currents",
     "summits": "Summit heights",
     "night_lights": "Night lights",
     "earthquakes_shallow": "Earthquakes, shallow",
@@ -130,6 +131,9 @@ _GROUPS: dict[str, str] = {
     "seamark_hazards": "Sea marks",
     "seamark_harbours": "Sea marks",
     "seamark_areas": "Sea marks",
+    # With the sea marks rather than with the terrain: both are statements about
+    # navigation, and the not-for-navigation notice fires on both.
+    "current_streamlines": "Sea marks",
     "coastline": "Water & land",
     "water": "Water & land",
     "parks": "Water & land",

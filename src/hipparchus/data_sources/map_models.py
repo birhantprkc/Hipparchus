@@ -191,6 +191,18 @@ def default_map_models() -> tuple[MapModel, ...]:
             metadata={"measured": True, "online": True},
         ),
         MapModel(
+            "surface_currents",
+            "Surface Currents (NOAA ERDDAP)",
+            ("erddap_current",),
+            "web_mercator",
+            "preview_high",
+            "export_print",
+            # Geostrophic velocity is derived from measured sea surface height
+            # rather than measured directly, so it is online and honest about
+            # not being a direct observation.
+            metadata={"measured": False, "online": True},
+        ),
+        MapModel(
             "contour_atlas",
             "Contour Atlas (OSM + simulated relief)",
             ("overpass", "simulated_terrain"),
