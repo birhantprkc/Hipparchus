@@ -114,6 +114,17 @@ class WindowTests(SharesTheWindow):
     def test_the_window_builds(self) -> None:
         self.assertEqual(self.root.title(), self.window.config.app_name)
 
+    def test_the_window_carries_a_real_app_icon(self) -> None:
+        """Ported from the Mac's own AppIcon -- if this is `None` the
+        packaged asset failed to load, silently, and every window opens
+        with whatever generic icon the platform falls back to."""
+        self.assertIsNotNone(self.window._app_icon_image)
+
+    def test_a_missing_icon_file_returns_none_rather_than_raising(self) -> None:
+        from hipparchus.ui.main_window import _load_app_icon
+
+        self.assertIsNone(_load_app_icon("/nonexistent/path/not-a-real-icon.png"))
+
     def test_every_part_the_window_reports_into_exists(self) -> None:
         """The panels are built before the status bar was, and one of them
         wired a callback straight to it."""

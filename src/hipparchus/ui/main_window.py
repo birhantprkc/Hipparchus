@@ -97,6 +97,17 @@ SAMPLE_SOURCE_PATHS: dict[str, str] = {
 # that the accent drawn on the map is chosen against the map.
 
 
+def _load_app_icon(path: str) -> "tk.PhotoImage | None":
+    """The window/taskbar icon, or nothing. Absent is absent."""
+    location = Path(path)
+    if not location.is_file():
+        return None
+    try:
+        return tk.PhotoImage(file=str(location))
+    except tk.TclError:  # pragma: no cover - a Tk without PNG support
+        return None
+
+
 @dataclass
 class MainWindow(FramePanelMixin, PagePanelMixin, ToolbarMixin):
     """Primary application window with sidebar layout."""
@@ -120,6 +131,11 @@ class MainWindow(FramePanelMixin, PagePanelMixin, ToolbarMixin):
         #: it. False when the root was handed in: it outlives this window.
         self._owns_root = self.root is None
         self._root = self.root if self.root is not None else tk.Tk()
+        # Kept on the instance -- Tk drops a PhotoImage with no surviving
+        # Python reference, icon and all, the moment this method returns.
+        self._app_icon_image = _load_app_icon(self.config.app_icon)
+        if self._app_icon_image is not None:
+            self._root.iconphoto(True, self._app_icon_image)
         self._theme_mode = self.config.theme_mode
         # Before anything is built. `theme.current()` is what every raw Tk
         # widget reads for its own colours — the Locator's canvas, the map's

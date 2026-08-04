@@ -45,6 +45,7 @@ class AppConfig:
     presets_file: Path
     session_file: Path
     makers_mark: str
+    app_icon: str
     project_dir: Path
     default_width: int
     default_height: int
@@ -82,6 +83,12 @@ class ConfigLoader:
         makers_mark = os.getenv("HIPPARCHUS_MAKERS_MARK", "").strip() or str(
             Path(__file__).resolve().parent.parent / "ui" / "assets" / "makers-mark.png"
         )
+        # The window/taskbar icon, ported from the Mac's own AppIcon --
+        # Tk reads PNG, not the .icns/.appiconset the Mac ships. Absent
+        # means absent: no placeholder, no broken-image icon.
+        app_icon = os.getenv("HIPPARCHUS_APP_ICON", "").strip() or str(
+            Path(__file__).resolve().parent.parent / "ui" / "assets" / "app-icon.png"
+        )
 
         default_width = _positive_int("HIPPARCHUS_WINDOW_WIDTH", DEFAULT_WIDTH)
         default_height = _positive_int("HIPPARCHUS_WINDOW_HEIGHT", DEFAULT_HEIGHT)
@@ -115,6 +122,7 @@ class ConfigLoader:
             presets_file=presets_file,
             session_file=session_file,
             makers_mark=makers_mark,
+            app_icon=app_icon,
             project_dir=project_dir,
             default_width=default_width,
             default_height=default_height,

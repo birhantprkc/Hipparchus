@@ -78,6 +78,23 @@ class StartSourcesTests(unittest.TestCase):
         self.assertEqual(self._load(" , terrain_tiles ,, ").start_sources, ("terrain_tiles",))
 
 
+class AppIconTests(unittest.TestCase):
+    """The window/taskbar icon, ported from the Mac's own AppIcon."""
+
+    def _load_with(self, env: dict[str, str]):
+        with mock.patch.dict("os.environ", env, clear=False):
+            return ConfigLoader.load()
+
+    def test_the_packaged_default_is_a_real_file(self) -> None:
+        config = self._load_with({"HIPPARCHUS_APP_ICON": ""})
+        self.assertTrue(os.path.isfile(config.app_icon))
+        self.assertTrue(config.app_icon.endswith(".png"))
+
+    def test_the_environment_can_override_it(self) -> None:
+        config = self._load_with({"HIPPARCHUS_APP_ICON": "/tmp/some-other-icon.png"})
+        self.assertEqual(config.app_icon, "/tmp/some-other-icon.png")
+
+
 class WindowSizeTests(unittest.TestCase):
     """How big the window opens, and how small it may be dragged.
 
