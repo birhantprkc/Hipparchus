@@ -8,7 +8,7 @@ from shapely.geometry import LineString, MultiLineString, MultiPolygon, Polygon,
 from shapely.geometry.base import BaseGeometry
 from shapely.ops import polygonize, unary_union
 
-from hipparchus.application.presets import GeometryPipelineProfile, QualityMode, StyleProfile
+from hipparchus.application.presets import GeometryPipelineProfile, QualityMode, StyleProfile, resolve_style
 from hipparchus.application.quality import quality_profile
 from hipparchus.data_sources.provider import FeatureCollection
 from hipparchus.data_sources.satellite_provider import TRACK_LAYER
@@ -25,7 +25,7 @@ from hipparchus.geometry.illumination import IlluminationProfile, illuminate_geo
 from hipparchus.geometry.projection import ProjectionProfile
 from hipparchus.geometry.simplification import SimplificationOptions, simplify_geometries, simplify_geometry
 from hipparchus.geometry.smoothing import smooth_layer_geometries
-from hipparchus.rendering.models import LayerStyle, RGBAColor, RenderLayer, RenderScene, PlaceLabel
+from hipparchus.rendering.models import RGBAColor, RenderLayer, RenderScene, PlaceLabel
 
 # Layers whose features carry a band_index/band_count pair and so get a
 # per-feature position along their style's two-stop fill ramp, rather than one
@@ -286,7 +286,7 @@ class RenderSceneBuilder:
         if street_labels:
             all_layer_names.add("street_names")
         for layer_name in _ordered_layers(all_layer_names):
-            style = style_profile.layer_styles.get(layer_name, LayerStyle())
+            style = resolve_style(style_profile, layer_name)
             geoms = layer_geometries.get(layer_name, [])
             # Assign appropriate labels to each layer
             if layer_name == "places":

@@ -5,8 +5,11 @@ from __future__ import annotations
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 
+from hipparchus.application.palettes import mix
+
 # Re-exported for the public preset API; consumers import QualityMode from here.
 from hipparchus.application.quality import QualityMode as QualityMode
+from hipparchus.data_sources.seamarks import ALL_LAYERS as SEAMARK_LAYERS
 from hipparchus.rendering.models import LayerStyle, RGBAColor
 
 @dataclass(slots=True, frozen=True)
@@ -70,6 +73,154 @@ def default_preset(name: str = DEFAULT_PRESET_NAME) -> ArtisticPreset:
 
 def preset_names() -> tuple[str, ...]:
     return tuple(_preset_registry().keys())
+
+
+def _derived_luma(colour: RGBAColor) -> float:
+    """Rec. 601 luma, the cheap standard answer to "is this light or dark"."""
+    return (299 * colour.r + 587 * colour.g + 114 * colour.b) / 1000.0
+
+
+def _sheets_own_water(profile: StyleProfile) -> RGBAColor:
+    """The sea's own colour, however the preset stated it: a filled water layer
+    carries it as a fill, an outlined one as a stroke."""
+    water = profile.layer_styles.get("water")
+    if water is None:
+        return RGBAColor(150, 180, 200)
+    return water.fill_color if water.fill_enabled else water.stroke_color
+
+
+def _sheets_own_ink(profile: StyleProfile) -> RGBAColor:
+    """The darkest line the preset draws on the sea: the sub-sea contours if it
+    has them, the coastline if not."""
+    bathymetry = profile.layer_styles.get("bathymetry")
+    if bathymetry is not None:
+        return bathymetry.stroke_color
+    coastline = profile.layer_styles.get("coastline")
+    if coastline is not None:
+        return coastline.stroke_color
+    return RGBAColor(40, 60, 80)
+
+
+def derived_depth_bands(profile: StyleProfile) -> LayerStyle:
+    """Depth bands for a preset that has never heard of them.
+
+    Not one of the built-in presets names ``depth_bands`` — they predate it, and
+    ``palette_sheet.style_profile`` is the only place that has ever styled it —
+    so a sheet drawn from a preset with no ``--palette`` override rendered the
+    sea floor in the shared default: a single flat grey box, no ramp at all.
+    This reads the same water and ink `derived_seamark_style` reads, mixed the
+    same way `palette_sheet` mixes them for a palette's own eight colours.
+
+    **It follows the land rather than overruling it.** A preset that leaves
+    ``elevation_bands`` unfilled has decided the sheet is linework, and forcing
+    a filled sea onto it would be this derivation overruling that choice — so
+    the fill is enabled only where the land's bands are.
+    """
+    bands = profile.layer_styles.get("elevation_bands")
+    fill_enabled = bands.fill_enabled if bands is not None else False
+    style = LayerStyle(stroke_width=0.0, fill_enabled=fill_enabled)
+    if not fill_enabled:
+        return style
+
+    water = _sheets_own_water(profile)
+    ink = _sheets_own_ink(profile)
+
+    # **Deep is darker, and which mix *is* darker depends on the sheet.** On a
+    # dark preset the ink is pale and the paper is near-black, so naming the
+    # ends "toward ink" and "toward ground" would invert the ramp — the same
+    # trap `palette_sheet.style_profile` avoids for the same reason. So the two
+    # mixes are computed and sorted by luminance rather than assigned by name.
+    toward_ink = mix(water, ink, 0.5)
+    toward_ground = mix(water, profile.background, 0.55)
+    deep, shallow = sorted((toward_ink, toward_ground), key=_derived_luma)
+    style.fill_color = deep
+    style.fill_color_high = shallow
+    style.opacity = bands.opacity if bands is not None else 0.9
+    return style
+
+
+def derived_seamark_style(profile: StyleProfile, layer: str) -> LayerStyle | None:
+    """Sea marks for a preset that has never heard of them, or ``None`` for any
+    other layer.
+
+    The same gap `derived_depth_bands` closes, and the same shape of bug: no
+    preset names any of the six ``seamark_*`` layers, so every one of them fell
+    through to the shared default — a filled grey box round a chart symbol that
+    needs to read as a light, a buoy or a wreck to mean anything. The weights
+    and mixes below are `palette_sheet.style_profile`'s own for these six
+    layers, read here off what the preset itself already chose rather than off
+    a full palette.
+
+    **Areas follow the land rather than overrule it**, the same rule
+    `derived_depth_bands` follows for the sea: a linework preset that leaves
+    ``buildings`` unfilled gets unfilled restricted areas too, because a solid
+    area wash is exactly the kind of mass a linework sheet has decided not to
+    draw. Harbours and hazards are never filled and the three point marks —
+    lights, buoys, beacons — are always filled, in both cases regardless of
+    that choice, matching `palette_sheet.style_profile` exactly: a chart
+    symbol has to be there to be read at all.
+    """
+    if layer not in SEAMARK_LAYERS:
+        return None
+
+    water = _sheets_own_water(profile)
+    ink = _sheets_own_ink(profile)
+    ground = profile.background
+    mark_ink = mix(water, ink, 0.62)
+
+    if layer == "seamark_lights":
+        return LayerStyle(
+            stroke_width=1.0, stroke_color=mark_ink,
+            fill_enabled=True, fill_color=mix(water, ground, 0.55), opacity=0.95,
+        )
+    if layer == "seamark_buoys":
+        return LayerStyle(
+            stroke_width=1.0, stroke_color=mark_ink,
+            fill_enabled=True, fill_color=mix(water, ground, 0.35), opacity=0.95,
+        )
+    if layer == "seamark_beacons":
+        return LayerStyle(
+            stroke_width=1.0, stroke_color=mark_ink,
+            fill_enabled=True, fill_color=mix(water, ground, 0.45), opacity=0.95,
+        )
+    if layer == "seamark_hazards":
+        return LayerStyle(stroke_width=1.1, stroke_color=mix(water, ink, 0.78), fill_enabled=False)
+    if layer == "seamark_harbours":
+        return LayerStyle(
+            stroke_width=0.7, stroke_color=mix(water, ink, 0.4),
+            fill_enabled=False, opacity=0.75,
+        )
+    if layer == "seamark_areas":
+        buildings = profile.layer_styles.get("buildings")
+        fills_areas = buildings.fill_enabled if buildings is not None else True
+        style = LayerStyle(
+            stroke_width=0.8, stroke_color=mix(water, ink, 0.52),
+            fill_enabled=fills_areas, opacity=0.6,
+        )
+        if fills_areas:
+            style.fill_color = mix(water, ink, 0.24)
+        return style
+    return None
+
+
+def resolve_style(profile: StyleProfile, layer_name: str) -> LayerStyle:
+    """The style for a layer, falling back to a derivation for the layers no
+    preset has ever named and to the shared default for everything else.
+
+    A layer a preset says nothing about and this has no derivation for is drawn
+    with `LayerStyle`'s own default rather than skipped, so a new source shows
+    up as *something* the first time it appears instead of silently not
+    rendering.
+    """
+    style = profile.layer_styles.get(layer_name)
+    if style is not None:
+        return style
+    if layer_name == "depth_bands":
+        return derived_depth_bands(profile)
+    derived = derived_seamark_style(profile, layer_name)
+    if derived is not None:
+        return derived
+    return LayerStyle()
 
 
 def resolve_preset_name(requested: str, available: Iterable[str], fallback: str) -> str:
