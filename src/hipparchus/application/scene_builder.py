@@ -13,6 +13,7 @@ from hipparchus.application.quality import quality_profile
 from hipparchus.data_sources.provider import FeatureCollection
 from hipparchus.data_sources.satellite_provider import TRACK_LAYER
 from hipparchus.data_sources.terrain_tiles import (
+    DEPTH_BANDS_LAYER,
     ELEVATION_BANDS_LAYER as BAND_LAYER,
     HILLSHADE_LAYER,
     SUMMIT_LAYER,
@@ -30,8 +31,14 @@ from hipparchus.rendering.models import LayerStyle, RGBAColor, RenderLayer, Rend
 # per-feature position along their style's two-stop fill ramp, rather than one
 # flat colour. Elevation bands the source terrain measured directly; relief
 # shading the same source lit and banded on a fixed scale -- different
-# quantities, the same pipeline.
-_BANDED_LAYERS = frozenset({BAND_LAYER, HILLSHADE_LAYER})
+# quantities, the same pipeline. Depth bands are the sea half of the first.
+#
+# **A band layer missing from this set does not fail; it draws flat**, in
+# whichever single colour `fill_color` holds -- for a depth ramp that is the
+# deepest tone, so the whole sea comes out one slab of dark water with the
+# shallows indistinguishable from the channel. It looks like a styling choice.
+# Add a band layer here in the same commit that creates it.
+_BANDED_LAYERS = frozenset({BAND_LAYER, DEPTH_BANDS_LAYER, HILLSHADE_LAYER})
 
 # Where "relief over buildings" stops raising the hillshade layer -- it goes
 # above every layer of the built environment, but not above the labels naming

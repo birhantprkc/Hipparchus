@@ -162,6 +162,20 @@ class TheLayerExistsEverywhereTests(unittest.TestCase):
     def test_a_sheet_with_depth_bands_is_not_for_navigation(self) -> None:
         self.assertIn("depth_bands", MARINE_LAYERS)
 
+    def test_it_gets_the_two_stop_ramp_and_not_one_flat_colour(self) -> None:
+        """**A band layer missing from `_BANDED_LAYERS` does not fail; it draws
+        flat**, in whichever single colour ``fill_color`` holds — for a depth
+        ramp that is the deepest tone, so the whole sea comes out one slab of
+        dark water with the shallows indistinguishable from the channel.
+
+        It looked like a styling choice. Only rendering Cuxhaven and seeing a
+        uniformly dark estuary, where the Elbe should read as a dark channel
+        through pale flats, showed otherwise.
+        """
+        from hipparchus.application.scene_builder import _BANDED_LAYERS
+
+        self.assertIn("depth_bands", _BANDED_LAYERS)
+
 
 class NotChangingTheLandTests(unittest.TestCase):
     """With the split switched off the sea floor bands with the land on one

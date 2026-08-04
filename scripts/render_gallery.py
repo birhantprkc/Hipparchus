@@ -206,7 +206,7 @@ def build_scene(plate_spec: Plate) -> RenderScene:
     # thirty-four thousand features.
     marine = {
         name: count for name, count in sorted(counts.items())
-        if name.startswith("seamark_") or name == "bathymetry"
+        if name.startswith("seamark_") or name in {"bathymetry", "depth_bands"}
     }
     if marine:
         print("   " + "  ".join(f"{name}={count}" for name, count in marine.items()), flush=True)
