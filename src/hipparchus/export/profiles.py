@@ -19,6 +19,11 @@ class MapComposition:
     include_scale_bar: bool = False
     include_north_arrow: bool = False
     include_legend: bool = False
+    #: **On by default, alone among furniture**, and the inversion is the
+    #: statement. A sheet carrying depths says on its own face that it is not a
+    #: chart. Turning this off removes the words; it does not remove the claim,
+    #: which goes into the SVG root and the diagnostics regardless.
+    include_not_for_navigation: bool = True
     margin_ratio: float = 0.06
     paper_preset: str = "Canvas"
     orientation: str = "Landscape"
@@ -58,6 +63,11 @@ class ExportDiagnostics:
     smoothed_geometries: int = 0
     source_metadata: dict[str, object] = field(default_factory=dict)
     composition: dict[str, object] = field(default_factory=dict)
+    #: Whether this sheet is making a claim about the sea.
+    #:
+    #: Written whether or not the words were drawn, so a file with the notice
+    #: removed still says what it is to anything that reads it.
+    not_for_navigation: bool = False
     #: What this sheet owes, source by source.
     #:
     #: The diagnostics accompany *every* export, so a PNG or a PDF — neither of
@@ -81,5 +91,6 @@ class ExportDiagnostics:
             "smoothed_geometries": self.smoothed_geometries,
             "source_metadata": dict(self.source_metadata),
             "composition": dict(self.composition),
+            "not_for_navigation": self.not_for_navigation,
             "attribution": [dict(entry) for entry in self.attribution],
         }

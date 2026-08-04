@@ -10,6 +10,8 @@ from hipparchus.application.attribution import attributions_for, sources_in, sta
 from hipparchus.export.profiles import ExportDiagnostics, SVGExportProfile
 from hipparchus.rendering.geometry_adapter import geometry_to_svg_path_data
 from hipparchus.rendering.models import RGBAColor, RenderScene
+from hipparchus.rendering.not_for_navigation import NOTICE
+from hipparchus.rendering.not_for_navigation import applies as not_for_navigation_applies
 
 
 @dataclass(slots=True)
@@ -51,6 +53,7 @@ class CleanSVGExporter:
         diagnostics.bounds = bounds
         diagnostics.crs = dict(scene.metadata.get("projection", {})) if isinstance(scene.metadata.get("projection"), dict) else {}
         diagnostics.source_metadata = dict(scene.metadata)
+        diagnostics.not_for_navigation = not_for_navigation_applies(scene)
         diagnostics.attribution = [
             {
                 "source_id": entry.source_id,
@@ -97,6 +100,13 @@ class CleanSVGExporter:
         # was simply untrue. This names only the sources that drew *this* sheet:
         # a map of Everest does not owe EMODnet a line, and padding the list with
         # sources that drew nothing makes the true entries harder to trust.
+        # **Unconditional.** A person may remove the words — this is a drawing
+        # tool and a poster does not want a warning across it — but not the
+        # claim. A file that carries depths says so to anything that reads it,
+        # whether or not it says so to the eye.
+        if not_for_navigation_applies(scene):
+            svg.set("data-hipparchus-not-for-navigation", "true")
+
         credit = statement_for(sources_in(scene.metadata or {}))
         if credit:
             svg.set("data-hipparchus-attribution", credit)
@@ -241,7 +251,13 @@ class CleanSVGExporter:
         profile: SVGExportProfile,
     ) -> None:
         composition = profile.composition
-        if not any((composition.include_title, composition.include_scale_bar, composition.include_north_arrow, composition.include_legend)):
+        # The notice counts as a reason to build the furniture group, and it is
+        # the only one that is on by default — a depths sheet with no title, no
+        # scale bar and no legend must still carry it.
+        wants_notice = composition.include_not_for_navigation and not_for_navigation_applies(scene)
+        if not any((composition.include_title, composition.include_scale_bar,
+                    composition.include_north_arrow, composition.include_legend,
+                    wants_notice)):
             return
 
         group = SubElement(svg, "g", {"id": "map_furniture"})
@@ -390,6 +406,46 @@ class CleanSVGExporter:
                     SubElement(legend_group, "rect", {"x": _fmt_float(x + 12), "y": _fmt_float(row_y - 10), "width": "18", "height": "10", "fill": fill, "stroke": stroke, "stroke-width": "1"})
                     item = SubElement(legend_group, "text", {"x": _fmt_float(x + 38), "y": _fmt_float(row_y), "font-family": "Arial, Helvetica, sans-serif", "font-size": "11", "fill": text_color})
                     item.text = _legend_label(layer.name)
+
+        if wants_notice:
+            # Bottom centre, on a panel, because this is the one thing on the
+            # sheet that must not be lost against a dark sea or a busy coast.
+            notice_group = SubElement(group, "g", {"id": "not_for_navigation"})
+            size = max(11.0, min(width, height) * 0.016)
+            y = height - margin * 0.45
+            padding = size * 0.6
+            # The width is estimated from the character count rather than
+            # measured; there is no text metric here, and the panel only has to
+            # be big enough not to crop the words.
+            text_width = len(NOTICE) * size * 0.5
+            SubElement(
+                notice_group,
+                "rect",
+                {
+                    "x": _fmt_float(width * 0.5 - text_width * 0.5 - padding),
+                    "y": _fmt_float(y - size - padding * 0.6),
+                    "width": _fmt_float(text_width + padding * 2),
+                    "height": _fmt_float(size + padding * 1.4),
+                    "fill": panel_fill,
+                    "opacity": "0.82",
+                    "stroke": panel_stroke,
+                },
+            )
+            words = SubElement(
+                notice_group,
+                "text",
+                {
+                    "x": _fmt_float(width * 0.5),
+                    "y": _fmt_float(y),
+                    "font-family": "Arial, Helvetica, sans-serif",
+                    "font-size": _fmt_float(size),
+                    "font-weight": "700",
+                    "letter-spacing": "0.04em",
+                    "text-anchor": "middle",
+                    "fill": text_color,
+                },
+            )
+            words.text = NOTICE
 
     @staticmethod
     def _compute_scene_bounds(scene: RenderScene) -> tuple[float, float, float, float] | None:

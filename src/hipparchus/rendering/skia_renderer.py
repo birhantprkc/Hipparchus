@@ -13,6 +13,8 @@ from shapely.geometry import LineString, LinearRing, Point, Polygon
 
 from hipparchus.rendering.geometry_adapter import iter_atomic_geometries
 from hipparchus.rendering.models import RGBAColor, RenderScene, ViewportState
+from hipparchus.rendering.not_for_navigation import NOTICE
+from hipparchus.rendering.not_for_navigation import applies as not_for_navigation_applies
 
 _PERF_LOGGER = logging.getLogger("hipparchus.perf")
 
@@ -276,7 +278,9 @@ class SkiaRenderer:
             surface = skia.Surface(pixel_width, pixel_height)
             canvas = surface.getCanvas()
             canvas.scale(scale * supersample, scale * supersample)
-            self._draw_scene(canvas, width, height)
+            # An exported PNG is the artefact that gets shared, so it carries
+            # the notice. The preview above does not.
+            self._draw_scene(canvas, width, height, furniture=True)
 
             image = surface.makeImageSnapshot()
             if supersample > 1.0:
@@ -326,13 +330,15 @@ class SkiaRenderer:
                     raise RuntimeError("this build of Skia cannot write PDF")
                 canvas = document.beginPage(float(page_width), float(page_height))
                 canvas.scale(page_width / max(1, width), page_height / max(1, height))
-                self._draw_scene(canvas, width, height)
+                self._draw_scene(canvas, width, height, furniture=True)
                 document.endPage()
                 document.close()
             finally:
                 stream.flush()
 
-    def _draw_scene(self, canvas: Any, width: int, height: int) -> None:
+    def _draw_scene(
+        self, canvas: Any, width: int, height: int, *, furniture: bool = False
+    ) -> None:
         skia = _import_skia()
         canvas.clear(skia.ColorSetARGB(self.background.a, self.background.r, self.background.g, self.background.b))
 
@@ -373,6 +379,52 @@ class SkiaRenderer:
         # Draw labels in a SEPARATE pass so they stay at fixed pixel size
         # regardless of viewport zoom.
         self._draw_labels(canvas, width, height, skia)
+
+        # The one thing this renderer draws that is not the map.
+        #
+        # Furniture is otherwise an SVG idea — the title, the scale bar and the
+        # legend all live in the exporter. This does not, because **a PNG is the
+        # artefact that actually gets shared**, and a sheet that looks like a
+        # chart in an SVG looks exactly as much like one as a picture.
+        #
+        # Not on the preview: the window is not the artefact, and the status bar
+        # already says what the map is made of. `furniture` is off by default so
+        # that stays true without every caller having to remember it.
+        if furniture and not_for_navigation_applies(self.scene):
+            self._draw_not_for_navigation(canvas, width, height, skia)
+
+    def _draw_not_for_navigation(self, canvas: Any, width: int, height: int, skia: Any) -> None:
+        """The notice, bottom centre, on a panel that keeps it legible over a
+        dark sea or a busy coast."""
+        luminance = (
+            0.2126 * self.background.r + 0.7152 * self.background.g + 0.0722 * self.background.b
+        )
+        dark = luminance < 128.0
+        ink = (242, 242, 242) if dark else (34, 34, 34)
+        panel = (18, 21, 28) if dark else (255, 255, 255)
+
+        short = min(width, height)
+        size = max(9.0, short * 0.014)
+        font = skia.Font(skia.Typeface("Helvetica", skia.FontStyle.Bold()), size)
+        text_width = font.measureText(NOTICE)
+        padding = size * 0.7
+
+        x = (width - text_width) / 2.0
+        y = height - max(10.0, short * 0.022)
+
+        panel_paint = skia.Paint(
+            AntiAlias=True, Color=skia.ColorSetARGB(210, panel[0], panel[1], panel[2])
+        )
+        canvas.drawRect(
+            skia.Rect.MakeLTRB(
+                x - padding, y - size - padding * 0.5, x + text_width + padding, y + padding * 0.7
+            ),
+            panel_paint,
+        )
+        text_paint = skia.Paint(
+            AntiAlias=True, Color=skia.ColorSetARGB(255, ink[0], ink[1], ink[2])
+        )
+        canvas.drawString(NOTICE, x, y, font, text_paint)
 
     def _draw_vector_layers(self, canvas: Any, width: int, height: int, sampled: bool) -> int:
         skia = _import_skia()
