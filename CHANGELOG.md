@@ -2,6 +2,74 @@
 
 Notable changes to Hipparchus. Earlier history is in the git log.
 
+## 0.5.0
+
+The sea release. Hipparchus has drawn coastlines since the beginning and had
+nothing to say about the water beyond them; it now draws the sea floor as mass,
+the marks that stand in it, and the current that moves through it.
+
+### The marine layer of OpenStreetMap
+
+- **Sea marks, as chart symbols rather than dots.** Every buoy, beacon, light,
+  harbour and restricted area in OSM was invisible to this application — on a
+  coastal sheet drawn by a program shipping a preset called *Coastal Survey* and
+  a palette called *Admiralty*. Six layers read out of the `seamark:*` namespace,
+  which follows the S-57 object model the official electronic charts use, so
+  this is a reading of a published standard rather than of a folksonomy.
+- **The shape is the message**: a can for a port hand mark and a cone for
+  starboard, the four cardinal topmarks arranged as the mnemonics they are taught
+  by — north up, south down, east the egg, west the wine glass — a light's flare,
+  a wreck's three masts, and a stem under anything fixed to the ground. Shape
+  carries the meaning and colour does not, which is how a chart survives flat
+  light, a photocopier and colour-blind eyes.
+- No sprite sheet and no symbol font: an image has nowhere to go in an SVG or a
+  PDF, and a symbol font reaches a printer as a font nobody has. These are
+  outlines, and they export as paths a person can edit.
+
+### Depth, as mass rather than as linework
+
+- **Filled depth bands below the waterline**, in a ramp of their own rather than
+  the land's. The sea got contours where the land got mass.
+
+### Surface currents
+
+- **Streamlines, integrated rather than animated.** The signature visual of every
+  modern marine application is animated GPU particle advection, and a sheet
+  cannot have it: a moving dot has nowhere to go on paper. So the field is
+  integrated — RK4 over a normalised direction field, with Jobard and Lefer's
+  evenly-spaced placement — which is what a printed current chart has always
+  drawn.
+- **Speed becomes weight.** Each line is split where it crosses a speed band, so
+  a streamline thickens where the water runs.
+- Fetched from NOAA's ERDDAP, both velocity components in **one request**:
+  fetched separately they could land on different time steps, and a vector
+  assembled from two different fields is a flow that exists nowhere.
+
+### Saying what it is
+
+- **NOT FOR NAVIGATION**, on any sheet carrying depths, marks or currents, and on
+  no other. It is the one piece of furniture that is on by default, and the
+  inversion is the statement. The words can be turned off; the machine-readable
+  claim cannot.
+- **Attribution became a registry.** Credits lived in a hand-written paragraph,
+  and prose does not survive a new source — EMODnet went in and its line did not.
+  Every shipped source now either carries a credit or is explicitly declared
+  exempt, enforced by a test, and each exported sheet carries the sources that
+  actually drew *it*.
+
+### Found by rendering rather than by testing
+
+Every one of these passed the suite and looked like a decision:
+
+- The sea marks were **never fetched**: the layers existed, were styled, were
+  grouped in the panel, and were not on the list of things to ask Overpass for.
+- The depth bands **drew flat**, every band the deepest tone, because the layer
+  that gets a two-stop ramp was named in a set they were not in. The Elbe — a
+  dredged channel through miles of tidal flats — came out as one slab of dark
+  water.
+- The streamlines **drew at one width**, because the per-run stroke multiplier
+  was written by the provider and read by nothing.
+
 ## 0.4.1
 
 The interface release. Everything the macOS rewrite learned, brought back to the
