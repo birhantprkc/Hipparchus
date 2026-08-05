@@ -80,6 +80,8 @@ LAYER_LABELS: dict[str, str] = {
     "seamark_harbours": "Harbours & anchorages",
     "seamark_areas": "Restricted & routed areas",
     "current_streamlines": "Surface currents",
+    "sst_bands": "Sea temperature bands",
+    "sst_contours": "Sea temperature",
     "summits": "Summit heights",
     "night_lights": "Night lights",
     "earthquakes_shallow": "Earthquakes, shallow",
@@ -122,6 +124,11 @@ _GROUPS: dict[str, str] = {
     "bathymetry": "Terrain",
     "summits": "Terrain",
     "night_lights": "Terrain",
+    # A scalar field, not a statement about navigation -- unlike the sea marks
+    # and the currents, a temperature reading fires no not-for-navigation
+    # notice, so it sits with the other measured fields rather than with them.
+    "sst_bands": "Terrain",
+    "sst_contours": "Terrain",
     # A group of their own rather than folded into "Water & land": a shoreline
     # is geography and a buoy is a statement about navigation, and the
     # not-for-navigation notice fires on one and not the other.

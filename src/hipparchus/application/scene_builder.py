@@ -12,6 +12,7 @@ from hipparchus.application.presets import GeometryPipelineProfile, QualityMode,
 from hipparchus.application.quality import quality_profile
 from hipparchus.data_sources.provider import FeatureCollection
 from hipparchus.data_sources.satellite_provider import TRACK_LAYER
+from hipparchus.data_sources.sst_provider import SST_BANDS_LAYER
 from hipparchus.data_sources.terrain_tiles import (
     DEPTH_BANDS_LAYER,
     ELEVATION_BANDS_LAYER as BAND_LAYER,
@@ -38,7 +39,7 @@ from hipparchus.rendering.models import RGBAColor, RenderLayer, RenderScene, Pla
 # deepest tone, so the whole sea comes out one slab of dark water with the
 # shallows indistinguishable from the channel. It looks like a styling choice.
 # Add a band layer here in the same commit that creates it.
-_BANDED_LAYERS = frozenset({BAND_LAYER, DEPTH_BANDS_LAYER, HILLSHADE_LAYER})
+_BANDED_LAYERS = frozenset({BAND_LAYER, DEPTH_BANDS_LAYER, HILLSHADE_LAYER, SST_BANDS_LAYER})
 
 # Where "relief over buildings" stops raising the hillshade layer -- it goes
 # above every layer of the built environment, but not above the labels naming

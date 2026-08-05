@@ -203,6 +203,15 @@ def default_map_models() -> tuple[MapModel, ...]:
             metadata={"measured": False, "online": True},
         ),
         MapModel(
+            "sea_surface_temperature",
+            "Sea Surface Temperature (NOAA ERDDAP)",
+            ("erddap_sst",),
+            "web_mercator",
+            "preview_high",
+            "export_print",
+            metadata={"measured": True, "online": True},
+        ),
+        MapModel(
             "contour_atlas",
             "Contour Atlas (OSM + simulated relief)",
             ("overpass", "simulated_terrain"),

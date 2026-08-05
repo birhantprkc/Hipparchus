@@ -89,6 +89,20 @@ PLATES: tuple[Plate, ...] = (
         sources=("terrain_tiles", "erddap_current"),
     ),
     Plate(
+        slug="aegean-sea-temperature",
+        title="The Aegean and the Levantine, sea surface temperature",
+        # The same frame as aegean-currents, so the two can be read side by
+        # side: one ocean scalar and one ocean vector, drawn from the same
+        # ERDDAP client pointed at two different datasets.
+        min_lon=22.0,
+        min_lat=34.0,
+        max_lon=29.0,
+        max_lat=41.0,
+        preset="Coastal Survey",
+        palette="Admiralty",
+        sources=("terrain_tiles", "erddap_sst"),
+    ),
+    Plate(
         slug="cuxhaven-seamarks",
         title="Cuxhaven and the Elbe fairway, Germany",
         # The densest sea mark coverage in OSM that I have found: the fairway
@@ -221,7 +235,7 @@ def build_scene(plate_spec: Plate) -> RenderScene:
     marine = {
         name: count for name, count in sorted(counts.items())
         if name.startswith("seamark_")
-        or name in {"bathymetry", "depth_bands", "current_streamlines"}
+        or name in {"bathymetry", "depth_bands", "current_streamlines", "sst_bands", "sst_contours"}
     }
     if marine:
         print("   " + "  ".join(f"{name}={count}" for name, count in marine.items()), flush=True)

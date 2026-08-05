@@ -91,6 +91,16 @@ REGISTRY: tuple[Attribution, ...] = (
         url="https://coastwatch.pfeg.noaa.gov/erddap/",
     ),
     Attribution(
+        source_id="erddap_sst",
+        name="NOAA CoastWatch ERDDAP",
+        # MUR is NASA JPL's analysis and the currents are NOAA/NESDIS's --
+        # different producers who happen to share a host, so this is a
+        # second credit rather than a duplicate of the one above.
+        statement="Sea surface temperature from NASA JPL MUR, served by NOAA CoastWatch ERDDAP",
+        licence="public domain (U.S. Government work)",
+        url="https://coastwatch.pfeg.noaa.gov/erddap/",
+    ),
+    Attribution(
         source_id="gibs_imagery",
         name="NASA GIBS",
         # The short name first, because that is what a reader recognises and what

@@ -35,6 +35,7 @@ PROVIDER_MODELS: dict[str, str] = {
     "gibs_imagery": "night_lights_online",
     "usgs_earthquakes": "seismicity",
     "erddap_current": "surface_currents",
+    "erddap_sst": "sea_surface_temperature",
     "satellite_tracks": "satellite_tracks",
     "simulated_terrain": "simulated_terrain",
     "simulated_relief_sheet": "relief_sheet",
@@ -195,6 +196,21 @@ def default_sources() -> tuple[SourceDefinition, ...]:
             settings=(
                 SourceSetting("satellites", "Show", "number", 12, attribute="max_satellites"),
                 SourceSetting("window", "Ahead", "number", 200.0, suffix="min", attribute="window_minutes"),
+            ),
+        ),
+        SourceDefinition(
+            source_id="erddap_sst",
+            label="Sea temperature",
+            subtitle="NOAA ERDDAP · MUR analysis",
+            # A satellite analysis is a measurement -- an interpolated one,
+            # which is what "analysed" means in the variable's own name --
+            # unlike the currents, which are derived from it and stay
+            # `approximate`.
+            provenance="measured",
+            settings=(
+                SourceSetting("lines", "Contour lines", "number", 14, attribute="target_line_count"),
+                SourceSetting("bands", "Bands", "number", 8, attribute="band_count"),
+                SourceSetting("samples", "Samples across", "number", 220, attribute="target_samples"),
             ),
         ),
         SourceDefinition(

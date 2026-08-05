@@ -32,6 +32,9 @@ LINE_SMOOTHING_LAYERS = {
     "night_lights",
     "satellite_tracks",
     "bathymetry",
+    # Marching squares over the same kind of sampling grid as bathymetry, with
+    # the same cell-scale staircase to smooth away.
+    "sst_contours",
 }
 POLYGON_SMOOTHING_LAYERS = {"water", "parks", "forests", "fields", "natural", "landuse", "coastline"}
 #: Sea mark symbols are a vocabulary, and smoothing destroys the vocabulary.

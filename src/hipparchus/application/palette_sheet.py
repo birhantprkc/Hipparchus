@@ -185,6 +185,19 @@ def style_profile(palette: Palette) -> StyleProfile:
         stroke=0.8, stroke_color=mix(water, ink, 0.52),
         fill=mix(water, ink, 0.24), opacity=0.6,
     )
+    # An ocean scalar -- sea surface temperature today, whatever ERDDAP is
+    # pointed at next. Warm reads as the palette's land and cool as its water,
+    # which is not a physical claim but is the association every reader
+    # already has, and it keeps the sheet inside its eight colours rather than
+    # importing a rainbow.
+    styles["sst_bands"] = _style(
+        stroke=0, fill=mix(water, ink, 0.35),
+        fill_high=mix(land, ink, 0.15), opacity=0.42,
+    )
+    styles["sst_contours"] = _style(
+        stroke=0.4 * palette.contourWeight,
+        stroke_color=mix(water, ink, 0.5), opacity=0.65,
+    )
     # Surface currents. Drawn in the sea's own ink rather than an accent: the
     # streamlines cross the whole sheet, and a second accent colour on top of a
     # chart is one competing claim too many. The weight varies per feature —

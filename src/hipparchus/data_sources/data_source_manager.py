@@ -30,6 +30,7 @@ from hipparchus.data_sources.provider import BBoxQuery, FeatureCollection
 from hipparchus.data_sources.terrain_tiles import TerrainTileSettings, terrain_tile_provider
 from hipparchus.data_sources.satellite_provider import SatelliteTrackSettings, satellite_track_provider
 from hipparchus.data_sources.currents_provider import CurrentsProvider, CurrentsSettings
+from hipparchus.data_sources.sst_provider import SstProvider, SstSettings
 from hipparchus.data_sources.usgs_provider import (
     DEFAULT_SEISMICITY_DAYS,
     DEFAULT_SEISMICITY_MIN_MAGNITUDE,
@@ -63,6 +64,7 @@ class DataSource(Enum):
     TERRAIN_TILES = "terrain_tiles"
     SATELLITE_TRACKS = "satellite_tracks"
     ERDDAP_CURRENT = "erddap_current"
+    ERDDAP_SST = "erddap_sst"
 
 
 @dataclass
@@ -100,6 +102,9 @@ class DataSourceConfig:
     # Currents need no path either: the dataset is named in the settings and
     # both velocity components arrive in one request.
     currents_settings: CurrentsSettings = field(default_factory=CurrentsSettings)
+    # Nor does sea surface temperature -- same reasoning, one variable instead
+    # of two.
+    sst_settings: SstSettings = field(default_factory=SstSettings)
     # The simulated field needs no path; the seed is the only knob, and it names
     # the landscape, so it belongs with the launch settings.
     simulated_terrain_settings: TerrainFieldSettings = field(
@@ -151,6 +156,7 @@ class DataSourceManager:
             "satellite_tracks": satellite_track_provider(self.config.satellite_track_settings),
             "terrain_tiles": terrain_tile_provider(self.config.terrain_tile_settings),
             "erddap_current": CurrentsProvider(settings=self.config.currents_settings),
+            "erddap_sst": SstProvider(settings=self.config.sst_settings),
         }
         _LOGGER.info("Overpass provider initialized with cache at %s", cache_dir / "overpass")
 
