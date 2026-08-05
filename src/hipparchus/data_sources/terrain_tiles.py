@@ -242,10 +242,22 @@ class TerrainTileProvider:
                     # friends); only a bathymetry contour can cross from
                     # EMODnet's real survey back onto the coarse global grid.
                     measured = True
+                    properties = {
+                        "elevation": float(level),
+                        "contour_interval": float(interval),
+                        "index_contour": layer == INDEX_CONTOUR_LAYER,
+                        "hipparchus_layer": target,
+                        "hipparchus_source": self.provider_id,
+                    }
                     if self.settings.separate_bathymetry and level < 0.0:
                         target = BATHYMETRY_LAYER
+                        properties["hipparchus_layer"] = target
                         if surveyed_grid is not None:
                             measured = _measured_along_polyline(surveyed_grid, polyline)
+                            share = _surveyed_share_along_polyline(surveyed_grid, polyline)
+                            properties["surveyed_share"] = share
+                            properties["depth_source"] = _depth_source(share)
+                    properties["measured"] = measured
                     features_by_layer[target].append(
                         {
                             "type": "Feature",
@@ -254,14 +266,7 @@ class TerrainTileProvider:
                                 "type": "LineString",
                                 "coordinates": [[lon, lat] for lon, lat in coordinates],
                             },
-                            "properties": {
-                                "elevation": float(level),
-                                "contour_interval": float(interval),
-                                "index_contour": layer == INDEX_CONTOUR_LAYER,
-                                "hipparchus_layer": target,
-                                "hipparchus_source": self.provider_id,
-                                "measured": measured,
-                            },
+                            "properties": properties,
                         }
                     )
 
@@ -269,15 +274,18 @@ class TerrainTileProvider:
             finite = grid[np.isfinite(grid)]
             low = float(finite.min()) if finite.size else 0.0
             high = float(finite.max()) if finite.size else 0.0
+            # `surveyed` goes only to the depth bands below, not to this one --
+            # a land band is never on the sea floor, so a survey/global-grid
+            # claim about it says nothing real.
             common = dict(
                 provider_id=self.provider_id,
                 max_pixels=self.settings.band_grid_max_pixels,
-                surveyed=surveyed_grid,
             )
 
             if not self.settings.separate_depth_bands:
                 # One ramp across the whole range, sea floor included: what every
-                # sheet did before the split.
+                # sheet did before the split, so no survey grid here either --
+                # this is the old behaviour, not a new claim about it.
                 features_by_layer[ELEVATION_BANDS_LAYER] = _band_features(
                     grid, window, zoom, count=self.settings.elevation_band_count, **common
                 )
@@ -298,6 +306,7 @@ class TerrainTileProvider:
                         low, high, self.settings.depth_band_count,
                         _depth_band_mode(self.settings.depth_band_mode),
                     ),
+                    surveyed=surveyed_grid,
                     **common,
                 )
 
@@ -897,6 +906,54 @@ def _band_is_measured(
     return bool(np.all(coarse_measured[mask] >= MEASURED_THRESHOLD))
 
 
+def _surveyed_share_along_polyline(measured: np.ndarray, polyline: list[tuple[float, float]]) -> float:
+    """The mean survey-grid value along a traced line's own vertices -- the
+    same sampling `_measured_along_polyline` walks, kept alongside it rather
+    than folded into it because a sub-sea contour's provenance is graded,
+    not only pass or fail: a line that is half on EMODnet's survey and half
+    on the coarse global grid is neither `measured` nor simply "not", and a
+    reader deciding how much to trust it wants the fraction.
+    """
+    if not polyline:
+        return 1.0
+    rows, cols = measured.shape
+    if rows == 0 or cols == 0:
+        return 1.0
+    samples = [
+        measured[min(max(int(round(row)), 0), rows - 1), min(max(int(round(col)), 0), cols - 1)]
+        for row, col in polyline
+    ]
+    return float(np.mean(samples))
+
+
+def _band_surveyed_share(
+    coarse: np.ndarray, coarse_measured: np.ndarray | None, band: ElevationBand
+) -> float:
+    """The mean survey-grid value over a band's own cells -- the same mask
+    `_band_is_measured` tests, kept apart for the same reason
+    `_surveyed_share_along_polyline` is kept apart from
+    `_measured_along_polyline`.
+    """
+    if coarse_measured is None:
+        return 1.0
+    mask = (coarse >= band.lower) & (coarse <= band.upper)
+    if not np.any(mask):
+        return 1.0
+    return float(np.mean(coarse_measured[mask]))
+
+
+def _depth_source(share: float) -> str:
+    """Which grid a sub-sea feature's depth came from, in words -- matching
+    the Mac's own thresholds (`BlendedSeaFloor.claim(forSamples:)`'s
+    siblings), not ones invented here.
+    """
+    if share >= MEASURED_THRESHOLD:
+        return "survey"
+    if share <= 0.001:
+        return "global_grid"
+    return "mixed"
+
+
 def _depth_band_mode(value: str) -> DepthBandMode:
     """A settings string, read back as a mode.
 
@@ -954,20 +1011,25 @@ def _band_features(
         geometry = map_coordinates(band.geometry, to_lonlat)
         if geometry.is_empty:
             continue
+        properties: dict[str, Any] = {
+            "elevation_low": band.lower,
+            "elevation_high": band.upper,
+            "band_index": index,
+            "band_count": len(bands),
+            "hipparchus_layer": layer,
+            "hipparchus_source": provider_id,
+            "measured": _band_is_measured(coarse, coarse_surveyed, band),
+        }
+        if coarse_surveyed is not None:
+            share = _band_surveyed_share(coarse, coarse_surveyed, band)
+            properties["surveyed_share"] = share
+            properties["depth_source"] = _depth_source(share)
         features.append(
             {
                 "type": "Feature",
                 "id": f"{provider_id}/{layer}/{index}",
                 "geometry": mapping(geometry),
-                "properties": {
-                    "elevation_low": band.lower,
-                    "elevation_high": band.upper,
-                    "band_index": index,
-                    "band_count": len(bands),
-                    "hipparchus_layer": layer,
-                    "hipparchus_source": provider_id,
-                    "measured": _band_is_measured(coarse, coarse_surveyed, band),
-                },
+                "properties": properties,
             }
         )
     return features

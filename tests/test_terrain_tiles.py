@@ -24,11 +24,14 @@ from hipparchus.data_sources.terrain_tiles import (
     TerrainTileError,
     TerrainTileSettings,
     _Window,
+    MEASURED_THRESHOLD,
     _band_is_measured,
+    _band_surveyed_share,
     _blend_sea_floor,
     _choose_zoom,
     _column_longitudes,
     _decode_terrarium,
+    _depth_source,
     _effective_measured_grid,
     _emodnet_covers,
     _emodnet_widened_bounds,
@@ -38,6 +41,7 @@ from hipparchus.data_sources.terrain_tiles import (
     _pixel_for,
     _read_emodnet_tiff,
     _row_latitudes,
+    _surveyed_share_along_polyline,
     _surveyed_share_of_sea,
     _tile_for,
     terrain_tile_provider,
@@ -690,6 +694,50 @@ class MeasuredProvenanceTests(unittest.TestCase):
         band = ElevationBand(lower=-100.0, upper=-50.0, geometry=Point(0, 0))
         self.assertTrue(_band_is_measured(coarse, coarse_measured, band))
 
+    def test_a_polylines_share_is_the_mean_of_its_samples(self) -> None:
+        """Graded, not pass/fail -- half the vertices on the survey and half
+        off reads as exactly half, where `_measured_along_polyline` would
+        already have called the whole line unmeasured."""
+        measured = np.array([[1.0, 1.0], [0.0, 0.0]])
+        polyline = [(0.0, 0.0), (0.0, 1.0), (1.0, 0.0), (1.0, 1.0)]
+        self.assertAlmostEqual(_surveyed_share_along_polyline(measured, polyline), 0.5)
+
+    def test_an_empty_polylines_share_defaults_to_fully_surveyed(self) -> None:
+        self.assertEqual(_surveyed_share_along_polyline(np.ones((2, 2)), []), 1.0)
+
+    def test_a_bands_share_is_the_mean_of_its_own_cells(self) -> None:
+        coarse = np.array([[-50.0, -60.0], [-40.0, -70.0]])
+        coarse_measured = np.array([[1.0, 0.0], [1.0, 1.0]])
+        band = ElevationBand(lower=-100.0, upper=0.0, geometry=Point(0, 0))
+        self.assertAlmostEqual(_band_surveyed_share(coarse, coarse_measured, band), 0.75)
+
+    def test_no_measured_grid_shares_default_to_fully_surveyed(self) -> None:
+        """EMODnet switched off, or nothing to blend: the same "say nothing
+        against it" default `_band_is_measured` already uses."""
+        coarse = np.array([[-50.0, -60.0]])
+        band = ElevationBand(lower=-100.0, upper=0.0, geometry=Point(0, 0))
+        self.assertEqual(_band_surveyed_share(coarse, None, band), 1.0)
+
+
+class DepthSourceTests(unittest.TestCase):
+    """Which grid a sub-sea feature's depth came from, in words -- matching
+    the Mac's own thresholds."""
+
+    def test_fully_surveyed_reads_survey(self) -> None:
+        self.assertEqual(_depth_source(1.0), "survey")
+
+    def test_at_the_threshold_reads_survey(self) -> None:
+        self.assertEqual(_depth_source(MEASURED_THRESHOLD), "survey")
+
+    def test_untouched_reads_global_grid(self) -> None:
+        self.assertEqual(_depth_source(0.0), "global_grid")
+
+    def test_a_touch_above_zero_still_reads_global_grid(self) -> None:
+        self.assertEqual(_depth_source(0.001), "global_grid")
+
+    def test_in_between_reads_mixed(self) -> None:
+        self.assertEqual(_depth_source(0.5), "mixed")
+
 
 @unittest.skipUnless(SKIA_AVAILABLE and RASTERIO_AVAILABLE, "skia-python and rasterio both needed")
 class EmodnetIntegrationTests(unittest.TestCase):
@@ -748,6 +796,51 @@ class EmodnetIntegrationTests(unittest.TestCase):
         bathymetry = result.features_by_layer["bathymetry"]
         self.assertTrue(bathymetry)
         self.assertTrue(all(feature["properties"]["measured"] for feature in bathymetry))
+
+    def test_bathymetry_features_carry_surveyed_share_and_depth_source(self) -> None:
+        """Not just pass/fail -- the graded fraction and the word for it,
+        the properties a reader would actually want to know which grid a
+        contour or a band's depth came from."""
+        settings = TerrainTileSettings(max_tiles=8, target_pixels=512, use_emodnet_bathymetry=True)
+        result = terrain_tile_provider(settings, self._fake_http()).fetch_bbox(ATHENS)
+        bathymetry = result.features_by_layer["bathymetry"]
+        self.assertTrue(bathymetry)
+        for feature in bathymetry:
+            self.assertGreaterEqual(feature["properties"]["surveyed_share"], MEASURED_THRESHOLD)
+            self.assertEqual(feature["properties"]["depth_source"], "survey")
+        sea_bands = result.features_by_layer["depth_bands"]
+        self.assertTrue(sea_bands)
+        for band in sea_bands:
+            self.assertGreaterEqual(band["properties"]["surveyed_share"], MEASURED_THRESHOLD)
+            self.assertEqual(band["properties"]["depth_source"], "survey")
+
+    def test_land_bands_never_carry_a_depth_source(self) -> None:
+        """A land elevation band is never on the sea floor, so a
+        survey/global-grid claim about it would say nothing real. It should
+        not appear at all -- the same way the Mac's own `bandFeatures` never
+        passes the land call a `surveyed` grid in the first place."""
+        settings = TerrainTileSettings(max_tiles=8, target_pixels=512, use_emodnet_bathymetry=True)
+        result = terrain_tile_provider(settings, self._fake_http()).fetch_bbox(ATHENS)
+        land_bands = result.features_by_layer["elevation_bands"]
+        self.assertTrue(land_bands)
+        for band in land_bands:
+            self.assertNotIn("surveyed_share", band["properties"])
+            self.assertNotIn("depth_source", band["properties"])
+
+    def test_bathymetry_features_carry_no_depth_source_with_emodnet_off(self) -> None:
+        """No survey grid to grade against at all -- the new properties are
+        absent rather than a fabricated `1.0`/`"survey"`."""
+        settings = TerrainTileSettings(max_tiles=8, target_pixels=512, use_emodnet_bathymetry=False)
+
+        def get(url: str, timeout: float) -> bytes:
+            return self._sea_and_land_tile()
+
+        result = terrain_tile_provider(settings, get).fetch_bbox(ATHENS)
+        bathymetry = result.features_by_layer["bathymetry"]
+        self.assertTrue(bathymetry)
+        for feature in bathymetry:
+            self.assertNotIn("surveyed_share", feature["properties"])
+            self.assertNotIn("depth_source", feature["properties"])
 
     def test_switched_off_makes_no_emodnet_request(self) -> None:
         def get(url: str, timeout: float) -> bytes:
