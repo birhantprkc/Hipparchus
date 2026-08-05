@@ -1,6 +1,6 @@
 # Hipparchus
 
-**Version 0.6.0**
+**Version 0.6.1**
 
 **Hipparchus is an online desktop vector cartography app for creating clean, editable maps from OpenStreetMap data and exporting them as Illustrator-friendly SVG files.**
 

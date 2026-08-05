@@ -2,6 +2,23 @@
 
 Notable changes to Hipparchus. Earlier history is in the git log.
 
+## 0.6.1
+
+Nothing in the app changes — this is a documentation release.
+
+`README.md` was still at 0.4.1 and never mentioned the marine layer at all.
+`FILE_STRUCTURE.md` was missing `terrain_tiles.py`, `erddap.py`,
+`currents_provider.py`, `sst_provider.py`, `seamarks.py`, `seamark_symbols.py`
+and a dozen other files that exist, along with 51 of the 83 test modules.
+`MANUAL.md` had zero coverage of sea marks, depth bands, EMODnet provenance,
+currents or sea surface temperature anywhere in its 1271 lines. All three are
+caught up to 0.6.0 now, including a new "Marine Layers" section in the
+manual.
+
+---
+
+1285 tests, 147 skipped.
+
 ## 0.6.0
 
 Sea surface temperature, and the sea's own provenance graded rather than
