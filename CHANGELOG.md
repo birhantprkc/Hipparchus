@@ -2,6 +2,44 @@
 
 Notable changes to Hipparchus. Earlier history is in the git log.
 
+## 0.6.0
+
+Sea surface temperature, and the sea's own provenance graded rather than
+pass/fail — closing the two gaps that were left open when the Mac ported
+this application's marine layer back onto its own source.
+
+### A second ocean scalar through the same ERDDAP client
+
+- **Sea surface temperature**, fetched from NASA JPL's MUR analysis through
+  NOAA CoastWatch's ERDDAP — the same federated client the currents already
+  used, pointed at a different dataset. Filled bands and isolines, the same
+  pipeline elevation already had, run over degrees Celsius instead of metres.
+- Wired into all six places a new layer needs: the source stack, the model
+  registry, the provider factory, the attribution registry, the layer
+  inventory, and the scene builder's own set of layers that get a two-stop
+  fill ramp rather than one flat colour. Missing that sixth one is exactly
+  how the depth bands drew flat in 0.5.0.
+
+### Depth provenance, graded rather than pass or fail
+
+- **`surveyed_share` and `depth_source`**, on bathymetry contours and depth
+  bands: what fraction of a feature sits on EMODnet's real survey rather than
+  the coarse global grid it may still be sitting on in part, and a word for
+  it — `survey`, `mixed` or `global_grid`. The existing pass/fail `measured`
+  boolean stays; this is the fraction behind it, ported to the same
+  thresholds the Mac already used.
+
+### Seamark layers get their own styling on every preset
+
+- **A preset with no palette override now draws sea marks in its own voice**
+  rather than the shared grey hairline every unstyled layer falls back to —
+  the same derivation `depth_bands` already had, reading a preset's own
+  water, ink, land and ground instead of requiring a palette.
+
+---
+
+1285 tests, 147 skipped.
+
 ## 0.5.0
 
 The sea release. Hipparchus has drawn coastlines since the beginning and had
