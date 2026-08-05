@@ -1,6 +1,6 @@
 # Hipparchus File Structure
 
-**Version 0.4.1**
+**Version 0.6.0**
 
 This document describes the repository layout of Hipparchus, an online desktop
 vector cartography application. It complements the "Project Layout" section of
@@ -13,8 +13,11 @@ Hipparchus/
 ├── README.md                 Project overview, install, and usage
 ├── MANUAL.md                 Full user manual
 ├── FILE_STRUCTURE.md         This document
+├── CHANGELOG.md               Notable changes, one heading per version
+├── CLAUDE.md                  Notes for an agent working in this repository
 ├── LICENSE                   MIT License
 ├── pyproject.toml            Package metadata, dependencies, pytest config
+├── Dockerfile.gui              Container image for the GUI test suite
 ├── setup.sh                  One-command dependency setup (macOS / Linux)
 ├── setup.ps1                 One-command dependency setup (Windows PowerShell)
 ├── run_hprs.sh               Fast launcher (adds src/ + repo root to PYTHONPATH)
@@ -24,7 +27,7 @@ Hipparchus/
 ├── hipparchus/               Compatibility shim package (run from source)
 ├── src/hipparchus/           Application source package
 ├── tests/                    Unit tests
-├── scripts/                  Launch, preflight, precache, and clip scripts
+├── scripts/                  Launch, preflight, precache, gallery and export scripts
 ├── docs/                     Documentation assets (screenshots)
 ├── documents/               Design, planning notes, and the interface proposal
 └── datasets/                 Local sample data (gitignored except README)
@@ -48,12 +51,15 @@ src/hipparchus/
 │
 ├── application/              The rules. Everything decidable without a widget
 │   ├── about.py              What the app is and what it owes, as data
+│   ├── attribution.py        Who owes a credit for what drew the sheet, and the registry that enforces it
 │   ├── controller.py         Central controller wiring requests to services
 │   ├── coordinate_import.py  Clipboard text to an area, refusing prose
 │   ├── fetch_cost.py         What a fetch will cost, before it is made
 │   ├── geocoding.py          Place names to frames, clamped to map-sized
 │   ├── layer_inventory.py    What a rendered map contains, for the layer panel
+│   ├── line_weight.py        One multiplier over every stroke, absolute rather than relative
 │   ├── locator.py            What a click chooses; the draw-area mode
+│   ├── page_size.py          How big the exported sheet actually is, in inches on paper
 │   ├── palette_sheet.py      A whole map's layers derived from a palette
 │   ├── palettes.py           Colour as an axis of its own, separate from style
 │   ├── places.py             The saved places, with ⌘1…⌘9 derived from them
@@ -67,6 +73,7 @@ src/hipparchus/
 │   ├── session_edit.py       What the Edit menu calls a change
 │   ├── session_history.py    Undo, with the rule that a fetch is never redone
 │   ├── source_stack.py       Composable map sources; resolves them into a fetch
+│   ├── status_line.py        What the status line says, when two things want to say something
 │   ├── style_catalogue.py    Which styles exist, and what may be done to them
 │   ├── style_previews.py     Preset thumbnails for the style picker
 │   ├── viewport.py           What is on screen, and what shape to ask for
@@ -86,7 +93,9 @@ src/hipparchus/
 │   └── settings_store.py     Preferences, clamped; shared with the macOS app
 │
 ├── data_sources/            Map data acquisition and conversion
+│   ├── currents_provider.py  Geostrophic surface currents from NOAA ERDDAP, drawn as streamlines
 │   ├── data_source_manager.py  Selects and configures active sources
+│   ├── erddap.py              One federated ocean-data client with server-side subsetting, shared by currents and sea temperature
 │   ├── map_models.py         Map-model registry (OSM, vector tiles, DEM, night lights, etc.)
 │   ├── optional_providers.py Optional local-source backends (PBF, MVT/PMTiles, shapefile, GeoParquet, raster contours)
 │   ├── overpass_geojson.py   Overpass JSON to layer-separated GeoJSON
@@ -95,6 +104,10 @@ src/hipparchus/
 │   ├── gibs_provider.py      NASA GIBS imagery, contoured into iso-brightness lines
 │   ├── provider.py           Provider interface / base types
 │   ├── satellite_provider.py Celestrak element sets to ground tracks and footprints
+│   ├── seamark_symbols.py    Chart symbol vocabulary for sea marks: cans, cones, cardinal topmarks, a light's flare
+│   ├── seamarks.py           OSM's seamark:* namespace read into six chart layers
+│   ├── sst_provider.py       Sea surface temperature from NASA JPL MUR, through the ERDDAP client
+│   ├── terrain_tiles.py      Real elevation from public terrain tiles, blended with EMODnet bathymetry where surveyed
 │   ├── usgs_provider.py      Live USGS seismicity as magnitude-scaled circles
 │   ├── rate_limit.py         Request rate limiting
 │   └── simulated_field.py    Procedural terrain field, contoured as synthetic relief
@@ -109,10 +122,14 @@ src/hipparchus/
 │   ├── circle_packing.py     Circle-packing derived layer
 │   ├── contours.py           Pure-numpy marching-squares contouring
 │   ├── hex_grid.py           Hex-grid derived layer
+│   ├── hillshade.py          Relief shading from a scalar elevation field, Horn's method
+│   ├── illumination.py       Illuminated contours: stroke weight that varies along a line to read as depth
 │   ├── ops.py                Shared geometry operations
+│   ├── orbits.py             Keplerian/J2 orbit propagation for satellite ground tracks
 │   ├── projection.py         Projection profiles and coordinate transforms
 │   ├── simplification.py     Path simplification (with parallel support)
 │   ├── smoothing.py          Cartographic smoothing
+│   ├── streamlines.py        A flow field drawn the way a printed chart always has: RK4 integration, evenly spaced
 │   ├── triangulation.py      Delaunay triangulation
 │   └── voronoi.py            Voronoi cell generation
 │
@@ -127,22 +144,27 @@ src/hipparchus/
 │   ├── engine.py             Rendering orchestration
 │   ├── geometry_adapter.py   Adapts scene geometry to render primitives
 │   ├── models.py             Render data models
+│   ├── not_for_navigation.py Whether a sheet is drawing the sea, and what it therefore has to say
 │   └── skia_renderer.py      Skia-backed renderer
 │
 └── ui/                       Desktop interface
     ├── about_window.py       The splash, and the attribution it carries
     ├── actions.py            The verb table both the menu and the buttons read
+    ├── disclosure.py         A section heading that can hide what is under it
+    ├── frame_panel.py        The left column: where you are, and how big the frame is
     ├── icons.py              Vector icons drawn on small canvases
     ├── locator_window.py     The floating Locator, with room to aim in
     ├── main_window.py        Tkinter main window — wiring, not rules
     ├── map_canvas.py         The map: pan, zoom, turn, marquee, controls
     ├── menubar.py            The menu bar, built from the verb table
+    ├── page_panel.py         Page: paper, orientation, resolution, and the SVG's furniture
     ├── panels.py             Sources / Layers / Style sidebar panels
     ├── search_field.py       Type a place, choose from the frames offered
     ├── settings_window.py    Preferences, at ⌘,
     ├── shortcuts.py          Accelerators, per platform
     ├── status_bar.py         Per-source progress, provenance, cache
     ├── theme.py              Colour, contrast and type, decided once
+    ├── toolbar.py            Search field, Render map, the Locator, and Export
     ├── tooltip.py            Tooltips, and where they are allowed to appear
     ├── world_map.py          The interactive world, drawn from Natural Earth
     └── assets/               The maker's mark and the About key art
@@ -150,10 +172,14 @@ src/hipparchus/
 
 ## Tests (`tests/`)
 
-62 pytest modules. The map half covers projection, smoothing,
+83 pytest modules. The map half covers projection, smoothing,
 simplification, scene building, rendering state, export and quality profiles,
 SVG, PDF and PNG export, caching, presets, the optional local-source providers
-and their bbox pre-filter, and the Overpass provider, query and GeoJSON paths.
+and their bbox pre-filter, the Overpass provider, query and GeoJSON paths, and
+the marine layer — sea marks and their symbols, depth bands, real elevation
+and EMODnet bathymetry blending, per-feature depth provenance, sea surface
+temperature and the shared ERDDAP client, surface currents and the streamline
+tracer, and the not-for-navigation notice.
 
 The interface half covers the rules the window obeys rather than the widgets
 themselves: the session and its undo history, what the Edit menu calls a
@@ -167,23 +193,40 @@ deliberately; see `CLAUDE.md`.
 
 ```text
 tests/
+├── test_about.py
+├── test_actions.py
+├── test_attribution.py
 ├── test_bands.py
 ├── test_cache_store.py
+├── test_canvas_transform.py
 ├── test_config.py
 ├── test_contour_rendering.py
 ├── test_contours.py
+├── test_coordinate_import.py
+├── test_currents.py
+├── test_depth_bands.py
+├── test_disclosure.py
+├── test_export_attribution.py
 ├── test_export_profiles.py
-├── test_canvas_transform.py
+├── test_fetch_cost.py
 ├── test_fetch_progress.py
-├── test_icons.py
+├── test_geocoding.py
 ├── test_geometry_adapter.py
 ├── test_geometry_tools.py
 ├── test_gibs_provider.py
+├── test_hillshade.py
+├── test_icons.py
 ├── test_illumination.py
+├── test_label_fonts.py
 ├── test_layer_inventory.py
-├── test_source_stack.py
-├── test_style_previews.py
+├── test_line_weight.py
+├── test_locator.py
+├── test_main_window.py
+├── test_map_canvas.py
 ├── test_map_models.py
+├── test_menubar.py
+├── test_not_for_navigation.py
+├── test_one_window.py
 ├── test_optional_providers.py
 ├── test_optional_providers_spatial.py
 ├── test_orbits.py
@@ -191,30 +234,65 @@ tests/
 ├── test_overpass_provider.py
 ├── test_overpass_query.py
 ├── test_package_imports.py
+├── test_page_size.py
+├── test_palettes.py
+├── test_panels.py
+├── test_places.py
 ├── test_preset_store.py
+├── test_presets.py
 ├── test_projection.py
+├── test_provenance.py
 ├── test_quality_profiles.py
+├── test_raster_export.py
+├── test_raster_not_for_navigation.py
+├── test_readiness.py
 ├── test_rendering_state.py
 ├── test_scene_builder.py
+├── test_seamark_style.py
+├── test_seamarks.py
+├── test_session.py
+├── test_session_edit.py
+├── test_session_history.py
+├── test_settings_store.py
+├── test_shortcuts.py
 ├── test_simplification_parallel.py
 ├── test_simulated_field.py
 ├── test_smoothing.py
-└── test_svg_exporter.py
+├── test_source_stack.py
+├── test_sst.py
+├── test_status_bar.py
+├── test_status_line.py
+├── test_streamlines.py
+├── test_style_catalogue.py
+├── test_style_previews.py
+├── test_svg_exporter.py
+├── test_terrain_tiles.py
+├── test_theme.py
+├── test_tooltip.py
+├── test_usgs_provider.py
+├── test_version.py
+├── test_viewport.py
+├── test_world_map.py
+├── test_world_outline.py
+├── test_world_paths.py
+└── test_world_view.py
 ```
 
 ## Scripts (`scripts/`)
 
 ```text
 scripts/
-├── clip_pbf.py               Clip an .osm.pbf to a bbox (city-sized extracts for OSM Local)
-├── precache_presets.py       Warm the Overpass cache for built-in presets
-├── python_env.sh             Shared PYTHONPATH / interpreter helper
-├── release_preflight.sh      Compile, test, and dependency checks before release
-├── make_about_art.py         The splash's key art and maker's mark, from the macOS sources
-├── render_gallery.py         Make a named gallery plate from live data, no window
-├── screenshot_session.py     Put the app in the state a documentation screenshot needs
-├── smoke_render.py           Prove the preview reaches the canvas, end to end
-└── smoke_run.sh              Quick smoke launch
+├── clip_pbf.py                       Clip an .osm.pbf to a bbox (city-sized extracts for OSM Local)
+├── export_glowingmap_geometry.py     Headless geometry export for the GlowingMap contract, no window
+├── generate_palette_parity_fixture.py  Regenerate the palette parity fixture from the shipped derivation
+├── precache_presets.py               Warm the Overpass cache for built-in presets
+├── python_env.sh                     Shared PYTHONPATH / interpreter helper
+├── release_preflight.sh              Compile, test, and dependency checks before release
+├── make_about_art.py                 The splash's key art and maker's mark, from the macOS sources
+├── render_gallery.py                 Make a named gallery plate from live data, no window
+├── screenshot_session.py             Put the app in the state a documentation screenshot needs
+├── smoke_render.py                   Prove the preview reaches the canvas, end to end
+└── smoke_run.sh                      Quick smoke launch
 ```
 
 ## Supporting Directories
@@ -235,7 +313,7 @@ docs/
     ├── gallery-auckland-hypsometric.png
     ├── hipparchus-south-bend-light.png
     ├── hipparchus-valletta-dark.png
-    └── gallery-*.png          Ten preset renders used by the README gallery
+    └── gallery-*.png          Preset renders used by the README gallery (22 images as of 0.6.0)
 
 documents/
 ├── NextStepsClaude.md        Outstanding work, with approach and acceptance criteria

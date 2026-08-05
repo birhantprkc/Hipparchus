@@ -1,6 +1,6 @@
 # Hipparchus Manual
 
-**Version 0.4.1**
+**Version 0.6.0**
 
 This manual explains how to use Hipparchus as an online map creation app. It covers installation, launching, fetching map data, working with layers and presets, exporting SVG files, and solving common problems. It applies to macOS, Linux, and Windows.
 
@@ -697,6 +697,48 @@ Layer visibility affects what is requested and what is drawn. For best Overpass 
 - `Parks/Gardens`
 
 These are polygonal or area-like features.
+
+### Marine Layers
+
+- `Sea Marks — Areas`
+- `Sea Marks — Harbours`
+- `Sea Marks — Beacons`
+- `Sea Marks — Buoys`
+- `Sea Marks — Hazards`
+- `Sea Marks — Lights`
+- `Depth Bands`
+- `Bathymetry Contours`
+
+Sea marks are read from OpenStreetMap's `seamark:*` tags — every buoy, beacon,
+light, harbour and restricted area in the fetched area — and drawn as chart
+symbols rather than dots: a can for a port hand mark, a cone for starboard,
+the four cardinal topmarks arranged the way they are taught (north up, south
+down, east the egg, west the wine glass), a light's flare, a wreck's three
+masts. Shape carries the meaning, not colour, so the marks still read in flat
+light or on a photocopier.
+
+Depth bands and bathymetry contours need the Elevation source turned on: the
+sea floor is banded on a ramp of its own rather than the land's, and where
+EMODnet has a real survey of a cell — European waters only, roughly 115 m
+resolution — it is used ahead of the coarser global grid everywhere else.
+Each sub-sea feature records which grid its own depth actually came from
+(`depth_source`: `survey`, `mixed` or `global_grid`), and how much of it is
+surveyed (`surveyed_share`), in its exported properties and diagnostics.
+
+**Surface Currents** and **Sea Surface Temperature** are separate sources —
+turned on under Sources rather than here, since each costs its own fetch to
+NOAA's ERDDAP. Currents draw as streamlines integrated through the flow
+field, thickened where the water runs faster; sea temperature draws as
+filled bands and isolines over the fetched area, the same pipeline
+elevation's contours and hypsometric tints use, run over degrees Celsius
+instead of metres.
+
+**Any sheet carrying depths, sea marks or currents prints a NOT FOR
+NAVIGATION notice** across the bottom of the export, on by default — the one
+piece of furniture that starts on rather than off, because the claim it is
+guarding against is exactly what a sheet with real bathymetry and chart
+symbols on it could otherwise be mistaken for. Nothing here is a charted
+sounding and nothing is updated by Notices to Mariners.
 
 ### Road Layers
 

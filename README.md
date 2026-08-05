@@ -1,6 +1,6 @@
 # Hipparchus
 
-**Version 0.4.1**
+**Version 0.6.0**
 
 **Hipparchus is an online desktop vector cartography app for creating clean, editable maps from OpenStreetMap data and exporting them as Illustrator-friendly SVG files.**
 
@@ -25,6 +25,20 @@ Hipparchus is a standalone map creation tool focused on live online data, clean 
 
 ## Features
 
+New in 0.6.0:
+
+- **Sea surface temperature**, fetched from NASA JPL's MUR analysis through NOAA CoastWatch's ERDDAP — the same federated client the currents use, pointed at a second dataset. Filled bands and isolines, the same pipeline elevation already had, run over degrees Celsius instead of metres.
+- **Depth provenance, graded rather than pass or fail.** Bathymetry contours and depth bands now carry `surveyed_share` and `depth_source` (`survey`, `mixed` or `global_grid`) alongside the existing `measured` boolean — what fraction of a feature actually sits on EMODnet's real survey rather than the coarse global grid it may still be sitting on in part.
+- **Sea marks and depth bands get their own styling on every preset**, not only under a palette — a preset with no palette override now draws them in its own voice instead of the shared grey hairline every unstyled layer falls back to.
+
+New in 0.5.0, the sea release — coastlines had nothing to say about the water beyond them until this:
+
+- **Sea marks, as chart symbols rather than dots.** Every buoy, beacon, light, harbour and restricted area in OSM's `seamark:*` namespace, styled to the S-57 object model the official electronic charts use — a can for a port hand mark, a cone for starboard, the four cardinal topmarks, a light's flare, a wreck's three masts. Shape carries the meaning and colour does not, so the marks survive flat light, a photocopier and colour-blind eyes.
+- **Real bathymetry** under European seas from EMODnet, blended into the elevation grid so filled depth bands, sub-sea contours and hillshade all improve at once — a ramp of the sea's own rather than borrowing the land's.
+- **Surface currents as streamlines**, integrated rather than animated: RK4 over a normalised direction field, with speed becoming stroke weight along each line. Fetched from NOAA's ERDDAP, both velocity components in one request.
+- **NOT FOR NAVIGATION**, on any sheet carrying depths, marks or currents and on no other — on by default, the inversion itself the statement, with a machine-readable claim that survives even when the words are turned off.
+- **An attribution registry.** Every shipped source either carries a credit or is explicitly declared exempt, enforced by a test, and each exported sheet carries the sources that actually drew it.
+
 New in 0.4.1:
 
 - A menu bar and the whole keyboard: ⌘↵ to render, ⌘. to cancel, ⌘L for the Locator, ⌘F to search, ⌘1…⌘9 for saved places, ⌘Z to undo, ⌘, for settings.
@@ -45,6 +59,7 @@ Throughout:
 - Manual bounding-box editing.
 - Saved places, reachable from the Map menu and from ⌘1…⌘9.
 - Layer toggles for roads, buildings, water, parks, railways, natural areas, labels, amenities, shops, landuse, barriers, and power features.
+- Sea marks (areas, harbours, beacons, buoys, hazards, lights), depth bands, bathymetry contours, surface currents and sea surface temperature as their own toggleable layers, each with a not-for-navigation notice where it applies.
 - Styled road hierarchy with motorway, trunk, primary, secondary, tertiary, residential, service, and other road classes.
 - Visible blue water rendering for lakes and coastline-derived sea areas.
 - Hipparchus 2 quality pipeline with projected render coordinates, cartographic smoothing, high-quality preview/export profiles, richer SVG diagnostics, and editable SVG labels.
@@ -729,7 +744,7 @@ src/hipparchus/
   ui/                The window: wiring, not rules
 
 hipparchus/          Compatibility shim so `python -m hipparchus` runs from source
-tests/               Unit tests (65 test modules)
+tests/               Unit tests (83 test modules)
 scripts/             Launch, preflight, precache, gallery, and clip scripts
 docs/                Documentation assets (screenshots)
 documents/           Design and planning notes
