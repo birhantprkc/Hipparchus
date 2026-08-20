@@ -597,9 +597,14 @@ class SkiaRenderer:
 
         font_size = max(6, min(getattr(self, '_label_font_size', 10), 16))
 
-        # The picked family, or None for the default face when nothing is
-        # requested or the system does not have it.
-        base_typeface = _family_typeface(self.label_font_family)
+        # The picked family, falling back to the Latin face when nothing is
+        # requested or the system does not have it. Resolving it here rather
+        # than handing Skia a None matters twice: Skia deprecated its implicit
+        # default font and warns once per call, and `_typeface_for_text` already
+        # judges coverage against `_default_typeface()` — so drawing with
+        # anything else meant deciding fallbacks against a face we were not
+        # using. Still None only on a system with no matchable font at all.
+        base_typeface = _family_typeface(self.label_font_family) or _default_typeface()
 
         try:
             font = skia.Font(base_typeface, font_size)
