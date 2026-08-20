@@ -234,8 +234,6 @@ class IntegrationTests(unittest.TestCase):
         for. The provider wrote the property and no consumer existed; every test
         passed and the Aegean came out as hairlines of uniform weight.
         """
-        from shapely.geometry import LineString
-
         from hipparchus.application.scene_builder import RenderSceneBuilder
         from hipparchus.data_sources.provider import FeatureCollection
 
@@ -263,7 +261,7 @@ class IntegrationTests(unittest.TestCase):
         scene = RenderSceneBuilder().build(
             collection, preset.geometry_profile, preset.style_profile, "preview"
         )
-        layer = next(l for l in scene.layers if l.name == CURRENTS_LAYER)
+        layer = next(each for each in scene.layers if each.name == CURRENTS_LAYER)
         self.assertEqual(len(layer.weights), len(layer.geometries))
         self.assertNotEqual(
             layer.weights[0], layer.weights[1], "the two runs drew at one width"

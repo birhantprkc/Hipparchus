@@ -15,7 +15,7 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Iterable, Sequence
+from typing import Sequence
 
 from hipparchus.data_sources.erddap import (
     ERDDAPClient,

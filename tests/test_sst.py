@@ -10,7 +10,6 @@ Mercator tile window.
 
 from __future__ import annotations
 
-import math
 import unittest
 
 from hipparchus.application.attribution import attribution_for
@@ -224,7 +223,7 @@ class IntegrationTests(unittest.TestCase):
         scene = RenderSceneBuilder().build(
             collection, preset.geometry_profile, preset.style_profile, "preview"
         )
-        layer = next(l for l in scene.layers if l.name == SST_BANDS_LAYER)
+        layer = next(each for each in scene.layers if each.name == SST_BANDS_LAYER)
         self.assertTrue(layer.fill_colors, "the band ramp never reached the render layer")
         self.assertEqual(len(set(layer.fill_colors)), len(layer.fill_colors), "every band drew the same colour")
 

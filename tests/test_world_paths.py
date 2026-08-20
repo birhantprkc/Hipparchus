@@ -15,8 +15,6 @@ from __future__ import annotations
 import math
 import unittest
 
-import numpy as np
-
 from hipparchus.application.world_outline import (
     DETAIL_10M,
     DETAIL_110M,
@@ -25,7 +23,6 @@ from hipparchus.application.world_outline import (
     detail_for,
 )
 from hipparchus.application.world_paths import (
-    Segment,
     markers_within,
     prepare,
     screen_coordinates,

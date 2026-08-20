@@ -198,7 +198,10 @@ class SymbolTests(unittest.TestCase):
         Baltic, and the reader is asked to tell it from a cone."""
         equator = placed(CAN, 0.0, 0.0, 1.0)
         north = placed(CAN, 0.0, 60.0, 1.0)
-        width = lambda ring: max(x for x, _ in ring) - min(x for x, _ in ring)
+
+        def width(ring) -> float:
+            return max(x for x, _ in ring) - min(x for x, _ in ring)
+
         self.assertGreater(width(north), width(equator) * 1.8)
 
     def test_the_size_follows_the_frame_rather_than_the_degree(self) -> None:

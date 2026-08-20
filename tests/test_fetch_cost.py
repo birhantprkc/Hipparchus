@@ -88,7 +88,7 @@ class EstimateTests(unittest.TestCase):
             for side in (0.01, 0.05, 0.2, 1.0, 5.0)
         ]
         ranked = {FINE: 0, SLOW: 1, BEYOND: 2}
-        self.assertEqual([ranked[level] for level in levels], sorted(ranked[l] for l in levels))
+        self.assertEqual([ranked[level] for level in levels], sorted(ranked[level] for level in levels))
 
     def test_the_estimate_carries_the_area_it_judged(self) -> None:
         """So the caller can say the number rather than repeat the arithmetic."""
