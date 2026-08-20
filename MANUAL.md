@@ -1272,7 +1272,7 @@ setup.ps1                    One-command setup (Windows PowerShell)
 run_hprs.sh                  Launcher (macOS / Linux)
 run_hprs.ps1                 Launcher (Windows PowerShell)
 run_hprs_checked.sh          Launcher with preflight checks (macOS / Linux)
-scripts/release_preflight.sh Preflight checks
+scripts/release_preflight.sh Preflight checks (compile, Ruff, pytest, dependencies)
 scripts/clip_pbf.py          Clip an .osm.pbf to a bbox for OSM Local
 src/hipparchus/main.py       Application entry point
 src/hipparchus/core/application.py

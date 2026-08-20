@@ -515,15 +515,26 @@ Windows PowerShell:
 
 ```powershell
 $env:PYTHONPATH = "src;."
-py -m unittest discover -s tests -p "test_*.py"
+py -m pytest
 ```
 
 The preflight script:
 
 - Compiles Python files.
-- Runs unit tests.
+- Runs `ruff check .` and fails on any finding.
+- Runs the pytest suite.
 - Confirms `shapely` is available.
 - Reports whether `skia-python` is available.
+
+It needs the `dev` extras (`pytest`, `ruff`) and fails if they are missing —
+a release gate that quietly skips its own checks is not a gate. Launching
+through `run_hprs_checked.sh` runs the compile-and-test subset only, so a lint
+finding never stands between you and a window.
+
+`unittest discover -s tests -p "test_*.py"` still works and is what to reach for
+where pytest is unavailable, but it collects a smaller inventory than pytest
+(1,397 cases against 1,432 at 0.6.1, the difference being almost entirely
+GUI-gated tests that skip either way). Pytest is the documented runner.
 
 ## How It Works
 
