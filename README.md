@@ -1,6 +1,6 @@
 # Hipparchus
 
-**Version 0.6.1**
+**Version 0.6.2**
 
 **Hipparchus is an online desktop vector cartography app for creating clean, editable maps from OpenStreetMap data and exporting them as Illustrator-friendly SVG files.**
 
@@ -533,7 +533,7 @@ finding never stands between you and a window.
 
 `unittest discover -s tests -p "test_*.py"` still works and is what to reach for
 where pytest is unavailable, but it collects a smaller inventory than pytest
-(1,397 cases against 1,432 at 0.6.1, the difference being almost entirely
+(1,397 cases against 1,432 at 0.6.2, the difference being almost entirely
 GUI-gated tests that skip either way). Pytest is the documented runner.
 
 ## How It Works

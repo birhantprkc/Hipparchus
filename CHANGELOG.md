@@ -2,6 +2,56 @@
 
 Notable changes to Hipparchus. Earlier history is in the git log.
 
+## 0.6.2
+
+Nothing in the app changes for anyone who was already running it — this
+release is what a read-only test review turned up, and the checks that should
+have caught it first.
+
+### Labels stop asking Skia for a face it no longer wants to give
+
+`skia.Font(None, size)` asks for the implicit default typeface, which Skia has
+deprecated and warns about once per call — 22 times across a full run. The
+Latin face is now resolved explicitly through `_default_typeface()`, which the
+renderer already had.
+
+That also closes something quieter: `_typeface_for_text` was judging glyph
+coverage against `_default_typeface()` while the drawing happened with Skia's
+implicit default, so every CJK fallback decision was measured against a face
+that was not the one in use.
+
+### The preflight runs the suite it claims to, and lints
+
+`scripts/release_preflight.sh` ran `unittest discover`, which collects 1,397
+cases where pytest collects 1,432 — and pytest is the runner the README
+documents. It now runs pytest, and `ruff check .`, and fails outright if
+either is missing: a release gate that quietly skips its own checks is not a
+gate.
+
+`run_hprs_checked.sh` no longer calls it. That script runs the checks and then
+launches the GUI, so sharing one script would have put a lint finding between
+somebody and a window. It runs the compile-and-test subset directly instead.
+
+### Ten Ruff findings, and the reason there were ten
+
+Six unused imports, three ambiguous `l` loop variables, and a lambda bound to
+a name. None of them changed behaviour. They accumulated because nothing ever
+ran Ruff — it has been declared in the `dev` extra and documented the whole
+time, and no script invoked it.
+
+### A Python that works, rather than the one named `python3`
+
+On macOS `python3` is frequently Xcode's 3.10, below this project's floor, so
+every script refused to run — while a 3.12 with every dependency installed sat
+on the same disk. With `HIPPARCHUS_PYTHON` unset, the launcher now searches,
+preferring an interpreter that can already import numpy, scipy and shapely
+over a merely newer bare one, and saying which it picked. Set
+`HIPPARCHUS_PYTHON` and it stays strict, substituting nothing.
+
+---
+
+1285 tests, 147 skipped. Ruff clean. No warnings.
+
 ## 0.6.1
 
 Nothing in the app changes — this is a documentation release.
