@@ -154,6 +154,50 @@ class ZoomChoiceTests(unittest.TestCase):
         self.assertLessEqual((max_x - min_x + 1) * (max_y - min_y + 1), 4)
 
 
+class SamplingCeilingTests(unittest.TestCase):
+    """`target_pixels` is a request; `max_tiles` is a ceiling on its cost.
+
+    The two were being confused for one. At 64 tiles -- eight across, 2048 px
+    of mosaic -- the ceiling sat below the request for any frame larger than a
+    country, so a world frame asked to be sampled 4096 px across came back at
+    2048 and said nothing about it.
+    """
+
+    WORLD = (-180.0, -85.0, 180.0, 85.0)
+
+    @staticmethod
+    def _mosaic_pixels(bounds: tuple[float, float, float, float], zoom: int) -> int:
+        min_x, _min_y = _tile_for(bounds[0], bounds[3], zoom)
+        max_x, _max_y = _tile_for(bounds[2], bounds[1], zoom)
+        return (max_x - min_x + 1) * TILE_PIXELS
+
+    def test_a_world_frame_asked_for_4096_is_sampled_at_4096(self) -> None:
+        settings = TerrainTileSettings(target_pixels=4096)
+        zoom = _choose_zoom(self.WORLD, settings)
+
+        self.assertEqual(zoom, 4)
+        self.assertEqual(self._mosaic_pixels(self.WORLD, zoom), 4096)
+
+    def test_the_default_request_still_puts_a_world_frame_at_zoom_2(self) -> None:
+        """Nothing reaches the ceiling by accident."""
+        self.assertEqual(_choose_zoom(self.WORLD, TerrainTileSettings()), 2)
+
+    def test_the_ceiling_is_where_the_machine_gives_out(self) -> None:
+        settings = TerrainTileSettings()
+
+        self.assertEqual(settings.max_tiles, 256, "sixteen tiles across, 4096 px")
+        self.assertEqual(settings.target_pixels, 1200)
+
+    def test_the_ceiling_still_refuses_what_it_cannot_afford(self) -> None:
+        """A request past the ceiling is capped, not honoured."""
+        settings = TerrainTileSettings(target_pixels=100_000)
+        zoom = _choose_zoom(self.WORLD, settings)
+        min_x, min_y = _tile_for(self.WORLD[0], self.WORLD[3], zoom)
+        max_x, max_y = _tile_for(self.WORLD[2], self.WORLD[1], zoom)
+
+        self.assertLessEqual((max_x - min_x + 1) * (max_y - min_y + 1), settings.max_tiles)
+
+
 @unittest.skipUnless(SKIA_AVAILABLE, "skia-python not installed")
 class TerrariumDecodeTests(unittest.TestCase):
     def test_known_elevations_survive_a_round_trip(self) -> None:

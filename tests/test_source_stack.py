@@ -10,6 +10,7 @@ from hipparchus.application.source_stack import (
     default_sources,
 )
 from hipparchus.data_sources.map_models import MapModelRegistry
+from hipparchus.data_sources.terrain_tiles import TerrainTileSettings
 
 
 class DefinitionTests(unittest.TestCase):
@@ -145,7 +146,7 @@ class SettingsTests(unittest.TestCase):
     def test_declared_settings_come_back_with_defaults(self) -> None:
         stack = SourceStack()
         keys = {setting.key for setting in stack.settings_for("terrain_tiles")}
-        self.assertEqual(keys, {"interval", "bands", "hillshade"})
+        self.assertEqual(keys, {"interval", "samples", "bands", "hillshade"})
 
     def test_an_override_replaces_the_default(self) -> None:
         stack = SourceStack()
@@ -298,3 +299,37 @@ class NaturalEarthStackingTests(unittest.TestCase):
         stack.set_enabled("natural_earth", True)
 
         self.assertEqual(stack.plan().map_model_id, "natural_earth_atlas")
+
+
+class SamplingRequestTests(unittest.TestCase):
+    """"Samples across" is a request the elevation source can be asked for.
+
+    Reachable only from `TerrainTileSettings` before this, which meant a world
+    frame could be sampled no more finely than whatever the default happened to
+    be.
+    """
+
+    def test_it_is_named_the_way_the_other_sampling_knobs_are(self) -> None:
+        stack = SourceStack()
+        setting = stack.definition("terrain_tiles").setting("samples")
+
+        self.assertEqual(setting.label, "Samples across")
+        self.assertEqual(setting.target, "target_pixels")
+        for source_id in ("erddap_sst", "erddap_current"):
+            self.assertEqual(
+                stack.definition(source_id).setting("samples").label, "Samples across"
+            )
+
+    def test_it_defaults_to_the_provider_s_own_default(self) -> None:
+        """So ticking Elevation changes nothing until somebody moves it."""
+        stack = SourceStack()
+        setting = stack.definition("terrain_tiles").setting("samples")
+
+        self.assertEqual(setting.value, TerrainTileSettings().target_pixels)
+        self.assertEqual(stack.provider_overrides("terrain_tiles"), {})
+
+    def test_moving_it_reaches_the_provider(self) -> None:
+        stack = SourceStack()
+        stack.set_setting("terrain_tiles", "samples", 4096)
+
+        self.assertEqual(stack.provider_overrides("terrain_tiles"), {"target_pixels": 4096})

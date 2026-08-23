@@ -17,6 +17,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field, replace
 from typing import Any, Literal
 
+from hipparchus.data_sources.terrain_tiles import TerrainTileSettings
+
 
 Provenance = Literal["live", "measured", "synthetic", "uncalibrated", "approximate"]
 SettingKind = Literal["number", "choice", "boolean"]
@@ -146,6 +148,18 @@ def default_sources() -> tuple[SourceDefinition, ...]:
             provenance="measured",
             settings=(
                 SourceSetting("interval", "Interval", "number", 0.0, suffix="m", attribute="contour_interval_metres"),
+                # How finely to sample the ground, and the only knob that means
+                # anything on a continental frame: the default is two metres a
+                # pixel over a city and thirty kilometres over the world. Named
+                # as the sea-temperature and currents sources already name
+                # theirs, and it costs the same thing -- more samples, a longer
+                # fetch, and more contour to trace afterwards. Defaulted to the
+                # provider's own default, so ticking Elevation changes nothing
+                # until somebody moves it. See `TerrainTileSettings.max_tiles`
+                # for where it stops.
+                SourceSetting("samples", "Samples across", "number",
+                              TerrainTileSettings().target_pixels,
+                              attribute="target_pixels"),
                 SourceSetting("bands", "Bands", "number", 10, attribute="elevation_band_count"),
                 SourceSetting("hillshade", "Hillshade", "boolean", False, attribute="emit_hillshade"),
             ),

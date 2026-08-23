@@ -31,6 +31,7 @@ is the whole of what that took:
 
 - **Equal Earth**, reached for automatically when a frame has outgrown the flat projection it asked for. Equal area exactly, poles as lines, no frame size at which it stops working — and no projection picker, because the frame has already answered the question. Previews move with exports.
 - **Natural Earth end to end**: a folder of shapefiles as one source, `--natural-earth` on the headless renderer, and the one missing translation that was silently dropping every place name on the sheet.
+- **Samples across**, under Elevation: how finely to sample the ground, with the tile ceiling raised from 64 to 256 so a large frame is sampled as finely as it was asked to be rather than quietly halved. The README says what it costs and what it does not buy.
 
 New in 0.6.0:
 
@@ -641,6 +642,43 @@ up the other half: feature ids came straight from fiona's record number, and
 every file in a folder starts counting at zero again, so seven files produced
 several features all called `0`.
 
+### How finely the ground is sampled
+
+`target_pixels` is the request — how finely to sample the ground — and
+`max_tiles` is the ceiling on what that request may cost. The two were being
+confused for one: at 64 tiles the ceiling sat below the request for any frame
+larger than a country, so a world frame asked to be sampled 4096 px across came
+back at 2048 and said nothing about it. The ceiling is now 256 tiles, sixteen
+across, or 4096 px of mosaic.
+
+Nothing reaches it by accident: the default of 1200 px puts a world frame at
+zoom 2. Asking for more is now possible from the sidebar as **Samples across**
+under Elevation, named the way the sea-temperature and currents sources already
+name their own, and defaulted to the provider's own default so ticking Elevation
+changes nothing. It is worth knowing what it costs before turning it up. One
+world frame with relief and Natural Earth on, everything else equal, measured on
+an M1 Ultra:
+
+| Samples across | Zoom | Grid | Ground | Features | Time | Peak memory |
+|---|---|---|---|---|---|---|
+| 1200 (default) | 2 | 1024² | 33 km/px | 9,007 | 29 s | 1.0 GB |
+| 2048 | 3 | 2048² | 16 km/px | 28,634 | 60 s | 1.3 GB |
+| 4096 (the ceiling) | 4 | 4096² | 8 km/px | 107,933 | 3 min 11 s | 3.8 GB |
+
+The mosaic is only 134 MB of that last figure — 16.7 million cells at eight
+bytes — and the rest is the copies taken through cropping, smoothing and banding,
+plus the traced geometry. The ceiling is set where a smaller machine would start
+swapping rather than at a round number.
+
+**More samples is not the same as a better sheet.** Measured on the same two
+runs: the contour interval comes out at 200 m at 1200 px and at 200 m at 4096 px,
+because it is chosen from the relief in view rather than from the sampling width.
+What the extra resolution buys is the same surfaces traced more finely — 1,826
+contours become 13,981 — which at screen size reads as noise over every mountain
+range and flattens the hypsometric tints underneath it. It is worth turning up
+for a large-format print, where those lines resolve, and worth leaving alone
+otherwise. The default is the default for a reason.
+
 ## Running Checks
 
 macOS / Linux:
@@ -899,7 +937,7 @@ src/hipparchus/
   ui/                The window: wiring, not rules
 
 hipparchus/          Compatibility shim so `python -m hipparchus` runs from source
-tests/               Unit tests (83 test modules)
+tests/               Unit tests (86 test modules)
 scripts/             Launch, preflight, precache, gallery, and clip scripts
 docs/                Documentation assets (screenshots)
 documents/           Design and planning notes

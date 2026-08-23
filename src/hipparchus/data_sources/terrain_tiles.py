@@ -97,10 +97,32 @@ class TerrainTileSettings:
     """How much real elevation to fetch, and how to contour it."""
 
     url_template: str = DEFAULT_TERRAIN_TILE_URL
-    # Sampling width to aim for across the area. More pixels means finer
-    # contours and more tiles to fetch.
+    # Sampling width to aim for across the area -- a *request*, in ground
+    # samples, not a limit. More pixels means finer contours and more tiles to
+    # fetch. 1200 is two metres a pixel over a city and thirty kilometres over
+    # the world.
     target_pixels: int = 1200
-    max_tiles: int = 64
+    # The ceiling on what that request may cost, which is a different thing and
+    # was being confused for the same one.
+    #
+    # 64 tiles is eight across, or 2048 px of mosaic: plenty for a city and,
+    # it turned out, a silent cap on everything larger. A world frame asked to
+    # be sampled 4096 px across came back at 2048 and said nothing, because the
+    # budget ran out a zoom level before `target_pixels` did.
+    #
+    # 256 tiles is sixteen across, or 4096 px, and it sits there because that
+    # is where the machine gives out rather than because it is a round number.
+    # Measured here, on a world frame with relief and Natural Earth on -- see
+    # the README table: 1200 px is zoom 2 and a minute; 4096 px is zoom 4,
+    # around 8 GB of peak resident memory, and most of that is not the mosaic
+    # (16.7 million cells at eight bytes is 134 MB) but the copies taken
+    # through cropping, smoothing and banding plus the traced geometry. Past
+    # this an 8 GB machine would be swapping, so the answer is a smaller frame
+    # rather than a bigger fetch.
+    #
+    # Nothing reaches it by accident: `target_pixels` still governs, and its
+    # default puts a world frame at zoom 2.
+    max_tiles: int = 256
     max_zoom: int = MAX_SOURCE_ZOOM
     timeout_seconds: float = 30.0
     max_attempts: int = 3
