@@ -527,7 +527,28 @@ default sampling took 29 seconds for 9,007 features, because a world frame
 settles at zoom 2 where there is less to trace than Europe gets at zoom 4.
 
 `--natural-earth <path>` stacks Natural Earth onto any other plate rather than
-replacing what it draws, which is how the sidebar treats every source.
+replacing what it draws, which is how the sidebar treats every source, and
+`--sources` adds or removes any other source for one run — a leading `-`
+unticks, which is what a frame this size needs:
+
+```bash
+PYTHONPATH=src python3 scripts/render_gallery.py world-natural-earth --sources=-terrain_tiles
+```
+
+(The `=` is not decoration: argparse reads a value beginning with a dash as
+another flag and refuses the whole command line without it.)
+
+**A size warning is a question; a size refusal is not.** The window puts the
+cost of a large area in a dialog and lets somebody answer it. Nobody is
+watching a headless run, so the question falls away and only the statement is
+left: past a couple of thousand square kilometres Overpass does not return at
+all, and asking anyway means waiting out a timeout for a sheet that was never
+coming. `fetch_cost.refusal` is that statement, and the renderer consults it
+before it builds a manager, let alone asks the network for anything. Europe
+with OpenStreetMap still ticked now stops in 0.2 seconds, says which of the two
+problems it is, and names the flag that fixes it. The *warning* is still
+skipped here, and should be — the Auckland plate is slow, took twelve minutes,
+and is a sheet somebody deliberately made.
 
 Each of the things that had to change for those sheets is invisible at any
 smaller size, and each has its own tests.

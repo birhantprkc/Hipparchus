@@ -49,6 +49,14 @@ BEYOND_LIMIT_KM2 = 2_000.0
 #: that never comes back.
 UNBOUNDED_SOURCES = frozenset({"overpass", "overture"})
 
+#: What each unbounded source is called in a sentence. A refusal that names
+#: `overpass` tells somebody which line of code to read; one that names
+#: OpenStreetMap tells them which box to untick.
+SOURCE_NAMES: dict[str, str] = {
+    "overpass": "OpenStreetMap",
+    "overture": "Overture",
+}
+
 
 @dataclass(frozen=True, slots=True)
 class Estimate:
@@ -115,6 +123,43 @@ def estimate(
             f"return, so this will probably fail after a long wait. Choose a "
             f"smaller area, or continue and use Cancel if it stalls."
         ),
+    )
+
+
+def refusal(
+    bbox: tuple[float, float, float, float], sources: tuple[str, ...]
+) -> str | None:
+    """Why this fetch cannot be made at all, or ``None`` if it can.
+
+    The same measurement as `estimate`, read by a caller with nobody to ask.
+    The dialog's version is a *question* -- this will take about ten minutes,
+    do you still want it -- and it ends by offering to be waited out and
+    cancelled, which is an offer only a window can make. On a headless path
+    there is no window and no one to answer, so the answerable part goes away
+    and only the statement is left: past `BEYOND_LIMIT_KM2` Overpass does not
+    return at all, and a run that asks anyway spends its whole life waiting for
+    a request that was never going to be served.
+
+    Only the `BEYOND` level. `SLOW` stays a warning wherever it is read: the
+    Auckland plate is slow, took twelve minutes, and is a sheet somebody
+    deliberately made. A warning is the thing a headless caller may skip; a
+    statement is not.
+
+    The window keeps asking rather than refusing, which is a deliberate
+    difference from the macOS port and is written down at `BEYOND_LIMIT_KM2`:
+    it is the user's machine and the user's patience, and a person watching a
+    progress bar can cancel. Nobody is watching this one.
+    """
+    found = estimate(bbox, sources)
+    if found.level != BEYOND:
+        return None
+    unbounded = sorted(source for source in sources if source in UNBOUNDED_SOURCES)
+    named = ", ".join(SOURCE_NAMES.get(source, source) for source in unbounded)
+    return (
+        f"That area is {readable_area(found.square_km)} km², and {named} will "
+        f"not answer for anything that size: the request times out rather than "
+        f"returning, so this would wait for a sheet that was never coming.\n\n"
+        f"Draw it without {named}, or choose a smaller area."
     )
 
 

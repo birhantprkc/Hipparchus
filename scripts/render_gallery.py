@@ -27,6 +27,7 @@ from pathlib import Path
 import sys
 import time
 
+from hipparchus.application.fetch_cost import refusal
 from hipparchus.application.layer_inventory import BASE_FETCH_LAYERS
 from hipparchus.application.palette_sheet import recoloured
 from hipparchus.application.palettes import named as palette_named, names as palette_names
@@ -177,6 +178,39 @@ PLATES: tuple[Plate, ...] = (
 DEFAULT_NATURAL_EARTH = Path("datasets/natural_earth")
 
 
+class TooLargeToFetch(RuntimeError):
+    """Refused before anything was asked of the network.
+
+    The window puts the same measurement in a dialog and lets somebody answer
+    it. Nobody is here to answer, and past a couple of thousand square
+    kilometres Overpass does not return at all -- so this is a statement rather
+    than a question, and it is made before the fetch rather than discovered
+    when the timeout gives up minutes later. See
+    `hipparchus.application.fetch_cost.refusal`.
+    """
+
+
+def sources_after(sources: tuple[str, ...], spec: str) -> tuple[str, ...]:
+    """The plate's own sources, with this comma-separated list applied.
+
+    Applied to them rather than replacing them, which is how the sidebar treats
+    every source. A leading `-` unticks: without that, the refusal above ends
+    by telling a headless run to turn OpenStreetMap off, which is advice it can
+    read and not follow.
+    """
+    result = list(sources)
+    for entry in spec.split(","):
+        name = entry.strip()
+        if not name:
+            continue
+        if name.startswith("-"):
+            wanted = name[1:].strip()
+            result = [source for source in result if source != wanted]
+        elif name not in result:
+            result.append(name)
+    return tuple(result)
+
+
 def plate(slug: str) -> Plate:
     for candidate in PLATES:
         if candidate.slug == slug:
@@ -249,6 +283,22 @@ def _reporter() -> FetchReporter:
 
 def build_scene(plate_spec: Plate, natural_earth: Path | None = None) -> RenderScene:
     """Fetch the area and build the scene, exactly as a Render map would."""
+    # Before the manager is built, let alone asked for anything. The window
+    # consults the same measurement and puts it in a dialog; here there is
+    # nobody to answer, so the part that can be answered falls away and the
+    # statement is all that is left.
+    refused = refusal(plate_spec.bbox, plate_spec.sources)
+    if refused is not None:
+        without = ",".join(
+            f"-{source}" for source in plate_spec.sources if source in {"overpass", "overture"}
+        )
+        # Written with the `=`, because argparse reads a value beginning with a
+        # dash as another flag and refuses the whole command line. Advice that
+        # cannot be typed is not advice, so `SuggestedFlagTests` parses this.
+        raise TooLargeToFetch(
+            f"{plate_spec.slug}: {refused}\n\n"
+            f"    --sources={without}    would draw this one without it."
+        )
     manager, plan = _prepare(plate_spec, natural_earth)
     preset: ArtisticPreset = recoloured(
         default_preset(plate_spec.preset), palette_named(plate_spec.palette)
@@ -332,7 +382,12 @@ def render(
     return destination
 
 
-def main(argv: list[str] | None = None) -> int:
+def argument_parser() -> argparse.ArgumentParser:
+    """The command line, built apart from `main` so a test can read it.
+
+    What the refusal in `build_scene` suggests typing has to be something this
+    accepts, and the only way to know that is to hand it over and see.
+    """
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("slugs", nargs="*", help="plates to render; default is all of them")
     parser.add_argument("--list", action="store_true", help="name the known plates and stop")
@@ -343,6 +398,15 @@ def main(argv: list[str] | None = None) -> int:
         help=f"override the plate's colours. One of: {', '.join(palette_names())}",
     )
     parser.add_argument(
+        "--sources", default=None, metavar="LIST",
+        help=(
+            "add or remove sources for this run, comma separated, applied to "
+            "the plate's own rather than replacing them. A leading - unticks, "
+            "and needs the = so argparse does not read it as another flag: "
+            "--sources=-overpass,terrain_tiles"
+        ),
+    )
+    parser.add_argument(
         "--natural-earth", type=Path, default=None, metavar="PATH",
         help=(
             "stack Natural Earth on top: coastlines, borders, rivers, lakes and "
@@ -351,7 +415,11 @@ def main(argv: list[str] | None = None) -> int:
             f"Defaults to {DEFAULT_NATURAL_EARTH} for a plate that asks for it."
         ),
     )
-    args = parser.parse_args(argv)
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = argument_parser().parse_args(argv)
 
     if args.list:
         for candidate in PLATES:
@@ -367,6 +435,24 @@ def main(argv: list[str] | None = None) -> int:
     if args.palette is not None and args.palette not in palette_names():
         print(f"unknown palette {args.palette!r}; one of: {', '.join(palette_names())}", file=sys.stderr)
         return 2
+
+    # Every change to what a plate is happens here, before anything reads the
+    # result: `--natural-earth` below asks whether Natural Earth is wanted, and
+    # a source ticked by `--sources` after that question had been answered
+    # would arrive with no file behind it and be quietly dropped.
+    if args.palette is not None:
+        wanted = [replace(candidate, palette=args.palette) for candidate in wanted]
+    if args.sources is not None:
+        wanted = [
+            replace(candidate, sources=sources_after(candidate.sources, args.sources))
+            for candidate in wanted
+        ]
+    if args.natural_earth is not None:
+        wanted = [
+            candidate if "natural_earth" in candidate.sources
+            else replace(candidate, sources=(*candidate.sources, "natural_earth"))
+            for candidate in wanted
+        ]
 
     # Stacked, not substituted: `--natural-earth` adds the source to whatever
     # the plate already draws, which is how the sidebar treats every source.
@@ -385,10 +471,6 @@ def main(argv: list[str] | None = None) -> int:
 
     failures = 0
     for candidate in wanted:
-        if args.palette is not None:
-            candidate = replace(candidate, palette=args.palette)
-        if args.natural_earth is not None and "natural_earth" not in candidate.sources:
-            candidate = replace(candidate, sources=(*candidate.sources, "natural_earth"))
         try:
             render(candidate, args.out_dir / candidate.filename, args.size, natural_earth)
         except Exception as exc:  # noqa: BLE001 — a plate failing must not stop the rest

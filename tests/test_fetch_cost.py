@@ -19,6 +19,7 @@ from hipparchus.application.fetch_cost import (
     estimate,
     ground_area_km2,
     readable_area,
+    refusal,
 )
 
 
@@ -113,3 +114,56 @@ class ReadableTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RefusalTests(unittest.TestCase):
+    """The same measurement, read by a caller with nobody to ask.
+
+    `estimate` is a question -- this will take about ten minutes, do you still
+    want it -- and a question is meaningless where nobody can answer. On a
+    headless path the answerable part goes away and only the statement is left:
+    past `BEYOND_LIMIT_KM2` Overpass does not return at all, so a run that asks
+    anyway spends its whole life waiting for a request that was never going to
+    be served.
+    """
+
+    EUROPE = (-25.0, 34.0, 45.0, 72.0)
+
+    def test_a_city_centre_is_not_refused(self) -> None:
+        self.assertIsNone(refusal(CARTAGENA, ("overpass",)))
+
+    def test_a_slow_area_is_not_refused_either(self) -> None:
+        """Auckland took twelve minutes and is a shipped plate. Slow is a
+        warning, and a warning is the thing a headless run may skip."""
+        self.assertEqual(estimate(AUCKLAND, ("overpass",)).level, SLOW)
+        self.assertIsNone(refusal(AUCKLAND, ("overpass",)))
+
+    def test_a_continental_frame_with_openstreetmap_is_refused(self) -> None:
+        self.assertIsNotNone(refusal(self.EUROPE, ("overpass", "terrain_tiles")))
+
+    def test_the_same_frame_without_openstreetmap_is_not(self) -> None:
+        """Elevation is tiles: slow over a continent, but bounded, and it
+        arrives. This is the whole difference the refusal turns on."""
+        self.assertIsNone(refusal(self.EUROPE, ("terrain_tiles", "natural_earth")))
+
+    def test_it_says_the_size_and_which_source_cannot_answer(self) -> None:
+        message = refusal(self.EUROPE, ("overpass",))
+
+        self.assertIn("km", message)
+        self.assertIn("OpenStreetMap", message)
+
+    def test_it_says_what_to_do_instead_rather_than_only_what_is_wrong(self) -> None:
+        message = refusal(self.EUROPE, ("overpass",))
+
+        self.assertTrue(
+            "without" in message.lower() or "smaller" in message.lower(),
+            message,
+        )
+
+    def test_it_does_not_offer_to_be_waited_out(self) -> None:
+        """The dialog's wording ends in "continue and use Cancel if it stalls",
+        which is an offer only a window can make."""
+        self.assertNotIn("Cancel", refusal(self.EUROPE, ("overpass",)))
+
+    def test_nothing_ticked_is_a_different_complaint(self) -> None:
+        self.assertIsNone(refusal(self.EUROPE, ()))
