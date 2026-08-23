@@ -254,14 +254,30 @@ class ToolbarMixin:
             (aoi.min_lon, aoi.min_lat, aoi.max_lon, aoi.max_lat),
             self.source_stack.enabled_ids(),
         )
-        if cost.worth_asking and not messagebox.askokcancel(
-            "This is a large area", cost.message, default=messagebox.CANCEL
-        ):
-            self._status.set_message(
-                f"Not fetched — {fetch_cost.readable_area(cost.square_km)} km²"
-                " is more than this will draw quickly."
-            )
-            return
+        if cost.worth_asking:
+            if cost.suggest_natural_earth:
+                # Not a warning but an offer: the area is beyond OpenStreetMap,
+                # and Natural Earth is the source that draws it. Yes switches to
+                # it, No tries OpenStreetMap anyway, Cancel does nothing.
+                answer = messagebox.askyesnocancel("This is a large area", cost.message)
+                if answer is None:
+                    self._status.set_message(
+                        f"Not fetched — {fetch_cost.readable_area(cost.square_km)} km²"
+                        " is more than OpenStreetMap will draw."
+                    )
+                    return
+                if answer:
+                    self._draw_with_natural_earth()
+                    return
+                # No: fall through and try OpenStreetMap anyway.
+            elif not messagebox.askokcancel(
+                "This is a large area", cost.message, default=messagebox.CANCEL
+            ):
+                self._status.set_message(
+                    f"Not fetched — {fetch_cost.readable_area(cost.square_km)} km²"
+                    " is more than this will draw quickly."
+                )
+                return
 
         preset = self._resolve_selected_preset()
         preset_profile = preset.geometry_profile
@@ -321,6 +337,30 @@ class ToolbarMixin:
             reporter=self._fetch_reporter,
             cancel=self._fetch_cancel,
         )
+
+    def _draw_with_natural_earth(self) -> None:
+        """The solution a too-large area actually has: move the stack off the
+        sources that will not answer at this size and onto Natural Earth, then
+        draw. If the data is not on disk yet, fetch it first and draw when it
+        lands — so 'yes, use Natural Earth' is one answer, not a chore.
+        """
+        for source_id in list(self.source_stack.enabled_ids()):
+            if source_id in fetch_cost.UNBOUNDED_SOURCES:
+                self.source_stack.set_enabled(source_id, False)
+
+        if self.source_stack.is_available("natural_earth"):
+            self.source_stack.set_enabled("natural_earth", True)
+            if getattr(self, "_sources_panel", None) is not None:
+                self._sources_panel.rebuild()
+            self._status.note("Drawing with Natural Earth")
+            self._on_fetch_clicked()
+            return
+
+        # The data is not here yet: download it, and come back to draw once it
+        # is. `_draw_with_natural_earth` is the on-done, so the second pass takes
+        # the branch above.
+        self._status.set_message("Natural Earth data is needed for an area this large — fetching it…")
+        self._download_natural_earth("natural_earth", on_done=self._draw_with_natural_earth)
 
     def _on_search(self, query: str) -> None:
         """Ask for places by name, off the UI thread."""

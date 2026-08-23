@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+from collections.abc import Callable
 from copy import deepcopy
 from dataclasses import dataclass, field, replace
 import logging
@@ -1613,10 +1614,17 @@ class MainWindow(FramePanelMixin, PagePanelMixin, ToolbarMixin):
         self._status.set_message(f"{provider_id}: {selected}")
         self._record()
 
-    def _download_natural_earth(self, provider_id: str) -> None:
+    def _download_natural_earth(
+        self, provider_id: str, *, on_done: Callable[[], None] | None = None
+    ) -> None:
         """Fetch the Natural Earth layers, off the UI thread, then point the
         source at them. The data is a download, not a checkout, so an empty
-        folder is offered a way to fill itself rather than only a file dialog."""
+        folder is offered a way to fill itself rather than only a file dialog.
+
+        ``on_done`` runs after the data is in place — used by the large-area
+        flow to draw the map the moment its source becomes available.
+        """
+        self._natural_earth_on_done = on_done
         root = self._repo_root()
         pending = ned.missing(root)
         if not pending:
@@ -1656,6 +1664,11 @@ class MainWindow(FramePanelMixin, PagePanelMixin, ToolbarMixin):
             self._sources_panel.rebuild()
         self._status.set_message("Natural Earth data ready — tick Natural Earth to draw with it.")
         self._record()
+        # A follow-up waiting on the data — the large-area flow drawing the map
+        # once its source exists. Cleared first, so it runs once.
+        follow_up, self._natural_earth_on_done = getattr(self, "_natural_earth_on_done", None), None
+        if follow_up is not None:
+            follow_up()
 
     def _maybe_offer_natural_earth(self) -> None:
         """Once, on a launch with the data absent: offer to fetch it.

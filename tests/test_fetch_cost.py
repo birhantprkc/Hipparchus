@@ -70,7 +70,9 @@ class EstimateTests(unittest.TestCase):
         self.assertIn("km", message)
 
     def test_the_message_says_what_to_do_about_it(self) -> None:
-        self.assertIn("smaller", estimate(A_WHOLE_SEA, ("overpass",)).message.lower())
+        # Now the "what to do" is the source that can draw it, not only shrinking.
+        message = estimate(A_WHOLE_SEA, ("overpass",)).message.lower()
+        self.assertTrue("natural earth" in message or "smaller" in message, message)
 
     def test_a_fine_area_has_nothing_to_say(self) -> None:
         self.assertEqual(estimate(CARTAGENA, ("overpass",)).message, "")
@@ -107,7 +109,9 @@ class ReadableTests(unittest.TestCase):
     def test_spacing_the_number_does_not_unpunctuate_the_sentence(self) -> None:
         """Running the comma-to-space replacement over the whole message took
         the commas out of the prose with it."""
-        message = estimate(A_WHOLE_SEA, ("overpass",)).message
+        # The fallback wording (Natural Earth already ticked, so nothing better
+        # to point at) keeps the commas this test guards.
+        message = estimate(A_WHOLE_SEA, ("overpass", "natural_earth")).message
         self.assertIn("return, so this", message)
         self.assertIn("smaller area, or continue", message)
 
@@ -167,3 +171,31 @@ class RefusalTests(unittest.TestCase):
 
     def test_nothing_ticked_is_a_different_complaint(self) -> None:
         self.assertIsNone(refusal(self.EUROPE, ()))
+
+
+class NaturalEarthSolutionTests(unittest.TestCase):
+    """A beyond-size area over OpenStreetMap should be offered the source that
+    can actually draw it, not only told to shrink."""
+
+    def test_beyond_over_openstreetmap_suggests_natural_earth(self) -> None:
+        found = estimate(A_WHOLE_SEA, ("overpass",))
+        self.assertEqual(found.level, BEYOND)
+        self.assertTrue(found.suggest_natural_earth)
+        self.assertIn("Natural Earth", found.message)
+
+    def test_it_does_not_suggest_what_is_already_ticked(self) -> None:
+        found = estimate(A_WHOLE_SEA, ("overpass", "natural_earth"))
+        self.assertFalse(found.suggest_natural_earth)
+        self.assertNotIn("Natural Earth instead", found.message)
+
+    def test_a_slow_area_is_not_a_natural_earth_case(self) -> None:
+        # Slow, not beyond: still worth asking, but the answer is patience, not
+        # a different source.
+        found = estimate(AUCKLAND if ground_area_km2(AUCKLAND) > 120 else A_WHOLE_SEA, ("overpass",))
+        if found.level == SLOW:
+            self.assertFalse(found.suggest_natural_earth)
+
+    def test_a_small_area_needs_no_suggestion(self) -> None:
+        found = estimate(CARTAGENA, ("overpass",))
+        self.assertEqual(found.level, FINE)
+        self.assertFalse(found.suggest_natural_earth)

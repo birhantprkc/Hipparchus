@@ -65,6 +65,12 @@ class Estimate:
     square_km: float
     level: str
     message: str = ""
+    #: Whether the honest answer is not "wait" or "shrink" but "use a different
+    #: source". True when the area is beyond what OpenStreetMap will serve and
+    #: Natural Earth — which is built for countries, continents and the world —
+    #: is not already in the stack. The window turns this into an offer rather
+    #: than only a warning.
+    suggest_natural_earth: bool = False
 
     @property
     def worth_asking(self) -> bool:
@@ -113,16 +119,33 @@ def estimate(
     # Spaced on the number alone. Running `replace` over the whole sentence
     # takes the commas out of the prose with it.
     times = readable_area(max(2.0, square_km / 164.0))
+    # Natural Earth is the answer for anything this size, so long as it is not
+    # already what is being drawn. When it is, there is no better source to
+    # point at and the old advice — shrink, or wait it out — is all that is left.
+    suggest = "natural_earth" not in sources
+    if suggest:
+        tail = (
+            "OpenStreetMap requests this large time out rather than returning, so "
+            "this will not draw.\n\n"
+            "Whole countries, continents and the world are drawn from Natural "
+            "Earth, which is built for exactly this scale. Draw it with Natural "
+            "Earth instead?"
+        )
+    else:
+        tail = (
+            "OpenStreetMap requests this large normally time out rather than "
+            "return, so this will probably fail after a long wait. Choose a "
+            "smaller area, or continue and use Cancel if it stalls."
+        )
     return Estimate(
         square_km=square_km,
         level=BEYOND,
         message=(
             f"That area is {readable_area(square_km)} km² — about {times} times "
             f"the size of an area that already takes ten minutes to draw.\n\n"
-            f"OpenStreetMap requests this large normally time out rather than "
-            f"return, so this will probably fail after a long wait. Choose a "
-            f"smaller area, or continue and use Cancel if it stalls."
+            f"{tail}"
         ),
+        suggest_natural_earth=suggest,
     )
 
 
