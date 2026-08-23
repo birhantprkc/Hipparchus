@@ -56,6 +56,10 @@ class UserSettings:
     #: Absent means yes: the first launch is exactly when the attribution
     #: and the credits are worth reading.
     show_about_on_launch: bool = True
+    #: Whether the one-time offer to download Natural Earth data has been made.
+    #: False means "not yet asked"; it is set once the offer is shown, declined
+    #: or accepted, so the question is asked once rather than every launch.
+    natural_earth_prompted: bool = False
 
     def with_changes(self, **changes: Any) -> "UserSettings":
         """A new set of settings, clamped. Never mutates this one."""
@@ -83,6 +87,7 @@ def clamp(settings: UserSettings) -> UserSettings:
             MIN_DEVICE_SCALE, min(MAX_DEVICE_SCALE, float(settings.device_scale))
         ),
         show_about_on_launch=bool(settings.show_about_on_launch),
+        natural_earth_prompted=bool(settings.natural_earth_prompted),
     )
 
 
@@ -130,6 +135,9 @@ class SettingsStore:
                 device_scale=_number(data.get("device_scale"), defaults.device_scale),
                 show_about_on_launch=bool(
                     data.get("show_about_on_launch", defaults.show_about_on_launch)
+                ),
+                natural_earth_prompted=bool(
+                    data.get("natural_earth_prompted", defaults.natural_earth_prompted)
                 ),
             )
         )

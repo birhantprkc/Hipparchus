@@ -16,6 +16,7 @@ import time
 import tkinter as tk
 from tkinter import filedialog, messagebox, simpledialog, ttk
 
+from hipparchus.application import natural_earth_download as ned
 from hipparchus.application import places, provenance, session_edit
 from hipparchus.application.controller import ApplicationController
 from hipparchus.application.layer_inventory import fetch_layers
@@ -278,6 +279,9 @@ class MainWindow(FramePanelMixin, PagePanelMixin, ToolbarMixin):
         self._queue_job = self._root.after(50, self._drain_callback_queue)
         if self.config.start_area or self.config.fetch_on_start:
             self._root.after(300, self._maybe_fetch_on_start)
+        # After the splash, not on top of it: the one-time offer to fetch the
+        # world data, made only when it is absent and only once.
+        self._root.after(1200, self._maybe_offer_natural_earth)
 
     def _create_scrollable_frame(self, parent: tk.Widget, width: int, *, padding: int = SIDEBAR_CONTENT_PADDING) -> tuple[ttk.Frame, tk.Canvas, ttk.Frame]:
         """Create a fixed-width scrollable frame."""
@@ -743,6 +747,7 @@ class MainWindow(FramePanelMixin, PagePanelMixin, ToolbarMixin):
             on_toggle=self._on_source_toggled,
             on_setting=self._on_source_setting_changed,
             on_choose_path=self._choose_source_path,
+            on_download=self._download_natural_earth,
             file_reason=self._file_reason,
         )
 
@@ -1255,6 +1260,10 @@ class MainWindow(FramePanelMixin, PagePanelMixin, ToolbarMixin):
                     # rather than a redraw popping one more than it pushed,
                     # which is what used to stop the spinner.
                     self._set_idle()
+                elif kind == "run":
+                    # A callable a worker thread wants run on the UI thread. Tk's
+                    # own after() is not thread-safe to call off it; the queue is.
+                    payload()
                 elif kind == "places":
                     self._show_search_results(payload)
                 elif kind == "search_failed":
@@ -1603,6 +1612,69 @@ class MainWindow(FramePanelMixin, PagePanelMixin, ToolbarMixin):
             self._sources_panel.rebuild()
         self._status.set_message(f"{provider_id}: {selected}")
         self._record()
+
+    def _download_natural_earth(self, provider_id: str) -> None:
+        """Fetch the Natural Earth layers, off the UI thread, then point the
+        source at them. The data is a download, not a checkout, so an empty
+        folder is offered a way to fill itself rather than only a file dialog."""
+        root = self._repo_root()
+        pending = ned.missing(root)
+        if not pending:
+            self._natural_earth_installed(provider_id)
+            self._status.set_message("Natural Earth data is already installed.")
+            return
+        if not messagebox.askyesno(
+            "Download Natural Earth data",
+            f"Download {len(pending)} Natural Earth layers — coastline, countries, "
+            "lakes and places at 1:110m and 1:10m — from naturalearthdata.com?\n\n"
+            "It is a few tens of megabytes and only needs doing once.",
+        ):
+            return
+        self._status.set_message("Downloading Natural Earth data…")
+
+        def worker() -> None:
+            def report(done: int, total: int, layer: ned.Layer) -> None:
+                self._pending_queue.put(
+                    ("run", lambda d=done, t=total, name=layer.stem:
+                        self._status.set_message(f"Natural Earth: {name} ({d}/{t})"))
+                )
+
+            try:
+                ned.install(root, on_progress=report)
+                self._pending_queue.put(("run", lambda: self._natural_earth_installed(provider_id)))
+            except Exception as exc:  # noqa: BLE001 - reported to the user, not swallowed
+                self._pending_queue.put(("error", RuntimeError(f"Natural Earth download failed: {exc}")))
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _natural_earth_installed(self, provider_id: str) -> None:
+        """Point the Natural Earth source at the freshly downloaded folder."""
+        folder = str(self._repo_root() / "datasets" / "natural_earth")
+        self.source_stack.set_path(provider_id, folder)
+        self.controller.data_source_manager.set_optional_source_path(provider_id, folder)
+        if self._sources_panel is not None:
+            self._sources_panel.rebuild()
+        self._status.set_message("Natural Earth data ready — tick Natural Earth to draw with it.")
+        self._record()
+
+    def _maybe_offer_natural_earth(self) -> None:
+        """Once, on a launch with the data absent: offer to fetch it.
+
+        Marked as asked before the question is put, so a decline, an error or a
+        closed dialog all count: a person mapping cities from Overpass is not
+        asked again at every launch. Sources → Natural Earth → Download stays.
+        """
+        if self._settings.natural_earth_prompted or not ned.missing(self._repo_root()):
+            return
+        self._apply_settings(self._settings.with_changes(natural_earth_prompted=True))
+        if messagebox.askyesno(
+            "Natural Earth data",
+            "Hipparchus can draw whole countries, continents and the world from "
+            "Natural Earth data, and the locator sharpens with it. The data is "
+            "not bundled — download it now? A few tens of megabytes, once.\n\n"
+            "You can also do this any time from Sources → Natural Earth → Download.",
+        ):
+            self._download_natural_earth("natural_earth")
 
     def _restyle_icons(self) -> None:
         """Keep the drawn icons in step with the current appearance."""

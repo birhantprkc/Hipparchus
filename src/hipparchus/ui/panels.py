@@ -46,6 +46,7 @@ class SourcesPanel:
         on_toggle: Callable[[str, bool], None],
         on_setting: Callable[[str, str, Any], None],
         on_choose_path: Callable[[str], None],
+        on_download: Callable[[str], None] | None = None,
         file_reason: Callable[[str], str] | None = None,
     ) -> None:
         self.parent = parent
@@ -53,6 +54,9 @@ class SourcesPanel:
         self.on_toggle = on_toggle
         self.on_setting = on_setting
         self.on_choose_path = on_choose_path
+        #: For a source whose data can be fetched — Natural Earth — the way to
+        #: fetch it, offered beside Choose so an empty folder is not a dead end.
+        self.on_download = on_download
         #: Why a chosen file cannot be read, asked of the host per source.
         self.file_reason = file_reason
         self._vars: dict[str, tk.BooleanVar] = {}
@@ -232,6 +236,16 @@ class SourcesPanel:
             width=9,
             command=lambda sid=definition.source_id: self.on_choose_path(sid),
         ).pack(side="right")
+
+        # Natural Earth is a download, not a checkout, so offer to fetch it here
+        # rather than leaving Choose pointed at a folder that does not exist yet.
+        if self.on_download is not None and definition.source_id == "natural_earth":
+            ttk.Button(
+                row,
+                text="Download…",
+                width=10,
+                command=lambda sid=definition.source_id: self.on_download(sid),
+            ).pack(side="right", padx=(0, 4))
 
     def _toggle_expanded(self, source_id: str) -> None:
         if source_id in self._expanded:

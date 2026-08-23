@@ -196,3 +196,24 @@ class SplashPreferenceTests(unittest.TestCase):
             path = Path(folder) / "settings.json"
             path.write_text(json.dumps({"theme_mode": "dark"}), encoding="utf-8")
             self.assertTrue(SettingsStore(path).load().show_about_on_launch)
+
+
+class NaturalEarthOfferTests(unittest.TestCase):
+    """The one-time offer to download Natural Earth data. It is only "one time"
+    if the flag survives a restart — otherwise it is asked at every launch."""
+
+    def test_it_has_not_been_asked_by_default(self) -> None:
+        self.assertFalse(UserSettings().natural_earth_prompted)
+
+    def test_having_asked_survives_a_restart(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "settings.json"
+            store = SettingsStore(path)
+            store.save(UserSettings().with_changes(natural_earth_prompted=True))
+            self.assertTrue(store.load().natural_earth_prompted)
+
+    def test_an_older_file_without_the_field_has_not_been_asked(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "settings.json"
+            path.write_text(json.dumps({"theme_mode": "dark"}), encoding="utf-8")
+            self.assertFalse(SettingsStore(path).load().natural_earth_prompted)
