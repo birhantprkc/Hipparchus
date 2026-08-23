@@ -2,6 +2,45 @@
 
 Notable changes to Hipparchus. Earlier history is in the git log.
 
+## 0.8.0
+
+The world sheets 0.7.0 made possible had nowhere to point: the saved places
+stopped at a handful of cities, and the Natural Earth data they draw from was a
+folder the repository does not carry. This release is the places, the data and
+the type to match.
+
+### Every country, and the continents, among the saved places
+
+The saved places were a flat run of cities. They are now a tree: the featured
+cities keep their number-key shortcuts, and above them sit **World, the six
+continents and the Mediterranean**, and **all ~195 countries grouped by
+continent** as a cascade — reached from the Map menu and from a Regions and a
+Countries button in the rail, both opening the same tree. The country boxes are
+generated from Natural Earth's 1:10m data rather than typed, with curated
+mainland boxes for the five antimeridian spanners (Russia, the United States,
+Fiji, New Zealand, Kiribati) whose raw bounds otherwise frame the whole globe,
+and for the distant-territory cases (France, the Netherlands, Norway, Chile).
+
+### The Natural Earth data as a download, not a checkout
+
+The Locator and the Natural Earth source both read shapefiles from `datasets/`,
+which the repository does not carry — until now the reader simply degraded to a
+blank world. **Sources → Natural Earth grows a Download button** that fetches the
+four layers at 1:110m and 1:10m from Natural Earth's own CDN, off the UI thread,
+and unzips them where the reader already looks. A **one-time offer** makes the
+same download at first launch when the data is absent, marked as asked before
+the question so a decline is not re-asked at every launch.
+
+### A multilingual default face, and any font you like
+
+The default label face was Arial: Latin only, and not the same Arial on any two
+machines. It is now **bundled Noto Sans** (SIL Open Font License, shipped with
+its `OFL.txt`) — Latin, Greek and Cyrillic in one known face on every platform,
+with the existing per-script fallback reaching the OS for the scripts it does
+not cover, so a Japanese or Arabic name still renders. The label-face setting
+becomes a **dropdown of every family the system reports**, the bundled default
+first; an unavailable choice degrades to the default rather than blanking labels.
+
 ## 0.7.0
 
 The app could not usefully draw a country, a continent or the world. The

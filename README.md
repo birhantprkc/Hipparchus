@@ -1,6 +1,6 @@
 # Hipparchus
 
-**Version 0.7.0**
+**Version 0.8.0**
 
 **Hipparchus is an online desktop vector cartography app for creating clean, editable maps from OpenStreetMap data and exporting them as Illustrator-friendly SVG files.**
 
@@ -24,6 +24,21 @@ The application fetches live OpenStreetMap data through the Overpass API, render
 Hipparchus is a standalone map creation tool focused on live online data, clean rendering, and editable vector export.
 
 ## Features
+
+New in 0.8.0:
+
+- **The world's countries among the saved places.** World, the six continents
+  and the Mediterranean, and all ~195 countries grouped by continent, as a
+  cascade in the Map menu and the rail. Country boxes are generated from Natural
+  Earth, with curated mainland frames for the antimeridian spanners (Russia, the
+  United States, Fiji, New Zealand, Kiribati).
+- **Natural Earth as a download, not a checkout.** Sources → Natural Earth gains
+  a Download button, and a one-time first-run offer, that fetches the 1:110m and
+  1:10m layers the world sheets and the Locator read — no folder to hunt for.
+- **A bundled multilingual default face.** Noto Sans ships with the app (Latin,
+  Greek, Cyrillic; SIL Open Font License), the per-script fallback reaching the
+  OS for the scripts it does not cover, so a Japanese or Arabic name still
+  renders. The label face becomes a dropdown of every family the system reports.
 
 New in 0.7.0 — the app could not usefully draw a country, a continent or the
 world, and [A continent, or the whole world](#a-continent-or-the-whole-world)

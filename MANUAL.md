@@ -1,6 +1,6 @@
 # Hipparchus Manual
 
-**Version 0.7.0**
+**Version 0.8.0**
 
 This manual explains how to use Hipparchus as an online map creation app. It covers installation, launching, fetching map data, working with layers and presets, exporting SVG files, and solving common problems. It applies to macOS, Linux, and Windows.
 
@@ -299,6 +299,19 @@ continent or the whole world drawable at all. See
 The headless renderer refuses instead of asking, because there is nobody
 watching it to answer. See
 [Rendering without a window](#rendering-without-a-window).
+
+### Regions And Countries
+
+Below the featured places, the saved places open into groups. **Regions** holds
+World, the six continents and the Mediterranean. **Countries** holds all ~195
+countries, grouped by continent, as a cascade. Reach them from the Map menu
+under Saved Places, or from the Regions and Countries buttons in the left rail —
+both open the same tree. Choosing one sets the area; a continent or the world is
+drawn in an equal-area projection automatically, so no projection needs picking.
+
+Whole-country, continent and world maps are drawn from Natural Earth rather than
+Overpass. If you have not downloaded that data yet, tick Natural Earth under
+Sources and use its Download button, or accept the offer made at first launch.
 
 ### Search By Name
 

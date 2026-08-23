@@ -1,6 +1,6 @@
 # Hipparchus File Structure
 
-**Version 0.7.0**
+**Version 0.8.0**
 
 This document describes the repository layout of Hipparchus, an online desktop
 vector cartography application. It complements the "Project Layout" section of
@@ -54,11 +54,13 @@ src/hipparchus/
 │   ├── attribution.py        Who owes a credit for what drew the sheet, and the registry that enforces it
 │   ├── controller.py         Central controller wiring requests to services
 │   ├── coordinate_import.py  Clipboard text to an area, refusing prose
+│   ├── country_boxes.py      Every country's box and continent, generated from Natural Earth
 │   ├── fetch_cost.py         What a fetch will cost, before it is made
 │   ├── geocoding.py          Place names to frames, clamped to map-sized
 │   ├── layer_inventory.py    What a rendered map contains, for the layer panel
 │   ├── line_weight.py        One multiplier over every stroke, absolute rather than relative
 │   ├── locator.py            What a click chooses; the draw-area mode
+│   ├── natural_earth_download.py  Fetches the Natural Earth layers the world sheets need
 │   ├── page_size.py          How big the exported sheet actually is, in inches on paper
 │   ├── palette_sheet.py      A whole map's layers derived from a palette
 │   ├── palettes.py           Colour as an axis of its own, separate from style
@@ -169,7 +171,7 @@ src/hipparchus/
     ├── toolbar.py            Search field, Render map, the Locator, and Export
     ├── tooltip.py            Tooltips, and where they are allowed to appear
     ├── world_map.py          The interactive world, drawn from Natural Earth
-    └── assets/               The maker's mark and the About key art
+    └── assets/               The maker's mark, the About key art, and fonts/ (bundled Noto Sans)
 ```
 
 ## Tests (`tests/`)
