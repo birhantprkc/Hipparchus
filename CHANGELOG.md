@@ -2,6 +2,141 @@
 
 Notable changes to Hipparchus. Earlier history is in the git log.
 
+## 0.7.0
+
+The app could not usefully draw a country, a continent or the world. The
+Overpass size refusal was never the obstacle — it is consulted only when
+OpenStreetMap is ticked, and elevation tiles go out to zoom 0. What was missing
+was a projection that survives a continent, real coastlines and borders, and a
+sampling ceiling that had been sitting silently below what callers asked for.
+
+### A projection that survives a continent
+
+Every projection here was written for a frame small enough that the Earth's
+curvature does not show. Asked for a continent, Web Mercator gives Greenland the
+area of Africa and the export projection stretches the top of the frame by the
+ratio of two cosines.
+
+**Equal Earth** (Šavrič, Patterson and Jenny, 2018) is equal-area exactly, draws
+the poles as lines, and has no frame size at which it stops working. It is
+written out in closed form rather than delegated to PROJ: `pyproj` is not a
+dependency of this project, and a sheet must not come out one shape on a machine
+that has it and another shape on a machine that does not. The test checks the
+equal-area property against the true spherical area of a graticule cell rather
+than against numbers copied from the paper, so a transcription error in a
+coefficient fails rather than passes; where pyproj is installed, a second test
+checks the same arithmetic against `+proj=eqearth` to within a metre.
+
+**Nothing asks for it, and there is no projection picker.** A frame that has
+outgrown the projection its quality profile named is moved, measured as how far
+the meridians converge across it, with the line at 0.12: Santorini 0.001, Greece
+0.05 and France 0.086 keep what they had; the contiguous United States 0.18,
+Europe 0.49 and the world 0.91 move. Previews move with exports, because a
+preview that cannot be trusted to show the shape of the exported sheet is not a
+preview.
+
+Two things followed from meridians that bend, and both were visible before they
+were fixed. A projection is applied vertex by vertex and everything between two
+vertices draws straight, so the hillshade's four-corner quad came out as a
+hard-edged rectangle over the middle of the Pacific while everything with real
+detail in it curved correctly around it; every line and ring is now split to a
+maximum segment of one degree first, and the real world hillshade goes in with
+five vertices and comes out with 1,059. And a frame's bounds are taken from its
+whole outline rather than its four corners, because a world frame is at its
+widest on the equator, *between* two corners — the corners understate it by
+about two fifths, which cropped the equator off the sheet.
+
+### Natural Earth, end to end
+
+A coast in a relief sheet is where the ground crosses zero, and a border is not
+in the terrain at all. Natural Earth answers for both, and for rivers, lakes and
+place names, at a scale no live query will serve. The source was already in the
+sidebar waiting for a file; what it needed was a way in from the headless
+renderer and one translation on the way through.
+
+`scripts/render_gallery.py --natural-earth <path>` stacks it onto whatever a
+plate already draws rather than replacing it, and a folder of shapefiles reads
+as one source, so a whole scale folder can be pointed at directly. Two plates
+come with it, `europe-natural-earth` and `world-natural-earth`.
+
+**The translation is the name.** The renderer reads a label off a feature's
+`name`, spelled exactly that way, and Natural Earth writes `NAME`. The layer
+classifier already read it case-insensitively, so 243 populated places arrived,
+landed correctly in the `places` layer, and were dropped one step later by a
+renderer that found no `name` on them. It is translated at the file boundary
+now, where every other source's vocabulary is already translated, and the
+source's own spelling is left in place beside it: the exported SVG carries a
+feature's properties, and rewriting them would lose the provenance of the word.
+
+Reading the boundary-lines file turned up a second silence. Its `featurecla` is
+"International boundary (verify)", which matched no branch of the layer
+classifier and was dropped — so a sheet drawn from the boundary lines rather
+than the country polygons had no borders on it at all.
+
+### As finely as it was asked to be
+
+`target_pixels` is a request — how finely to sample the ground — and `max_tiles`
+is a ceiling on what that request may cost. The two were being confused for one:
+at 64 tiles the ceiling sat below the request for any frame larger than a
+country, so a world frame asked to be sampled 4096 px across came back at 2048
+and said nothing about it. The ceiling is now 256 tiles, and **Samples across**
+appears under Elevation, defaulted to the provider's own default so ticking the
+source changes nothing.
+
+Measured on one world frame with relief and Natural Earth on, an M1 Ultra:
+
+| Samples across | Zoom | Features | Time | Peak memory |
+|---|---|---|---|---|
+| 1200 (default) | 2 | 9,007 | 29 s | 1.0 GB |
+| 2048 | 3 | 28,634 | 60 s | 1.3 GB |
+| 4096 (the ceiling) | 4 | 107,933 | 3 min 11 s | 3.8 GB |
+
+And what it does not buy, measured on the same runs: the contour interval comes
+out at 200 m either way, because it follows the relief in view rather than the
+sampling width. The extra resolution traces the same surfaces more finely —
+1,826 contours become 13,981 — which at screen size reads as noise over every
+mountain range. It is for large-format print.
+
+### A refusal the headless renderer honours
+
+A size warning is a question, and a question is meaningless where nobody can
+answer it. A size refusal is not a question: past a couple of thousand square
+kilometres Overpass does not return at all. `scripts/render_gallery.py`
+consulted neither, so a continental frame with OpenStreetMap ticked went to
+Overpass for a few thousand square degrees and then waited out the timeout for a
+sheet that was never coming. It now stops in a fifth of a second, says which of
+the two problems it is, and names the flag that fixes it — `--sources` gained
+the ability to untick, or the advice would have been something a headless run
+could read and not follow.
+
+The window still asks rather than refuses, which is deliberate and is written
+down where the threshold is: it is the user's machine and the user's patience,
+and a person watching a progress bar can cancel.
+
+### Ids, and a bug that is not here
+
+The macOS port pairs a shapefile's `.dbf` to its `.shp` by hand, indexed the
+attributes by how many features it had *kept* rather than by the record's place
+in the file, and drew a Europe sheet labelled Agra, Albuquerque and the
+Amundsen-Scott South Pole Station. This edition reads shapefiles through fiona,
+so GDAL does the pairing — which is now asserted rather than assumed, with a
+fixture whose first record is outside the query, because a fixture that keeps
+every record is exactly the case that cannot show it.
+
+Checking it turned up the other half. Feature ids came straight from fiona's
+record number, and every file in a folder starts counting at zero again, so a
+seven-file Natural Earth folder produced several features called `0`. They are
+the feature's own ordinal now, qualified by source and layer, because ids travel
+into the exported SVG.
+
+### Documentation
+
+`MANUAL.md` had drifted furthest from the app and has been caught up: the button
+has been `Render map` since 0.4.1 and the manual still said `Fetch`; there is no
+`Model` dropdown and no `Relief` checkbox beside it, both replaced by the Sources
+list in 0.4.1; `Quality` and the style picker are in the sidebar, not the top
+bar. Sections 11 to 17 have not been audited against the current interface.
+
 ## 0.6.2
 
 Nothing in the app changes for anyone who was already running it — this

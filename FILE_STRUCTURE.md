@@ -1,6 +1,6 @@
 # Hipparchus File Structure
 
-**Version 0.6.2**
+**Version 0.7.0**
 
 This document describes the repository layout of Hipparchus, an online desktop
 vector cartography application. It complements the "Project Layout" section of

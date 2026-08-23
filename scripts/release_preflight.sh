@@ -24,7 +24,7 @@ fi
 "$HIPPARCHUS_PYTHON" -m ruff check .
 
 # Pytest, not `unittest discover`. The two do not collect the same inventory --
-# 1,432 cases against 1,397 at 0.6.2 -- and pytest is the runner the README
+# 1,506 cases against 1,471 at 0.7.0 -- and pytest is the runner the README
 # documents, so a green preflight now means the documented suite is green.
 if ! "$HIPPARCHUS_PYTHON" -m pytest --version >/dev/null 2>&1; then
   echo "Pytest is not installed for $HIPPARCHUS_PYTHON." >&2

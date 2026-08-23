@@ -1,6 +1,6 @@
 # Hipparchus
 
-**Version 0.6.2**
+**Version 0.7.0**
 
 **Hipparchus is an online desktop vector cartography app for creating clean, editable maps from OpenStreetMap data and exporting them as Illustrator-friendly SVG files.**
 
@@ -25,7 +25,7 @@ Hipparchus is a standalone map creation tool focused on live online data, clean 
 
 ## Features
 
-New, unreleased — the app could not usefully draw a country, a continent or the
+New in 0.7.0 — the app could not usefully draw a country, a continent or the
 world, and [A continent, or the whole world](#a-continent-or-the-whole-world)
 is the whole of what that took:
 
@@ -737,7 +737,7 @@ finding never stands between you and a window.
 
 `unittest discover -s tests -p "test_*.py"` still works and is what to reach for
 where pytest is unavailable, but it collects a smaller inventory than pytest
-(1,397 cases against 1,432 at 0.6.2, the difference being almost entirely
+(1,471 cases against 1,506 at 0.7.0, the difference being almost entirely
 GUI-gated tests that skip either way). Pytest is the documented runner.
 
 ## How It Works
