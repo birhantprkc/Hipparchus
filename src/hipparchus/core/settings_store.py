@@ -47,7 +47,10 @@ class UserSettings:
     performance_preview_tolerance: float = 1.5
     cache_size_limit_mb: int = 4096
     provider_rps_limit: float = 1.0
-    label_font_family: str = "Arial"
+    # The bundled multilingual default (see rendering.skia_renderer). Kept as a
+    # bare string rather than an import so this core type stays clear of the
+    # renderer; the two agree on the name "Noto Sans".
+    label_font_family: str = "Noto Sans"
     label_font_size: int = 12
     device_scale: float = 2.0
     #: Absent means yes: the first launch is exactly when the attribution
@@ -72,7 +75,7 @@ def clamp(settings: UserSettings) -> UserSettings:
             MIN_CACHE_MB, min(MAX_CACHE_MB, int(settings.cache_size_limit_mb))
         ),
         provider_rps_limit=max(MIN_RPS, min(MAX_RPS, float(settings.provider_rps_limit))),
-        label_font_family=settings.label_font_family.strip() or "Arial",
+        label_font_family=settings.label_font_family.strip() or "Noto Sans",
         label_font_size=max(
             MIN_LABEL_SIZE, min(MAX_LABEL_SIZE, int(settings.label_font_size))
         ),

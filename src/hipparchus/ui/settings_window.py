@@ -29,7 +29,27 @@ from hipparchus.ui.icons import IconButton
 
 WIDTH = 460
 
-LABEL_FACES = ("Arial", "Helvetica", "Times", "Courier", "Verdana")
+#: The picker offers every family the system reports, but this curated run —
+#: the bundled multilingual default first — is what it falls back to when Skia
+#: cannot be asked for the system list.
+LABEL_FACES = ("Noto Sans", "Arial", "Helvetica", "Verdana", "Times", "Courier")
+
+
+def font_choices() -> tuple[str, ...]:
+    """Families for the label-face dropdown: the bundled multilingual default
+    first, then every family the system reports, de-duplicated."""
+    try:
+        from hipparchus.rendering.skia_renderer import (
+            DEFAULT_FONT_FAMILY,
+            available_font_families,
+        )
+
+        families = available_font_families()
+    except Exception:  # noqa: BLE001 - no Skia to ask; offer the curated run
+        return LABEL_FACES
+    if not families:
+        return LABEL_FACES
+    return (DEFAULT_FONT_FAMILY, *(name for name in families if name != DEFAULT_FONT_FAMILY))
 
 
 class SettingsWindow:
@@ -170,9 +190,9 @@ class SettingsWindow:
         row = ttk.Frame(frame)
         row.pack(fill="x", pady=2)
         ttk.Label(row, text="Label face", width=16).pack(side="left")
-        ttk.OptionMenu(
-            row, self._vars["font"], self._vars["font"].get(), *LABEL_FACES
-        ).pack(side="left")
+        ttk.Combobox(
+            row, textvariable=self._vars["font"], values=font_choices(), width=24
+        ).pack(side="left", fill="x", expand=True)
 
         row = ttk.Frame(frame)
         row.pack(fill="x", pady=2)

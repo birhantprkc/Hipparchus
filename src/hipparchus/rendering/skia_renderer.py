@@ -63,17 +63,66 @@ _DEFAULT_TYPEFACE: Any = _UNSET
 _FALLBACK_TYPEFACES: dict[int, Any] = {}
 _FAMILY_TYPEFACES: dict[str, Any] = {}
 
+# Fonts shipped with the app, by family name. Bundling the default means a
+# machine without it still draws labels in a known face, the same face on every
+# platform, rather than whatever the OS happens to call default. Noto Sans
+# covers Latin, Greek and Cyrillic; the per-block fallback below reaches the OS
+# for the scripts it does not, so a Japanese or Arabic name still renders.
+_FONTS_DIR = Path(__file__).resolve().parents[1] / "ui" / "assets" / "fonts"
+_BUNDLED_FONT_FILES: dict[str, str] = {"Noto Sans": "NotoSans-Regular.ttf"}
+DEFAULT_FONT_FAMILY = "Noto Sans"
+_BUNDLED_TYPEFACES: dict[str, Any] = {}
+
+
+def _bundled_typeface(family: str) -> Any:
+    """The shipped typeface for a family, or None if it is not one we ship."""
+    if family not in _BUNDLED_FONT_FILES:
+        return None
+    if family not in _BUNDLED_TYPEFACES:
+        skia = _import_skia()
+        path = _FONTS_DIR / _BUNDLED_FONT_FILES[family]
+        try:
+            _BUNDLED_TYPEFACES[family] = (
+                skia.Typeface.MakeFromFile(str(path)) if path.exists() else None
+            )
+        except Exception:  # noqa: BLE001 - a missing font is not a crash
+            _BUNDLED_TYPEFACES[family] = None
+    return _BUNDLED_TYPEFACES[family]
+
+
+def available_font_families() -> tuple[str, ...]:
+    """Every family the picker may offer: the bundled ones and the system's.
+
+    Sorted and de-duplicated. Degrades to just the bundled families when Skia is
+    unavailable, so the dropdown is never empty.
+    """
+    families = set(_BUNDLED_FONT_FILES)
+    try:
+        skia = _import_skia()
+        manager = skia.FontMgr()
+        for index in range(manager.countFamilies()):
+            name = manager.getFamilyName(index)
+            if name:
+                families.add(name)
+    except Exception:  # noqa: BLE001 - no Skia, no system list
+        pass
+    return tuple(sorted(families))
+
 
 def _family_typeface(family: str) -> Any:
     """Return the typeface for a requested family, or None to use the default.
 
-    None covers both "nothing requested" and "the system does not have it", so
-    an unavailable family degrades to the default face rather than blanking
-    every label.
+    A bundled family is loaded from its shipped file; otherwise the system is
+    asked. None covers both "nothing requested" and "the system does not have
+    it", so an unavailable family degrades to the default face rather than
+    blanking every label.
     """
     requested = family.strip()
     if not requested:
         return None
+    bundled = _bundled_typeface(requested)
+    if bundled is not None:
+        return bundled
     if requested not in _FAMILY_TYPEFACES:
         skia = _import_skia()
         try:
@@ -84,16 +133,22 @@ def _family_typeface(family: str) -> Any:
 
 
 def _default_typeface() -> Any:
-    """Return the typeface used for Latin labels, or None if unavailable."""
+    """Return the typeface used for Latin labels, or None if unavailable.
+
+    The bundled default first, so labels look the same on every machine; the
+    system's own default only if the shipped font is somehow missing.
+    """
     global _DEFAULT_TYPEFACE
     if _DEFAULT_TYPEFACE is _UNSET:
-        skia = _import_skia()
-        try:
-            _DEFAULT_TYPEFACE = skia.FontMgr().matchFamilyStyleCharacter(
-                "", skia.FontStyle(), ["und"], ord("A")
-            )
-        except Exception:  # noqa: BLE001 - font matching is best effort
-            _DEFAULT_TYPEFACE = None
+        _DEFAULT_TYPEFACE = _bundled_typeface(DEFAULT_FONT_FAMILY)
+        if _DEFAULT_TYPEFACE is None:
+            skia = _import_skia()
+            try:
+                _DEFAULT_TYPEFACE = skia.FontMgr().matchFamilyStyleCharacter(
+                    "", skia.FontStyle(), ["und"], ord("A")
+                )
+            except Exception:  # noqa: BLE001 - font matching is best effort
+                _DEFAULT_TYPEFACE = None
     return _DEFAULT_TYPEFACE
 
 
