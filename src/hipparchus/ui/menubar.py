@@ -112,16 +112,20 @@ def _add_places(
     on_place: "callable",
     system: str,
 ) -> None:
-    """Every saved place, the first nine with a number key.
+    """The saved places, grouped: the featured run inline with a number key on
+    the first nine, then the world groups — Regions, and Countries by continent —
+    as cascades below.
 
-    Both the list and the shortcuts come from `places`, so the sidebar order
-    and the ⌘1…⌘9 order are one order rather than two that can drift.
+    Both the featured list and the shortcuts come from `places`, so the sidebar
+    order and the ⌘1…⌘9 order are one order rather than two that can drift.
     """
     submenu_ = tk.Menu(menu, tearoff=0)
-    shortcut_specs = dict(zip(verbs.place_accelerators(), places.PLACES))
+    with_keys = {place.name: spec for spec, place in zip(verbs.place_accelerators(), places.PLACES)}
 
-    with_keys = {place.name: spec for spec, place in shortcut_specs.items()}
-    for place in places.PLACES:
+    groups = places.groups()
+    # The featured group inline: it is the quick run, and the only one that
+    # carries shortcuts.
+    for place in groups[0].places:
         spec = with_keys.get(place.name, "")
         submenu_.add_command(
             label=place.name,
@@ -131,8 +135,27 @@ def _add_places(
         if spec:
             _bind(root, spec, lambda name=place.name: on_place(name), system)
 
+    # The rest — Regions, Countries — as cascades, one entry each.
+    for group in groups[1:]:
+        submenu_.add_separator()
+        submenu_.add_cascade(label=group.name, menu=group_cascade(submenu_, group, on_place))
+
     menu.add_separator()
     menu.add_cascade(label=PLACES_LABEL, menu=submenu_)
+
+
+def group_cascade(parent: tk.Menu, group: "places.PlaceGroup", on_place: "callable") -> tk.Menu:
+    """A cascading menu for one place group, recursive over its subgroups.
+
+    Shared by the menu bar and the rail's popup so a continent lists the same
+    countries in the same order wherever it is opened from.
+    """
+    menu = tk.Menu(parent, tearoff=0)
+    for place in group.places:
+        menu.add_command(label=place.name, command=lambda name=place.name: on_place(name))
+    for sub in group.subgroups:
+        menu.add_cascade(label=sub.name, menu=group_cascade(menu, sub, on_place))
+    return menu
 
 
 #: Where each verb landed, so its label can be changed later. Keyed by the

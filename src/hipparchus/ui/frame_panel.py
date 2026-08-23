@@ -150,6 +150,23 @@ class FramePanelMixin:
             span = abs(bounds[2] - bounds[0])
             ttk.Label(row, text=f"{span:.2f}°", font=theme.font("caption")).pack(side="right", padx=(4, 0))
 
+        # The world groups — Regions, Countries — are too many for a rail, so
+        # each opens as a cascade under its own button rather than as rows. The
+        # same tree the Map menu shows, reached from the column it belongs to.
+        picker = ttk.Frame(self._places_body)
+        picker.pack(fill="x", pady=(8, 0))
+        for group in places.groups()[1:]:
+            button = ttk.Button(picker, text=f"{group.name}  ▸")
+            button.configure(command=lambda g=group, w=button: self._post_places_menu(g, w))
+            button.pack(side="left", fill="x", expand=True, padx=(0, 4))
+
+    def _post_places_menu(self, group: "places.PlaceGroup", anchor: tk.Widget) -> None:
+        """Open a place group's cascade just under the button that asked for it."""
+        from hipparchus.ui import menubar
+
+        menu = menubar.group_cascade(anchor, group, self._use_saved_place)
+        menu.tk_popup(anchor.winfo_rootx(), anchor.winfo_rooty() + anchor.winfo_height())
+
     def _use_saved_place(self, name: str) -> None:
         self._location_preset_var.set(name)
         self._apply_location_preset()
