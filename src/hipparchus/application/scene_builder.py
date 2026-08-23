@@ -60,7 +60,14 @@ class RenderSceneBuilder:
     ) -> RenderScene:
         profile = quality_profile(str(quality_mode))
         legacy_quality = profile.legacy_mode
-        projection = ProjectionProfile.from_bbox(feature_collection.bbox, mode=profile.projection_mode)
+        # The quality profile asks for a projection; the frame decides whether
+        # it can have it. Every profile here names one written for a small
+        # frame, because until there were continental sheets there were no
+        # others -- see `honest_mode`. Previews included: the tiers differ in
+        # how much work they spend, not in what the map is.
+        projection = ProjectionProfile.from_bbox(
+            feature_collection.bbox, mode=profile.projection_mode, honest=True
+        )
         tolerance = (
             geometry_profile.simplify_tolerance_preview
             if legacy_quality == "preview"

@@ -25,6 +25,12 @@ Hipparchus is a standalone map creation tool focused on live online data, clean 
 
 ## Features
 
+New, unreleased — the app could not usefully draw a country, a continent or the
+world, and [A continent, or the whole world](#a-continent-or-the-whole-world)
+is the whole of what that took:
+
+- **Equal Earth**, reached for automatically when a frame has outgrown the flat projection it asked for. Equal area exactly, poles as lines, no frame size at which it stops working — and no projection picker, because the frame has already answered the question. Previews move with exports.
+
 New in 0.6.0:
 
 - **Sea surface temperature**, fetched from NASA JPL's MUR analysis through NOAA CoastWatch's ERDDAP — the same federated client the currents use, pointed at a second dataset. Filled bands and isolines, the same pipeline elevation already had, run over degrees Celsius instead of metres.
@@ -496,6 +502,73 @@ $env:HIPPARCHUS_VECTOR_TILES = "datasets\pmtiles\firenze.pmtiles"
 ```
 
 Sources are ticked individually in the Sources list and stack rather than replace; the one-click `Source Library` presets that predated it were removed in 0.4.1, along with the map-model dropdown they shared a purpose with.
+
+## A continent, or the whole world
+
+Every frame limit in this app belongs to Overpass, and it is worth being exact
+about which: the size refusal is consulted only when **OpenStreetMap is actually
+ticked**. Untick it and the limit goes with it. Elevation is tiles, and tiles go
+all the way out to zoom 0.
+
+What had to change for a frame that size is invisible at any smaller one,
+and has its own tests.
+
+### The projection
+
+Every projection here was written for a frame small enough that the Earth's
+curvature does not show: Web Mercator for previews, and for exports an
+equirectangular scaled by the cosine of the frame's own latitude, exact at the
+centre and near enough a few degrees either side. Neither survives a continent
+— Mercator gives Greenland the area of Africa, and the local scaling stretches
+the top of the frame by the ratio of two cosines. So there is now a fourth,
+**Equal Earth** (Šavrič, Patterson and Jenny, 2018): equal area exactly, poles
+drawn as lines, and no frame size at which it stops working.
+
+It is written out in `src/hipparchus/geometry/equal_earth.py` rather than
+delegated to PROJ. `pyproj` is not a dependency of this project, and a sheet
+must not come out one shape on a machine that has it and another shape on a
+machine that does not — for forty lines of arithmetic with a published closed
+form. `tests/test_equal_earth.py` checks the equal-area property against the
+true spherical area of a graticule cell rather than against numbers copied from
+the paper, so a transcription error in a coefficient fails rather than passes;
+where pyproj *is* installed, a second test checks the same arithmetic against
+`+proj=eqearth` on the same sphere, to within a metre.
+
+**Nothing asks for it, and there is no projection picker.** `honest_mode` reads
+the frame and moves it there when the projection it was given has stopped
+telling the truth — measured as the ratio between the cosine at the frame's
+centre and the cosine at its furthest edge, with the line at 0.12:
+
+| Frame | Departure | Drawn in |
+|---|---|---|
+| Santorini | 0.001 | what it asked for |
+| Greece | 0.05 | what it asked for |
+| France | 0.086 | what it asked for |
+| The contiguous United States | 0.18 | Equal Earth |
+| Europe | 0.49 | Equal Earth |
+| The world | 0.91 | Equal Earth |
+
+The rule reads latitudes rather than counting degrees, so the same 18° of span
+keeps its projection over the equator and loses it in the Arctic. A raw
+longitude/latitude mode means "give me degrees" and is left alone. It applies to
+previews as well as exports, because a preview that cannot be trusted to show
+the shape of the exported sheet is not a preview.
+
+Equal Earth bends the meridians, and that broke two things no earlier projection
+could. Both were reproduced before they were fixed, and both have tests.
+
+A projection is applied vertex by vertex, and everything between two vertices is
+drawn straight. The hillshade lays a quadrilateral over the whole grid — four
+vertices, one per corner — and it drew as a hard-edged rectangle sitting over the
+middle of the Pacific while everything with real detail in it curved correctly
+around it. `geometry/densify.py` splits any run longer than a degree before
+projecting: the real world hillshade quad goes in with five vertices and comes
+out with 1,059. A Natural Earth border along a parallel would have done the same.
+
+And a frame's bounds are now taken from its whole outline rather than its four
+corners, because a world frame is at its widest **on the equator**, *between* two
+corners. The corners understate it by about two fifths, which cropped the equator
+off the sheet.
 
 ## Running Checks
 
