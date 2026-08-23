@@ -32,6 +32,7 @@ is the whole of what that took:
 - **Equal Earth**, reached for automatically when a frame has outgrown the flat projection it asked for. Equal area exactly, poles as lines, no frame size at which it stops working — and no projection picker, because the frame has already answered the question. Previews move with exports.
 - **Natural Earth end to end**: a folder of shapefiles as one source, `--natural-earth` on the headless renderer, and the one missing translation that was silently dropping every place name on the sheet.
 - **Samples across**, under Elevation: how finely to sample the ground, with the tile ceiling raised from 64 to 256 so a large frame is sampled as finely as it was asked to be rather than quietly halved. The README says what it costs and what it does not buy.
+- **A size refusal the headless renderer honours.** A warning is a question and a question needs somebody to answer it; past a couple of thousand square kilometres Overpass does not answer at all, which is a statement. `scripts/render_gallery.py` consulted neither, and would wait out a timeout for a sheet that was never coming.
 
 New in 0.6.0:
 
@@ -958,7 +959,7 @@ src/hipparchus/
   ui/                The window: wiring, not rules
 
 hipparchus/          Compatibility shim so `python -m hipparchus` runs from source
-tests/               Unit tests (86 test modules)
+tests/               Unit tests (87 test modules)
 scripts/             Launch, preflight, precache, gallery, and clip scripts
 docs/                Documentation assets (screenshots)
 documents/           Design and planning notes

@@ -83,7 +83,7 @@ Windows (PowerShell):
 1. In the `Area` dropdown, choose `London Center`.
 2. Click `Use Preset AOI`.
 3. Leave `Quality` on `Fast Preview`.
-4. Click `Fetch` and wait for the preview to appear.
+4. Click `Render map` (⌘↵) and wait for the preview to appear.
 5. Toggle layers on the left until the map looks right.
 6. Click `Export SVG` and choose where to save it.
 7. Open the SVG in Illustrator, Inkscape, or another vector editor.
@@ -285,6 +285,21 @@ city centre is seconds; a whole sea does not return at all. Hipparchus says so
 before the wait rather than after: past about 120 km² it asks first, and names
 the size it is about to fetch.
 
+Past about 2 000 km² it says something stronger. OpenStreetMap requests that
+large normally time out rather than return, so the dialog says that too — and
+the window still lets you go ahead, because it is your machine and your
+patience and there is a Cancel button in front of you.
+
+**Only OpenStreetMap and Overture make an area expensive this way.** Elevation
+is tiles: slow over a wide area, but bounded, and it arrives. Untick
+OpenStreetMap and the size question goes away entirely — which is what makes a
+continent or the whole world drawable at all. See
+[Drawing a continent or the world](#drawing-a-continent-or-the-world).
+
+The headless renderer refuses instead of asking, because there is nobody
+watching it to answer. See
+[Rendering without a window](#rendering-without-a-window).
+
 ### Search By Name
 
 Use the top `Location` field:
@@ -293,7 +308,7 @@ Use the top `Location` field:
 2. Click `Find`.
 3. Hipparchus asks Nominatim for the location bounding box.
 4. Review the coordinates.
-5. Click `Fetch`.
+5. Click `Render map`.
 
 The search feature uses OpenStreetMap Nominatim. If no result appears, try a more specific query.
 
@@ -306,7 +321,7 @@ In the left sidebar, edit:
 - `Max Lon`
 - `Max Lat`
 
-Then click `Fetch`.
+Then click `Render map`.
 
 Manual coordinates are useful when:
 
@@ -322,13 +337,13 @@ The small buttons under the coordinate fields adjust the AOI before fetching:
 - `+`: zooms the AOI in by making the bounding box smaller.
 - Up, down, left, right: nudges the AOI.
 - `Reset`: returns to the selected preset AOI.
-- `Fetch`: fetches the current AOI.
+- `Render map` (⌘↵): fetches the current AOI and draws it.
 
 These controls change the coordinates, not just the canvas view.
 
 ## 7. Fetching Map Data
 
-Click `Fetch` to download data for the selected AOI and visible base layers.
+Click `Render map` (⌘↵) to fetch the selected AOI and the visible base layers, and draw them.
 
 During fetch:
 
@@ -357,9 +372,18 @@ https://z.overpass-api.de/api/interpreter
 https://overpass.kumi.systems/api/interpreter
 ```
 
-### Map Models And Local Sources
+### Sources And What They Resolve To
 
-The top bar includes a `Model` dropdown. `OSM Live` is the default and uses Overpass. Other models can use local source paths configured in the right sidebar:
+**There is no `Model` dropdown.** It was removed in 0.4.1, along with the
+one-click `Source Library` presets, and replaced by the Sources list in the left
+sidebar: a map is *built from* sources rather than chosen from a list of models,
+and ticking one adds to the sheet instead of replacing it. Ticking Elevation
+onto a street map adds contours to it and never throws the streets away.
+
+The models below still exist underneath — the source stack resolves whatever is
+ticked into one of them — and they are what each combination gives you. Sources
+needing a file on disk stay listed but cannot be ticked until one is chosen; set
+the path in the sidebar or with the environment variables in section 21.
 
 - `OSM Local`: local `.osm.pbf` when `osmium` is installed.
 - `Vector Tiles`: accepts GeoJSON/JSON exports directly and can decode MBTiles/MVT or PMTiles when optional map packages are installed.
@@ -447,20 +471,116 @@ Beyond contours, the elevation models produce two layers of their own:
 Both appear in the `Terrain` group of the layer panel and as their own SVG
 groups on export.
 
-### Adding Relief To Any Model
+### Adding Relief To Anything
 
-The `Relief` checkbox beside the `Model` dropdown layers real elevation onto
-whatever model is selected. It exists because a model should never be a choice
-between terrain *and* everything else: tick it on `OSM Live` and you get streets,
-names, buildings and contours together; tick it on any other model and the same
-applies. It is skipped automatically when the selected model already fetches
-elevation, so nothing is fetched twice.
+Tick `Elevation` in the Sources list and real elevation is layered onto whatever
+else is ticked. This is the same mechanism as every other source rather than a
+special case: a map should never be a choice between terrain *and* everything
+else, so streets, names, buildings and contours arrive together.
 
 Contours obey the layer panel like every other layer — the `Terrain` group in
 the left sidebar toggles `Contours` and `Index Contours` independently.
 
-Relief is a second network fetch, so it is off by default rather than a cost on
-every map.
+Elevation is a second network fetch, so it is off by default rather than a cost
+on every map.
+
+#### The settings under Elevation
+
+Each source carries its own knobs, shown inline beneath it when it is ticked.
+Elevation has four:
+
+| Setting | Default | What it does |
+|---|---|---|
+| `Interval` | 0 m | The contour interval. Zero chooses a round one from the relief actually in view — 200 m over a world frame, a few metres over a coastal town. |
+| `Samples across` | 1200 | How finely to sample the ground. Two metres a pixel over a city; thirty kilometres over the world. |
+| `Bands` | 10 | How many filled hypsometric bands the elevation is divided into. |
+| `Hillshade` | off | Relief shading laid under the contours. |
+
+`Samples across` is the only one that means much on a large frame, and it is the
+one worth understanding before turning up. It is a *request*; what a request may
+cost is capped separately, at 256 tiles or 4096 samples of mosaic. Measured on
+one world frame with relief and Natural Earth on:
+
+| Samples across | Grid | Ground | Features | Time | Peak memory |
+|---|---|---|---|---|---|
+| 1200 (default) | 1024² | 33 km/px | 9 007 | 29 s | 1.0 GB |
+| 2048 | 2048² | 16 km/px | 28 634 | 60 s | 1.3 GB |
+| 4096 (the ceiling) | 4096² | 8 km/px | 107 933 | 3 min 11 s | 3.8 GB |
+
+More samples is not the same as a better sheet. The contour interval comes out
+at 200 m either way, because it follows the relief in view rather than the
+sampling width, so what the extra resolution buys is the same surfaces traced
+more finely — 1 826 contours become 13 981. At screen size that reads as noise
+over every mountain range. Turn it up for a large-format print, where those
+lines resolve, and leave it alone otherwise.
+
+### Natural Earth: Coastlines, Borders And Names
+
+A coast in a relief sheet is where the ground crosses zero, and a border is not
+in the terrain at all. Neither is a country's name. Natural Earth answers for
+all three, plus rivers, lakes and place names, at a scale no live query will
+serve — and it is public domain, needing no account and no key.
+
+Download a scale folder once:
+
+```bash
+mkdir -p datasets/natural_earth && cd datasets/natural_earth
+for f in physical/ne_110m_coastline physical/ne_110m_ocean physical/ne_110m_lakes \
+         physical/ne_110m_rivers_lake_centerlines cultural/ne_110m_admin_0_countries \
+         cultural/ne_110m_admin_0_boundary_lines_land cultural/ne_110m_populated_places; do
+  name=$(basename "$f")
+  curl -fsSL "https://naciscdn.org/naturalearth/110m/$f.zip" -o t.zip \
+    && unzip -oq t.zip -d "$name" && rm t.zip
+done
+```
+
+Point the `Natural Earth` row at that **folder** — a folder of `.shp` files
+reads as one source, so the whole scale folder can be given at once — or set
+`HIPPARCHUS_NATURAL_EARTH` before launch. Use 110m for a world sheet, 50m for a
+continent, 10m for a country. Shapefiles need `fiona`, which arrives with
+`./setup.sh --maps`; GeoJSON works with no extra packages.
+
+Natural Earth stacks like everything else: ticking it on a relief sheet adds
+coastlines and borders to it rather than replacing the relief.
+
+One thing worth knowing if you write your own reader or inspect an export:
+Natural Earth spells a feature's name `NAME`, and the renderer reads `name`.
+Hipparchus adds the lower-case spelling as the file is read, trying `name`,
+`name_en`, `nameascii`, `name_long` and `admin` in that order, and leaves the
+source's own spelling in place beside it — the exported SVG carries a feature's
+properties, so rewriting them would lose where the word came from.
+
+### Drawing A Continent Or The World
+
+Every size limit in section 5 belongs to Overpass. Untick `OpenStreetMap` and
+the limit goes with it: elevation is tiles, and tiles go out to zoom 0. That
+makes a continent, and the whole planet, ordinary sheets.
+
+**The projection changes itself when you do.** Every projection this app had was
+written for a frame small enough that the Earth's curvature does not show, and
+neither survives a continent: Web Mercator gives Greenland the area of Africa,
+and the export projection stretches the top of the frame by the ratio of two
+cosines. So a frame that has outgrown the projection its quality profile named
+is drawn in **Equal Earth** instead — equal area exactly, poles drawn as lines,
+no frame size at which it stops working.
+
+There is no projection picker, and this is why: the frame has already answered
+the question. The measurement is how far the meridians converge across the
+frame, and the line is drawn at 0.12:
+
+| Frame | Departure | Drawn in |
+|---|---|---|
+| Santorini | 0.001 | the projection asked for |
+| Greece | 0.05 | the projection asked for |
+| France | 0.086 | the projection asked for |
+| The contiguous United States | 0.18 | Equal Earth |
+| Europe | 0.49 | Equal Earth |
+| The world | 0.91 | Equal Earth |
+
+It reads latitudes rather than counting degrees, so the same span of ground
+keeps its projection over the equator and loses it in the Arctic. It applies to
+previews exactly as it does to exports: a preview that cannot be trusted to show
+the shape of the exported sheet is not a preview.
 
 ### Using Your Own Local Files
 
@@ -522,7 +642,9 @@ The best fix is usually to reduce the area and selected layers.
 
 ## 8. Quality Mode
 
-The top bar has a `Quality` dropdown:
+`Quality` sits in the `Style` panel of the right sidebar, under the style
+picker and the palette — a style says what the map should look like, and
+quality says how much work to spend getting there:
 
 - `Fast Preview`: optimized for interactive use.
 - `High Preview`: projected geometry with smoother screen rendering.
@@ -533,11 +655,17 @@ Use `Fast Preview` while exploring. Use `High Preview` when judging visual quali
 
 Large AOIs are automatically sampled more aggressively to keep the preview responsive.
 
+Each profile also names a projection — Web Mercator for the two previews, a
+local equirectangular for the two exports — but a profile only *asks*. A frame
+too large for the projection it named is drawn in Equal Earth instead, previews
+included, and the diagnostics say which was used. See
+[Drawing a continent or the world](#drawing-a-continent-or-the-world).
+
 Quality profiles also record projection, smoothing, clipping, layer counts, path counts, and source metadata in export diagnostics.
 
 ## 9. Presets
 
-The top bar has a `Preset` dropdown. Presets control layer styling, geometry simplification, which derived layers are generated, and processing intensity.
+The `Style` panel of the right sidebar shows all sixteen presets as swatches, with an `All styles` dropdown beside them for choosing one by name — which is faster when you already know which one you want, and is the only way to reach a saved custom style, since it has no swatch. Presets control layer styling, geometry simplification, which derived layers are generated, and processing intensity.
 
 ### Cartographic Presets
 
@@ -1010,7 +1138,7 @@ The SVG export is designed to remain friendly to Illustrator and other vector-ed
 4. If the bounding box is large, use `+` to reduce it.
 5. Disable shops, amenities, barriers, and power.
 6. Keep `Quality` on `Fast Preview`.
-7. Click `Fetch`.
+7. Click `Render map`.
 8. Adjust layer visibility.
 9. Export SVG.
 
@@ -1039,6 +1167,48 @@ The SVG export is designed to remain friendly to Illustrator and other vector-ed
 3. Fetch a dense but small AOI.
 4. Try different presets.
 5. Export SVG variants.
+
+### A Continental Or World Sheet
+
+1. Untick `OpenStreetMap`. Nothing this size can be asked of it.
+2. Tick `Elevation`, and `Natural Earth` if you have downloaded a scale folder.
+3. Type the frame into the coordinate fields — `-25, 34, 45, 72` is Europe;
+   `-180, -89, 180, 89` is the world.
+4. Leave `Samples across` at 1200 unless the sheet is going to large-format
+   print.
+5. Render map. The projection moves to Equal Earth on its own.
+
+### Rendering Without A Window
+
+`scripts/render_gallery.py` walks the same path the window walks — source stack,
+fetch, scene build, export — with the widgets left out, and records the bounding
+box, sources and style of each plate so a sheet can be re-made exactly:
+
+```bash
+PYTHONPATH=src python3 scripts/render_gallery.py --list
+PYTHONPATH=src python3 scripts/render_gallery.py europe-natural-earth --size 2400
+```
+
+| Flag | What it does |
+|---|---|
+| `--list` | name the known plates and stop |
+| `--out-dir`, `--size` | where the PNG goes, and its longest edge |
+| `--palette` | override the plate's colours |
+| `--natural-earth PATH` | stack Natural Earth onto whatever the plate draws |
+| `--sources=LIST` | tick and untick per run: `--sources=-overpass,terrain_tiles` |
+
+The `=` in `--sources` is not decoration: a value beginning with a dash is read
+as another flag without it.
+
+**It refuses rather than asks.** The window puts a large area in a dialog and
+waits for an answer; nobody is watching this, so the question falls away and
+only the statement is left — past a couple of thousand square kilometres
+Overpass does not return at all. A plate with `overpass` ticked over a
+continental frame stops in a fifth of a second, says which of the two problems
+it is, and names the flag that fixes it, rather than waiting out a timeout for a
+sheet that was never coming. The *warning* is still skipped here, and should be:
+the Auckland plate is slow, took twelve minutes, and is a sheet somebody
+deliberately made.
 
 ## 19. Troubleshooting
 
@@ -1120,7 +1290,7 @@ Try:
 2. Select `London Center`.
 3. Click `Use Preset AOI`.
 4. Enable roads and buildings.
-5. Click `Fetch`.
+5. Click `Render map`.
 
 ### Fetch Is Slow
 

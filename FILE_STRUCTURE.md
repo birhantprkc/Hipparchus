@@ -181,7 +181,12 @@ and their bbox pre-filter, the Overpass provider, query and GeoJSON paths, and
 the marine layer — sea marks and their symbols, depth bands, real elevation
 and EMODnet bathymetry blending, per-feature depth provenance, sea surface
 temperature and the shared ERDDAP client, surface currents and the streamline
-tracer, and the not-for-navigation notice.
+tracer, and the not-for-navigation notice. Continental and world frames brought
+their own: Equal Earth checked against the area of a graticule cell rather than
+against copied numbers, the rule that decides when a frame has outgrown a flat
+projection, the densifying that keeps a straight run from becoming a chord,
+Natural Earth's name translation and shapefile pairing, and the size refusal the
+headless renderer honours because nobody is there to answer a question.
 
 The interface half covers the rules the window obeys rather than the widgets
 themselves: the session and its undo history, what the Edit menu calls a
@@ -295,7 +300,10 @@ scripts/
 ├── python_env.sh                     Shared PYTHONPATH / interpreter helper
 ├── release_preflight.sh              Compile, lint, pytest, and dependency checks before release
 ├── make_about_art.py                 The splash's key art and maker's mark, from the macOS sources
-├── render_gallery.py                 Make a named gallery plate from live data, no window
+├── render_gallery.py                 Make a named gallery plate from live data, no window.
+│                                     `--sources` ticks and unticks per run, `--natural-earth`
+│                                     stacks an atlas on, and a frame too large for Overpass is
+│                                     refused before the fetch rather than after the timeout
 ├── screenshot_session.py             Put the app in the state a documentation screenshot needs
 ├── smoke_render.py                   Prove the preview reaches the canvas, end to end
 └── smoke_run.sh                      Quick smoke launch
