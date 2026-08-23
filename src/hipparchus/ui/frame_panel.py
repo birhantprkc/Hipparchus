@@ -133,32 +133,26 @@ class FramePanelMixin:
             self._coords_expanded.set(True)
 
     def _rebuild_saved_places(self) -> None:
-        """One row per saved area, with the current one marked."""
+        """The saved places as cascades, one button per group.
+
+        The featured cities, the regions and the countries by continent each
+        open as a menu under their own button rather than as a rail-long run of
+        rows — the same tree the Map menu shows. The current place is named
+        above them, since there is no list left to mark it in.
+        """
         for child in self._places_body.winfo_children():
             child.destroy()
-        current = self._location_preset_var.get()
-        for place in places.PLACES:
-            name, bounds = place.name, place.bbox
-            row = ttk.Frame(self._places_body)
-            row.pack(fill="x", pady=1)
-            marker = "•  " if name == current else "    "
-            ttk.Button(
-                row,
-                text=f"{marker}{name}",
-                command=lambda n=name: self._use_saved_place(n),
-            ).pack(side="left", fill="x", expand=True)
-            span = abs(bounds[2] - bounds[0])
-            ttk.Label(row, text=f"{span:.2f}°", font=theme.font("caption")).pack(side="right", padx=(4, 0))
 
-        # The world groups — Regions, Countries — are too many for a rail, so
-        # each opens as a cascade under its own button rather than as rows. The
-        # same tree the Map menu shows, reached from the column it belongs to.
-        picker = ttk.Frame(self._places_body)
-        picker.pack(fill="x", pady=(8, 0))
-        for group in places.groups()[1:]:
-            button = ttk.Button(picker, text=f"{group.name}  ▸")
+        current = self._location_preset_var.get()
+        if current:
+            ttk.Label(
+                self._places_body, text=f"•  {current}", font=theme.font("caption")
+            ).pack(anchor="w", pady=(0, 6))
+
+        for group in places.groups():
+            button = ttk.Button(self._places_body, text=f"{group.name}  ▸")
             button.configure(command=lambda g=group, w=button: self._post_places_menu(g, w))
-            button.pack(side="left", fill="x", expand=True, padx=(0, 4))
+            button.pack(fill="x", pady=1)
 
     def _post_places_menu(self, group: "places.PlaceGroup", anchor: tk.Widget) -> None:
         """Open a place group's cascade just under the button that asked for it."""
