@@ -121,6 +121,8 @@ src/hipparchus/
 │   ├── bands.py              Filled elevation bands from a scalar field
 │   ├── circle_packing.py     Circle-packing derived layer
 │   ├── contours.py           Pure-numpy marching-squares contouring
+│   ├── densify.py            Vertices added along a straight run so a curved projection can bend it
+│   ├── equal_earth.py        Equal Earth in closed form, and the poles as lines
 │   ├── hex_grid.py           Hex-grid derived layer
 │   ├── hillshade.py          Relief shading from a scalar elevation field, Horn's method
 │   ├── illumination.py       Illuminated contours: stroke weight that varies along a line to read as depth
@@ -172,7 +174,7 @@ src/hipparchus/
 
 ## Tests (`tests/`)
 
-83 pytest modules. The map half covers projection, smoothing,
+87 pytest modules. The map half covers projection, smoothing,
 simplification, scene building, rendering state, export and quality profiles,
 SVG, PDF and PNG export, caching, presets, the optional local-source providers
 and their bbox pre-filter, the Overpass provider, query and GeoJSON paths, and
@@ -206,6 +208,7 @@ tests/
 ├── test_currents.py
 ├── test_depth_bands.py
 ├── test_disclosure.py
+├── test_equal_earth.py
 ├── test_export_attribution.py
 ├── test_export_profiles.py
 ├── test_fetch_cost.py
@@ -225,6 +228,8 @@ tests/
 ├── test_map_canvas.py
 ├── test_map_models.py
 ├── test_menubar.py
+├── test_natural_earth_names.py
+├── test_natural_earth_shapefile.py
 ├── test_not_for_navigation.py
 ├── test_one_window.py
 ├── test_optional_providers.py
@@ -246,6 +251,7 @@ tests/
 ├── test_raster_export.py
 ├── test_raster_not_for_navigation.py
 ├── test_readiness.py
+├── test_render_gallery.py
 ├── test_rendering_state.py
 ├── test_scene_builder.py
 ├── test_seamark_style.py
