@@ -365,7 +365,20 @@ def _feature_collection_from_fiona(path: Path, *, query: BBoxQuery, provider_id:
                     continue
                 layer = _layer_for_properties(properties, provider_id=provider_id, geometry=geom)
                 if layer is not None:
-                    _append_feature(features_by_layer, layer, str(feature.get("id", "")), mapping(geom), properties, query_box, provider_id)
+                    # The feature's own ordinal in the layer it landed in, not
+                    # the record number fiona reports. A folder reads as one
+                    # source and every file in it starts counting records at
+                    # zero again, so a Natural Earth scale folder produced seven
+                    # features all called "0". Ids travel into the exported SVG.
+                    #
+                    # The *properties* need no such care: a `.dbf` is paired to
+                    # its `.shp` by position, and GDAL does that pairing here.
+                    # See `tests/test_natural_earth_shapefile.py` for why that is
+                    # worth a test -- the macOS port hand-rolled the reader,
+                    # indexed the attributes by how many features it had kept,
+                    # and drew a Europe sheet labelled Agra and Albuquerque.
+                    feature_id = f"{provider_id}/{layer}/{len(features_by_layer[layer])}"
+                    _append_feature(features_by_layer, layer, feature_id, mapping(geom), properties, query_box, provider_id)
 
     return _collection_from_layers(
         features_by_layer,
