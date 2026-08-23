@@ -264,3 +264,37 @@ class OverpassSettingsTests(unittest.TestCase):
         self.assertEqual(
             stack.provider_overrides("overpass").get("endpoint"), OVERPASS_MIRRORS[1]
         )
+
+
+class NaturalEarthStackingTests(unittest.TestCase):
+    """An atlas source stacks onto a relief sheet rather than replacing it.
+
+    A coast in a relief sheet is where the ground crosses zero, and a border is
+    not in the terrain at all. Natural Earth answers for both, and for rivers,
+    lakes and place names, at a scale no live query will serve.
+    """
+
+    def test_it_cannot_be_ticked_until_it_has_a_file(self) -> None:
+        stack = SourceStack()
+        stack.set_enabled("natural_earth", True)
+
+        self.assertFalse(stack.is_enabled("natural_earth"))
+
+    def test_with_a_file_it_rides_along_on_the_elevation(self) -> None:
+        stack = SourceStack()
+        stack.set_path("natural_earth", "datasets/natural_earth")
+        stack.set_enabled("terrain_tiles", True)
+        stack.set_enabled("natural_earth", True)
+        stack.set_enabled("overpass", False)
+        plan = stack.plan()
+
+        self.assertEqual(plan.map_model_id, "terrain_online")
+        self.assertIn("natural_earth", plan.extra_provider_ids)
+
+    def test_it_can_carry_a_sheet_on_its_own(self) -> None:
+        stack = SourceStack()
+        stack.set_path("natural_earth", "datasets/natural_earth")
+        stack.set_enabled("overpass", False)
+        stack.set_enabled("natural_earth", True)
+
+        self.assertEqual(stack.plan().map_model_id, "natural_earth_atlas")

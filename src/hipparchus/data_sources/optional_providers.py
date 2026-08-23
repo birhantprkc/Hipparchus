@@ -240,7 +240,7 @@ def _feature_collection_from_geojson_sources(
                 "type": "Feature",
                 "id": feature.get("id", f"{provider_id}/{layer}/{len(features_by_layer[layer])}"),
                 "geometry": mapping(geom),
-                "properties": properties | {"hipparchus_source": provider_id},
+                "properties": named_properties(properties) | {"hipparchus_source": provider_id},
             }
             features_by_layer[layer].append(normalized)
 
@@ -724,7 +724,17 @@ def _layer_for_properties(properties: dict[str, Any], *, provider_id: str, geome
             "capital" in feature_class or "populated" in feature_class or _property_value(properties, "name")
         ):
             return "places"
-        if "admin" in feature_class or "country" in feature_class or _property_value(properties, "admin"):
+        if (
+            "admin" in feature_class
+            or "country" in feature_class
+            # `ne_110m_admin_0_boundary_lines_land` says "International
+            # boundary (verify)" and nothing else: no `admin` property, no
+            # `NAME`. It classified into nothing and was dropped, which is a
+            # quiet way to lose every border on a sheet drawn from the
+            # boundary-line files rather than the country polygons.
+            or "boundary" in feature_class
+            or _property_value(properties, "admin")
+        ):
             return "admin_boundaries"
         if "populated place" in feature_class or "populated_places" in feature_class:
             return "places"
@@ -739,6 +749,46 @@ def _layer_for_properties(properties: dict[str, Any], *, provider_id: str, geome
         if "place" in overture_type:
             return "places"
     return _classify_layer(properties)
+
+
+#: Spellings for a name, in order of preference, matched case-insensitively.
+#:
+#: `name` first so a file already speaking the right vocabulary is untouched;
+#: `admin` last because a country polygon whose only name is its administrative
+#: one is still better labelled than not. Case-insensitive matching is what
+#: makes `NAME` and `NAMEASCII` work without listing every source's
+#: capitalisation.
+NAME_ALIASES: tuple[str, ...] = ("name", "name_en", "nameascii", "name_long", "admin")
+
+
+def named_properties(properties: dict[str, Any]) -> dict[str, Any]:
+    """Translate a file's own vocabulary for a name into the one above it.
+
+    `_layer_for_properties` already does this for *which layer* a feature
+    belongs to -- Natural Earth's `featurecla`, Overture's `theme`. This is the
+    same translation for the one property the renderer reads off a feature by
+    name: a label comes from `name`, spelled exactly that way, and a source
+    that spells it `NAME` gets its cities classified correctly and then
+    silently dropped at the point where they would have been drawn.
+
+    Additive on purpose, and a new dict either way: the source's own spelling
+    stays, because the exported SVG carries a feature's properties and
+    rewriting them would lose the provenance of the word.
+    """
+    existing = properties.get("name")
+    if isinstance(existing, str) and existing.strip():
+        return properties
+    for alias in NAME_ALIASES:
+        for key, value in properties.items():
+            if str(key).lower() != alias:
+                continue
+            # A blank name is no name: Natural Earth's boundary lines carry
+            # `NAME` set to null, and an empty label draws an empty box.
+            text = str(value).strip() if value is not None else ""
+            if not text:
+                continue
+            return properties | {"name": text}
+    return properties
 
 
 def _property_value(properties: dict[str, Any], key: str) -> Any:
@@ -771,7 +821,10 @@ def _append_feature(
             "type": "Feature",
             "id": feature_id,
             "geometry": mapping(geom),
-            "properties": properties | {"hipparchus_source": provider_id},
+            # Translated here, at the boundary, because this is the one funnel
+            # every file-backed feature passes through -- shapefile, GeoParquet,
+            # vector tile and raster alike. See `named_properties`.
+            "properties": named_properties(properties) | {"hipparchus_source": provider_id},
         }
     )
 

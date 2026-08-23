@@ -30,6 +30,7 @@ world, and [A continent, or the whole world](#a-continent-or-the-whole-world)
 is the whole of what that took:
 
 - **Equal Earth**, reached for automatically when a frame has outgrown the flat projection it asked for. Equal area exactly, poles as lines, no frame size at which it stops working — and no projection picker, because the frame has already answered the question. Previews move with exports.
+- **Natural Earth end to end**: a folder of shapefiles as one source, `--natural-earth` on the headless renderer, and the one missing translation that was silently dropping every place name on the sheet.
 
 New in 0.6.0:
 
@@ -503,6 +504,8 @@ $env:HIPPARCHUS_VECTOR_TILES = "datasets\pmtiles\firenze.pmtiles"
 
 Sources are ticked individually in the Sources list and stack rather than replace; the one-click `Source Library` presets that predated it were removed in 0.4.1, along with the map-model dropdown they shared a purpose with.
 
+The headless renderer takes the same sources: `scripts/render_gallery.py --natural-earth datasets/natural_earth <plate>` stacks Natural Earth onto whatever that plate already draws. Where to get the data is under [A continent, or the whole world](#a-continent-or-the-whole-world).
+
 ## A continent, or the whole world
 
 Every frame limit in this app belongs to Overpass, and it is worth being exact
@@ -510,8 +513,23 @@ about which: the size refusal is consulted only when **OpenStreetMap is actually
 ticked**. Untick it and the limit goes with it. Elevation is tiles, and tiles go
 all the way out to zoom 0.
 
-What had to change for a frame that size is invisible at any smaller one,
-and has its own tests.
+Two plates render at that size, headlessly, with no window involved:
+
+```bash
+PYTHONPATH=src python3 scripts/render_gallery.py europe-natural-earth --size 2400
+PYTHONPATH=src python3 scripts/render_gallery.py world-natural-earth --size 2400
+```
+
+Europe is many times over the Overpass ceiling and took 17 seconds at Clean
+Export — 3,391 features, relief and Natural Earth together. The world at the
+default sampling took 29 seconds for 9,007 features, because a world frame
+settles at zoom 2 where there is less to trace than Europe gets at zoom 4.
+
+`--natural-earth <path>` stacks Natural Earth onto any other plate rather than
+replacing what it draws, which is how the sidebar treats every source.
+
+Each of the things that had to change for those sheets is invisible at any
+smaller size, and each has its own tests.
 
 ### The projection
 
@@ -569,6 +587,59 @@ And a frame's bounds are now taken from its whole outline rather than its four
 corners, because a world frame is at its widest **on the equator**, *between* two
 corners. The corners understate it by about two fifths, which cropped the equator
 off the sheet.
+
+### Coastlines, borders and names
+
+A coast in a relief sheet is where the ground crosses zero, and a border is not
+in the terrain at all. That is Natural Earth's job, and the source was already in
+the sidebar waiting for a file. It is public domain and needs no account:
+
+```bash
+mkdir -p datasets/natural_earth && cd datasets/natural_earth
+for f in physical/ne_110m_coastline physical/ne_110m_ocean physical/ne_110m_lakes \
+         physical/ne_110m_rivers_lake_centerlines cultural/ne_110m_admin_0_countries \
+         cultural/ne_110m_admin_0_boundary_lines_land cultural/ne_110m_populated_places; do
+  name=$(basename "$f")
+  curl -fsSL "https://naciscdn.org/naturalearth/110m/$f.zip" -o t.zip \
+    && unzip -oq t.zip -d "$name" && rm t.zip
+done
+```
+
+Point the Natural Earth row at that folder — a folder of `.shp` files reads as
+one source — or pass `--natural-earth datasets/natural_earth`. Use 110m for a
+world sheet, 50m for a continent, 10m for a country.
+
+**One translation was missing and cost the whole layer.** The renderer reads a
+label off a feature's `name`, spelled exactly that way; Natural Earth writes
+`NAME`. The layer classifier already read it case-insensitively, so on the macOS
+port's first world sheet all 243 populated places arrived, landed correctly in
+the `places` layer, and were dropped one step later by a renderer that found no
+`name` on them. `named_properties` translates at the boundary, where every other
+source's vocabulary is already translated, trying `name`, `name_en`, `nameascii`,
+`name_long` and `admin` in that order, and leaves the source's own spelling in
+place beside it — the exported SVG carries a feature's properties, and rewriting
+them would lose the provenance of the word. A whitespace-only name is no name:
+`ne_110m_admin_0_boundary_lines_land` sets `NAME` to null on every record.
+
+That file turned up a second silence while it was being read. Its `featurecla`
+is "International boundary (verify)", which matched no branch of the layer
+classifier and was dropped — so a sheet drawn from the boundary lines rather
+than the country polygons had no borders on it at all.
+
+**The bug that is not here, and why it has a test anyway.** A shapefile's `.dbf`
+is matched to its `.shp` *by position*, and the macOS port's hand-rolled reader
+indexed the attributes by how many features it had **kept** rather than by the
+record's own place in the file. A bbox query skips nearly every record in a
+world-wide file, so each survivor took the attributes of one near the start: the
+first Europe sheet came back labelled Agra, Albuquerque and the Amundsen–Scott
+South Pole Station, all drawn in Europe, with no error and no wrong-looking
+count. This edition reads shapefiles through fiona, so GDAL does the pairing —
+`tests/test_natural_earth_shapefile.py` asserts that rather than assuming it,
+with a fixture whose first record is outside the query, because a fixture that
+keeps every record is exactly the case that cannot show it. Checking it did turn
+up the other half: feature ids came straight from fiona's record number, and
+every file in a folder starts counting at zero again, so seven files produced
+several features all called `0`.
 
 ## Running Checks
 

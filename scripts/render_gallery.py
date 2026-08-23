@@ -139,7 +139,42 @@ PLATES: tuple[Plate, ...] = (
         sources=("overpass", "terrain_tiles"),
         settings=(("terrain_tiles", "bands", 12),),
     ),
+    Plate(
+        slug="europe-natural-earth",
+        title="Europe: relief, coastline and borders",
+        # The frame the projection rule was written against: 0.49 of
+        # convergence departure, so it is drawn in Equal Earth whatever the
+        # quality profile asked for. Overpass is not in it -- at this size the
+        # answer is Natural Earth, and a coastline is where the ground crosses
+        # zero rather than something the elevation can draw.
+        min_lon=-25.0,
+        min_lat=34.0,
+        max_lon=45.0,
+        max_lat=72.0,
+        preset="Clean Atlas",
+        sources=("terrain_tiles", "natural_earth"),
+        quality="export_clean",
+    ),
+    Plate(
+        slug="world-natural-earth",
+        title="The world: relief, coastline and borders",
+        # 89 rather than 90 north and south: the poles are a line in Equal
+        # Earth, not a singularity, but a frame that ends exactly on one has no
+        # cell of area at its edge for the bands to trace.
+        min_lon=-180.0,
+        min_lat=-89.0,
+        max_lon=180.0,
+        max_lat=89.0,
+        preset="Clean Atlas",
+        sources=("terrain_tiles", "natural_earth"),
+        quality="export_clean",
+    ),
 )
+
+#: Where a Natural Earth download lands by the README's own instructions. A
+#: folder of shapefiles reads as one source, so a whole scale folder can be
+#: pointed at directly.
+DEFAULT_NATURAL_EARTH = Path("datasets/natural_earth")
 
 
 def plate(slug: str) -> Plate:
@@ -149,21 +184,27 @@ def plate(slug: str) -> Plate:
     raise KeyError(slug)
 
 
-def _prepare(plate_spec: Plate) -> tuple[DataSourceManager, FetchPlan]:
+def _prepare(
+    plate_spec: Plate, natural_earth: Path | None = None
+) -> tuple[DataSourceManager, FetchPlan]:
     """A configured manager and the fetch plan its sources resolve to.
 
     The same two steps the sidebar performs: tick the sources, push each
     source's settings at the provider it belongs to, then ask the stack which
-    model that adds up to.
+    model that adds up to. A source needing a file on disk is given one first,
+    because the stack refuses to tick a source it has no file for.
     """
     config = ConfigLoader.load()
     manager = DataSourceManager(
         config=DataSourceConfig(
             local_cache_dir=config.cache_dir,
             overpass_rps=config.provider_rps_limit,
+            natural_earth_path=natural_earth,
         )
     )
     stack = SourceStack()
+    if natural_earth is not None:
+        stack.set_path("natural_earth", str(natural_earth))
     for definition in stack.definitions:
         stack.set_enabled(definition.source_id, definition.source_id in plate_spec.sources)
     for source_id, key, value in plate_spec.settings:
@@ -206,9 +247,9 @@ def _reporter() -> FetchReporter:
     return FetchReporter(on_change=announce)
 
 
-def build_scene(plate_spec: Plate) -> RenderScene:
+def build_scene(plate_spec: Plate, natural_earth: Path | None = None) -> RenderScene:
     """Fetch the area and build the scene, exactly as a Render map would."""
-    manager, plan = _prepare(plate_spec)
+    manager, plan = _prepare(plate_spec, natural_earth)
     preset: ArtisticPreset = recoloured(
         default_preset(plate_spec.preset), palette_named(plate_spec.palette)
     )
@@ -268,11 +309,16 @@ def plate_size(scene: RenderScene, longest_edge: int) -> tuple[int, int]:
     return (max(1, round(longest_edge * span_x / span_y)), longest_edge)
 
 
-def render(plate_spec: Plate, destination: Path, longest_edge: int) -> Path:
+def render(
+    plate_spec: Plate,
+    destination: Path,
+    longest_edge: int,
+    natural_earth: Path | None = None,
+) -> Path:
     started = time.monotonic()
     colours = plate_spec.palette or "the preset's own colours"
     print(f"{plate_spec.slug}: {plate_spec.title}, {plate_spec.preset}, {colours}", flush=True)
-    scene = build_scene(plate_spec)
+    scene = build_scene(plate_spec, natural_earth)
     drawn = sum(len(layer.geometries) for layer in scene.layers)
     if drawn == 0:
         raise ValueError(f"{plate_spec.slug}: the scene came back empty")
@@ -296,6 +342,15 @@ def main(argv: list[str] | None = None) -> int:
         "--palette", default=None,
         help=f"override the plate's colours. One of: {', '.join(palette_names())}",
     )
+    parser.add_argument(
+        "--natural-earth", type=Path, default=None, metavar="PATH",
+        help=(
+            "stack Natural Earth on top: coastlines, borders, rivers, lakes and "
+            "place names, from a shapefile or a folder of them. Adds the source "
+            "to whatever the plate already draws rather than replacing it. "
+            f"Defaults to {DEFAULT_NATURAL_EARTH} for a plate that asks for it."
+        ),
+    )
     args = parser.parse_args(argv)
 
     if args.list:
@@ -313,12 +368,29 @@ def main(argv: list[str] | None = None) -> int:
         print(f"unknown palette {args.palette!r}; one of: {', '.join(palette_names())}", file=sys.stderr)
         return 2
 
+    # Stacked, not substituted: `--natural-earth` adds the source to whatever
+    # the plate already draws, which is how the sidebar treats every source.
+    # Ticking it on a relief sheet adds coastlines and borders; it does not
+    # throw the relief away.
+    natural_earth = args.natural_earth
+    if natural_earth is None and any("natural_earth" in c.sources for c in wanted):
+        natural_earth = DEFAULT_NATURAL_EARTH
+    if natural_earth is not None and not natural_earth.exists():
+        print(
+            f"no Natural Earth data at {natural_earth}; see the README for the "
+            "seven files to download",
+            file=sys.stderr,
+        )
+        return 2
+
     failures = 0
     for candidate in wanted:
         if args.palette is not None:
             candidate = replace(candidate, palette=args.palette)
+        if args.natural_earth is not None and "natural_earth" not in candidate.sources:
+            candidate = replace(candidate, sources=(*candidate.sources, "natural_earth"))
         try:
-            render(candidate, args.out_dir / candidate.filename, args.size)
+            render(candidate, args.out_dir / candidate.filename, args.size, natural_earth)
         except Exception as exc:  # noqa: BLE001 — a plate failing must not stop the rest
             failures += 1
             print(f"  FAILED {candidate.slug}: {type(exc).__name__}: {exc}", file=sys.stderr, flush=True)
