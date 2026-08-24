@@ -190,6 +190,23 @@ PLATES: tuple[Plate, ...] = (
         # the whole point of `sampling_pixels`.
         quality="export_print",
     ),
+    Plate(
+        slug="greece-country-box",
+        title="Greece: the mainland, the islands and the Aegean",
+        # The Countries menu's own box, raw from Natural Earth — nothing
+        # curated, because the mainland and the islands share one rectangle
+        # here and it needs no help.
+        min_lon=19.63,
+        min_lat=34.82,
+        max_lon=28.24,
+        max_lat=41.75,
+        preset="Clean Atlas",
+        sources=("terrain_tiles", "natural_earth"),
+        # The heaviest plate in the set. Several thousand contours over a frame
+        # that is mostly coastline, which is the case Print Export's sampling
+        # was raised for: at 1200 samples the Cyclades are blobs.
+        quality="export_print",
+    ),
 )
 
 #: Where a Natural Earth download lands by the README's own instructions. A
