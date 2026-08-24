@@ -46,6 +46,7 @@ class ApplicationController:
         extra_provider_ids: tuple[str, ...] = (),
         reporter: FetchReporter | None = None,
         cancel: CancellationToken | None = None,
+        projection_override: str | None = None,
     ) -> None:
         """Run data pipeline asynchronously and callback with ready scene."""
         self._request_version += 1
@@ -79,6 +80,7 @@ class ApplicationController:
                     geometry_profile=geometry_profile,
                     style_profile=style_profile,
                     quality_mode=quality_mode,
+                    projection_override=projection_override,
                 )
                 t_build = time.perf_counter()
                 if version != self._request_version:

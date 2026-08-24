@@ -379,12 +379,41 @@ class SceneProjectionTests(unittest.TestCase):
             bbox=bbox,
         )
 
-    def _projection(self, bbox: tuple[float, float, float, float], quality: str) -> dict:
+    def _projection(
+        self,
+        bbox: tuple[float, float, float, float],
+        quality: str,
+        override: str | None = None,
+    ) -> dict:
         preset = default_preset("Coastal Survey")
         scene = RenderSceneBuilder().build(
-            self._collection(bbox), preset.geometry_profile, preset.style_profile, quality
+            self._collection(bbox),
+            preset.geometry_profile,
+            preset.style_profile,
+            quality,
+            projection_override=override,
         )
         return scene.diagnostics["projection"]
+
+    def test_a_named_projection_beats_the_promotion_to_equal_earth(self) -> None:
+        """The one way to draw a rectangular earth.
+
+        The promotion is right about area and wrong for anyone who wanted
+        straight edges, and refusing on their behalf leaves them no way to draw
+        one at all.
+        """
+        self.assertEqual(self._projection(WORLD, "export_print")["mode"], "equal_earth")
+        self.assertEqual(
+            self._projection(WORLD, "export_print", override="wgs84_raw")["mode"],
+            "wgs84_raw",
+            "a world asked for as a rectangle came back an oval",
+        )
+
+    def test_no_override_still_lets_the_frame_decide(self) -> None:
+        """Empty is "let the frame choose", not "draw it flat"."""
+        self.assertEqual(
+            self._projection(EUROPE, "export_print", override=None)["mode"], "equal_earth"
+        )
 
     def test_a_continent_is_drawn_in_equal_earth_at_every_quality(self) -> None:
         for quality in ("preview_fast", "preview_high", "export_clean", "export_print"):

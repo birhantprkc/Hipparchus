@@ -342,6 +342,7 @@ class ToolbarMixin:
             layers=tuple(self._active_base_layers()),
             style_profile=preset.style_profile,
             quality_mode=quality_mode_key(self._quality_var.get()),
+            projection_override=self._projection_var.get() or None,
             geometry_profile=preset_profile,
             on_scene=self._queue_scene,
             on_error=self._queue_error,

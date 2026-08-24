@@ -49,7 +49,17 @@ from hipparchus.application.quality import (
     quality_menu_labels,
     quality_mode_key,
 )
-from hipparchus.application.session import Area, Session
+from hipparchus.application.session import Area, DEFAULT_QUALITY, Session
+
+#: Projection modes offered in the Style section, by the name the scene builder
+#: speaks. "" is the honest choice: the profile's own projection, promoted to
+#: Equal Earth once the frame outgrows it.
+PROJECTION_CHOICES: dict[str, str] = {
+    "": "Automatic",
+    "wgs84_raw": "Rectangular",
+    "equal_earth": "Equal Earth",
+    "web_mercator": "Web Mercator",
+}
 from hipparchus.application.session_history import SessionHistory
 from hipparchus.application.preset_store import PresetStore
 from hipparchus.application.style_catalogue import Catalogue, seeded_name, validate_name
@@ -179,7 +189,16 @@ class MainWindow(FramePanelMixin, PagePanelMixin, ToolbarMixin):
         self._preset_store = PresetStore(self.config.presets_file)
         self._custom_presets = self._load_custom_presets()
         self._preset_options = sorted({*preset_names(), *self._custom_presets.keys()})
-        self._quality_var = tk.StringVar(value="Fast Preview")
+        # The default profile's label rather than a literal: the menu opening
+        # on Fast Preview while the session defaults to Print Export would show
+        # one thing and draw another.
+        self._quality_var = tk.StringVar(value=quality_label_for(DEFAULT_QUALITY))
+        # A forced projection, by mode name; "" is the honest choice, which
+        # promotes a world frame to Equal Earth and its curved edges. Two vars
+        # because the menu shows labels and the session stores mode names, and
+        # one `StringVar` cannot hold both.
+        self._projection_var = tk.StringVar(value="")
+        self._projection_label_var = tk.StringVar(value=PROJECTION_CHOICES[""])
         # Not part of the session: a drawing choice for the next Render map,
         # like the page-panel Include toggles, rather than a fact about the
         # map worth undoing back to.
@@ -531,6 +550,7 @@ class MainWindow(FramePanelMixin, PagePanelMixin, ToolbarMixin):
             preset_name=self._preset_var.get(),
             palette_name=self._palette_var.get(),
             quality_key=quality_mode_key(self._quality_var.get()),
+            projection_key=self._projection_var.get(),
             hidden_layers=tuple(
                 layer_id
                 for layer_id, var in self._layer_visibility_vars.items()
@@ -629,6 +649,11 @@ class MainWindow(FramePanelMixin, PagePanelMixin, ToolbarMixin):
             self._preset_var.set(session.preset_name)
             self._palette_var.set(session.palette_name)
             self._quality_var.set(quality_label_for(session.quality_key))
+            # An unknown mode name — a hand-edited file, or one since renamed —
+            # reads as Automatic rather than throwing the session away.
+            restored = session.projection_key if session.projection_key in PROJECTION_CHOICES else ""
+            self._projection_var.set(restored)
+            self._projection_label_var.set(PROJECTION_CHOICES[restored])
             for layer_id, var in self._layer_visibility_vars.items():
                 var.set(layer_id not in session.hidden_layers)
 
@@ -807,6 +832,30 @@ class MainWindow(FramePanelMixin, PagePanelMixin, ToolbarMixin):
             row,
             "A preset says what the map should look like; quality says how much "
             "work to spend getting there.",
+        )
+
+        # How the round earth is flattened. Automatic is the honest choice and
+        # stays the default; it promotes a continent or a world to Equal Earth,
+        # an oval with curved edges, which is right for area and wrong for
+        # anyone who wanted a rectangle.
+        row = ttk.Frame(style_body)
+        row.pack(fill="x", pady=(4, 0))
+        ttk.Label(row, text="Projection", font=theme.font("caption")).pack(side="left")
+        self._projection_menu = ttk.OptionMenu(
+            row,
+            self._projection_label_var,
+            self._projection_label_var.get(),
+            *PROJECTION_CHOICES.values(),
+            command=self._on_projection_chosen,
+        )
+        self._projection_menu.pack(side="left", fill="x", expand=True, padx=(6, 0))
+        tooltip.attach(
+            row,
+            "How the round earth is flattened. Automatic lets the frame choose, "
+            "which draws a whole world as an Equal Earth oval. Rectangular "
+            "draws it as a plain rectangle, plate carree, with the poles as "
+            "lines — the whole earth edge to edge, at the cost of stretching "
+            "the high latitudes.",
         )
 
         row = ttk.Frame(style_body)
@@ -1002,6 +1051,15 @@ class MainWindow(FramePanelMixin, PagePanelMixin, ToolbarMixin):
             source_id, self.source_stack.provider_overrides(source_id)
         )
         self._status.set_message(f"{source_id}: {key} = {value}")
+        self._record()
+
+    def _on_projection_chosen(self, label: str) -> None:
+        """Turn the menu's label back into the mode name the builder speaks."""
+        for mode, shown in PROJECTION_CHOICES.items():
+            if shown == label:
+                self._projection_var.set(mode)
+                break
+        self._status.set_message(f"Projection: {label} — takes effect on the next Render map.")
         self._record()
 
     def _on_layer_visibility_changed(self, layer_id: str, visible: bool) -> None:

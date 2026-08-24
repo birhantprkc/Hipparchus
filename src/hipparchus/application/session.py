@@ -85,6 +85,14 @@ class Session:
     #: its own, which is why it is a name here rather than a palette or None.
     palette_name: str = PRESET_OWN
     quality_key: str = DEFAULT_QUALITY
+    #: A forced projection, by mode name, or empty for the honest choice.
+    #:
+    #: Empty is not "no projection" but "let the frame decide" -- the profile's
+    #: own, promoted to Equal Earth once the frame outgrows it. That promotion
+    #: is why a whole earth arrives as an oval, which is right for area and
+    #: wrong for anyone who wanted a rectangle. Remembered because someone who
+    #: wants the world as a rectangle wants it that way next launch too.
+    projection_key: str = ""
     hidden_layers: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
@@ -115,6 +123,7 @@ class Session:
             "preset_name": self.preset_name,
             "palette_name": self.palette_name,
             "quality_key": self.quality_key,
+            "projection_key": self.projection_key,
             "hidden_layers": list(self.hidden_layers),
         }
 
@@ -154,6 +163,7 @@ class Session:
             preset_name=str(data.get("preset_name", defaults.preset_name)),
             palette_name=str(data.get("palette_name", defaults.palette_name)),
             quality_key=str(data.get("quality_key", defaults.quality_key)),
+            projection_key=str(data.get("projection_key", defaults.projection_key)),
             hidden_layers=tuple(str(item) for item in data.get("hidden_layers", ())),
         )
 

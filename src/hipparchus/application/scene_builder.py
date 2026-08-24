@@ -57,6 +57,7 @@ class RenderSceneBuilder:
         geometry_profile: GeometryPipelineProfile,
         style_profile: StyleProfile,
         quality_mode: QualityMode,
+        projection_override: str | None = None,
     ) -> RenderScene:
         profile = quality_profile(str(quality_mode))
         legacy_quality = profile.legacy_mode
@@ -65,9 +66,21 @@ class RenderSceneBuilder:
         # frame, because until there were continental sheets there were no
         # others -- see `honest_mode`. Previews included: the tiers differ in
         # how much work they spend, not in what the map is.
-        projection = ProjectionProfile.from_bbox(
-            feature_collection.bbox, mode=profile.projection_mode, honest=True
-        )
+        #
+        # Unless a projection was named outright, which turns the honesty off:
+        # `honest_mode` promotes a continental or world frame to Equal Earth,
+        # an oval with curved edges, because that is the honest shape for
+        # area. Someone asking for a rectangular earth is asking for the
+        # trade -- straight edges, stretched high latitudes -- and saying no on
+        # their behalf leaves them no way to draw one at all.
+        if projection_override:
+            projection = ProjectionProfile.from_bbox(
+                feature_collection.bbox, mode=projection_override, honest=False
+            )
+        else:
+            projection = ProjectionProfile.from_bbox(
+                feature_collection.bbox, mode=profile.projection_mode, honest=True
+            )
         tolerance = (
             geometry_profile.simplify_tolerance_preview
             if legacy_quality == "preview"
