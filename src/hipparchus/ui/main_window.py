@@ -213,6 +213,9 @@ class MainWindow(FramePanelMixin, PagePanelMixin, ToolbarMixin):
         # 3000 x 1800 — the shape a whole-earth sheet is most often asked for.
         self._custom_width_var = tk.StringVar(value="20")
         self._custom_height_var = tk.StringVar(value="12")
+        # Off by default: a sheet is usually a sheet, and someone printing to
+        # A3 wants A3 rather than the map's own proportions.
+        self._edge_to_edge_var = tk.BooleanVar(value=False)
         self._page_cost_var = tk.StringVar(value="")
         self._map_title_var = tk.StringVar(value="")
         self._map_subtitle_var = tk.StringVar(value="")
@@ -551,6 +554,7 @@ class MainWindow(FramePanelMixin, PagePanelMixin, ToolbarMixin):
             palette_name=self._palette_var.get(),
             quality_key=quality_mode_key(self._quality_var.get()),
             projection_key=self._projection_var.get(),
+            edge_to_edge=bool(self._edge_to_edge_var.get()),
             hidden_layers=tuple(
                 layer_id
                 for layer_id, var in self._layer_visibility_vars.items()
@@ -654,6 +658,7 @@ class MainWindow(FramePanelMixin, PagePanelMixin, ToolbarMixin):
             restored = session.projection_key if session.projection_key in PROJECTION_CHOICES else ""
             self._projection_var.set(restored)
             self._projection_label_var.set(PROJECTION_CHOICES[restored])
+            self._edge_to_edge_var.set(session.edge_to_edge)
             for layer_id, var in self._layer_visibility_vars.items():
                 var.set(layer_id not in session.hidden_layers)
 

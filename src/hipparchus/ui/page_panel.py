@@ -70,6 +70,22 @@ class PagePanelMixin:
 
         row = ttk.Frame(body)
         row.pack(fill="x", pady=2)
+        ttk.Checkbutton(
+            row,
+            text="Edge to edge",
+            variable=self._edge_to_edge_var,
+            command=self._refresh_page_cost,
+        ).pack(side="left")
+        tooltip.attach(
+            row,
+            "Give the exported sheet the map's own proportions and let the map "
+            "run right to its edges. Off, the map is centred on the sheet you "
+            "chose — which is what you want for paper, and what leaves a bar "
+            "above and below a wide map like a rectangular world.",
+        )
+
+        row = ttk.Frame(body)
+        row.pack(fill="x", pady=2)
         ttk.Label(row, text="Orientation", width=11, font=theme.font("caption")).pack(side="left")
         ttk.OptionMenu(
             row, self._paper_orientation_var, self._paper_orientation_var.get(),
@@ -193,11 +209,37 @@ class PagePanelMixin:
         )
 
     def _canvas_size(self) -> tuple[int, int]:
-        """What Canvas means: the size the window already has."""
-        return (
-            max(1024, self._canvas.winfo_width()),
-            max(1024, self._canvas.winfo_height()),
-        )
+        """What Canvas means: the size the window already has.
+
+        Unless the map is asked to fill the sheet, in which case the sheet
+        takes the map's own proportions. A 2:1 world on a 4:3 canvas is
+        letterboxed, and that bar is sheet the map never reaches rather than
+        margin -- no margin setting can remove it, only a sheet of the right
+        shape can. The margin and the shape go together, which is why this
+        also tells the renderer to bleed.
+        """
+        width = max(1024, self._canvas.winfo_width())
+        height = max(1024, self._canvas.winfo_height())
+
+        bleed = bool(self._edge_to_edge_var.get())
+        renderer = getattr(self, "renderer", None)
+        if renderer is not None:
+            renderer.edge_to_edge = bleed
+        if not bleed or renderer is None:
+            return (width, height)
+
+        aspect = renderer.scene_aspect()
+        if aspect is None:
+            # Nothing drawn yet, so nothing to take the shape of. The sheet
+            # asked for is still a sheet.
+            return (width, height)
+
+        # Keep the longer edge asked for, so "about this big" stays about that
+        # big whichever way the map is turned.
+        longest = max(width, height)
+        if aspect >= 1:
+            return (longest, max(1, round(longest / aspect)))
+        return (max(1, round(longest * aspect)), longest)
 
     def _export_dimensions(self) -> tuple[int, int]:
         """Pixels, for the PNG and for the SVG viewport."""

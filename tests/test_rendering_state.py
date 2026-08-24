@@ -110,3 +110,48 @@ class SkiaWeightedLayerTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+@unittest.skipUnless(SKIA_AVAILABLE, "skia-python is not installed")
+class EdgeToEdgeTests(unittest.TestCase):
+    """A sheet that disagrees with its map letterboxes it, whatever the margin.
+
+    The bar above and below a 2:1 world on a 4:3 sheet is not padding — it is
+    sheet the map never reaches — so the margin and the sheet's shape are one
+    setting rather than two.
+    """
+
+    def _renderer(self):
+        from hipparchus.rendering.skia_renderer import SkiaRenderer
+
+        renderer = SkiaRenderer()
+        # A 2:1 map, stated in projected coordinates.
+        renderer._scene_bounds = (0.0, 0.0, 200.0, 100.0)
+        return renderer
+
+    def test_the_scene_reports_its_own_shape(self) -> None:
+        self.assertAlmostEqual(self._renderer().scene_aspect(), 2.0)
+
+    def test_nothing_drawn_has_no_shape_to_take(self) -> None:
+        from hipparchus.rendering.skia_renderer import SkiaRenderer
+
+        self.assertIsNone(SkiaRenderer().scene_aspect())
+
+    def test_bleeding_removes_the_margin(self) -> None:
+        renderer = self._renderer()
+        breathing = renderer.fit_margin(1600, 800)
+        renderer.edge_to_edge = True
+        self.assertGreater(breathing, 0.0)
+        self.assertEqual(renderer.fit_margin(1600, 800), 0.0)
+
+    def test_bleeding_fills_more_of_the_sheet_than_a_margin_does(self) -> None:
+        renderer = self._renderer()
+        breathing = renderer.fit_metrics(1600, 800)
+        renderer.edge_to_edge = True
+        bled = renderer.fit_metrics(1600, 800)
+        self.assertIsNotNone(breathing)
+        self.assertIsNotNone(bled)
+        self.assertGreater(bled[0], breathing[0])
+        # No bar on either side once the sheet already has the map's shape.
+        self.assertAlmostEqual(bled[1], 0.0, places=6)
+        self.assertAlmostEqual(bled[2], 0.0, places=6)

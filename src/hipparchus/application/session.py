@@ -93,6 +93,9 @@ class Session:
     #: wrong for anyone who wanted a rectangle. Remembered because someone who
     #: wants the world as a rectangle wants it that way next launch too.
     projection_key: str = ""
+    #: Whether an exported sheet takes the map's own proportions and lets the
+    #: map bleed to its edges, rather than centring it on the sheet chosen.
+    edge_to_edge: bool = False
     hidden_layers: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
@@ -124,6 +127,7 @@ class Session:
             "palette_name": self.palette_name,
             "quality_key": self.quality_key,
             "projection_key": self.projection_key,
+            "edge_to_edge": self.edge_to_edge,
             "hidden_layers": list(self.hidden_layers),
         }
 
@@ -164,6 +168,7 @@ class Session:
             palette_name=str(data.get("palette_name", defaults.palette_name)),
             quality_key=str(data.get("quality_key", defaults.quality_key)),
             projection_key=str(data.get("projection_key", defaults.projection_key)),
+            edge_to_edge=bool(data.get("edge_to_edge", defaults.edge_to_edge)),
             hidden_layers=tuple(str(item) for item in data.get("hidden_layers", ())),
         )
 

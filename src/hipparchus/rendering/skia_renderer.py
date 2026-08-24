@@ -203,6 +203,11 @@ class SkiaRenderer:
     _cache_width: int = field(default=0, init=False, repr=False)
     _cache_height: int = field(default=0, init=False, repr=False)
     _fit_scale: float = field(default=1.0, init=False, repr=False)
+    #: Let the map run to the edges of the sheet instead of breathing inside a
+    #: margin. Only worth asking for when the sheet already has the map's own
+    #: shape -- otherwise the space reappears as letterboxing on the long side,
+    #: which is why `PagePanelMixin` sizes the sheet and sets this together.
+    edge_to_edge: bool = field(default=False, init=False, repr=False)
     _lock: threading.RLock = field(default_factory=threading.RLock, init=False, repr=False)
     _last_drawn_paths: int = field(default=0, init=False, repr=False)
     _label_font_size: int = field(default=10, init=False, repr=False)
@@ -819,6 +824,33 @@ class SkiaRenderer:
             return None
         return (minx, miny, maxx, maxy)
 
+    def fit_margin(self, width: int, height: int) -> float:
+        """Points of breathing room around the map, or none when bleeding.
+
+        One place rather than two: `fit_metrics` calls itself the single source
+        of truth for the fit and `_apply_fit_transform` recomputed the same
+        arithmetic beside it, so a margin changed in one was a map drawn at one
+        scale and hit-tested at another.
+        """
+        if self.edge_to_edge:
+            return 0.0
+        return max(16.0, min(width, height) * 0.06)
+
+    def scene_aspect(self) -> float | None:
+        """The drawn map's own width-over-height, or None with nothing drawn.
+
+        What a sheet has to match for `edge_to_edge` to mean anything: a 2:1
+        world on a 4:3 sheet is letterboxed whatever the margin says, because
+        the bar is sheet the map never reaches rather than padding.
+        """
+        if self._scene_bounds is None:
+            return None
+        minx, miny, maxx, maxy = self._scene_bounds
+        span_x = max(maxx - minx, 1e-9)
+        span_y = max(maxy - miny, 1e-9)
+        aspect = span_x / span_y
+        return aspect if aspect > 0 else None
+
     def fit_metrics(self, width: int, height: int) -> tuple[float, float, float, float, float] | None:
         """``(fit_scale, offset_x, offset_y, min_x, max_y)`` for the fit transform.
 
@@ -831,7 +863,7 @@ class SkiaRenderer:
         minx, miny, maxx, maxy = self._scene_bounds
         span_x = max(maxx - minx, 1e-9)
         span_y = max(maxy - miny, 1e-9)
-        margin = max(16.0, min(width, height) * 0.06)
+        margin = self.fit_margin(width, height)
         avail_w = max(1.0, width - 2.0 * margin)
         avail_h = max(1.0, height - 2.0 * margin)
         fit_scale = max(1e-6, min(min(avail_w / span_x, avail_h / span_y), 1e6))
@@ -882,7 +914,7 @@ class SkiaRenderer:
         span_x = max(maxx - minx, 1e-9)
         span_y = max(maxy - miny, 1e-9)
 
-        margin = max(16.0, min(width, height) * 0.06)
+        margin = self.fit_margin(width, height)
         avail_w = max(1.0, width - 2.0 * margin)
         avail_h = max(1.0, height - 2.0 * margin)
         fit_scale = min(avail_w / span_x, avail_h / span_y)
