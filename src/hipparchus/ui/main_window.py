@@ -190,6 +190,10 @@ class MainWindow(FramePanelMixin, PagePanelMixin, ToolbarMixin):
         # poster, which is 1.2 gigapixels and several minutes of drawing before
         # it fails. Only reached when a paper other than Canvas is chosen.
         self._paper_dpi_var = tk.StringVar(value=str(Resolution.DEFAULT))
+        # The Custom sheet, in inches. 20 x 12 is 5:3, which at 150 dpi is
+        # 3000 x 1800 — the shape a whole-earth sheet is most often asked for.
+        self._custom_width_var = tk.StringVar(value="20")
+        self._custom_height_var = tk.StringVar(value="12")
         self._page_cost_var = tk.StringVar(value="")
         self._map_title_var = tk.StringVar(value="")
         self._map_subtitle_var = tk.StringVar(value="")

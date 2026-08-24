@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import unittest
 
+from dataclasses import replace
+
 from hipparchus.application.page_size import PageSpec, PaperSize, Resolution
 
 
@@ -32,9 +34,16 @@ class PaperSizeTests(unittest.TestCase):
         self.assertTrue(PaperSize.named("").is_canvas)
 
     def test_every_offered_sheet_is_portrait_taller_than_wide(self) -> None:
-        """The orientation turns the sheet, so the table states one of them."""
+        """The orientation turns the sheet, so the table states one of them.
+
+        Canvas and Custom are exempt, and for the same reason rather than as
+        an exception: the rule exists *because* orientation turns a named
+        sheet. Canvas has no stated size to turn, and a Custom sheet is two
+        numbers the reader typed, which `inches()` deliberately leaves alone.
+        A sheet nothing turns has no side to state it on.
+        """
         for paper in PaperSize.all():
-            if paper.is_canvas:
+            if paper.is_canvas or paper.is_custom:
                 continue
             with self.subTest(paper=paper.name):
                 self.assertGreaterEqual(paper.height_inches, paper.width_inches)
@@ -119,6 +128,45 @@ class ResolutionTests(unittest.TestCase):
     def test_each_says_what_it_is_for(self) -> None:
         self.assertIn("print", Resolution.label(300))
         self.assertIn("screen", Resolution.label(72))
+
+
+class CustomPaperTests(unittest.TestCase):
+    """A sheet whose two numbers the reader chose."""
+
+    def test_a_custom_sheet_is_exactly_the_inches_asked_for(self) -> None:
+        page = PageSpec(paper_name=PaperSize.CUSTOM_NAME, dpi=150)
+        page = replace(page, custom_width_inches=20.0, custom_height_inches=12.0)
+        self.assertEqual(page.inches(), (20.0, 12.0))
+        # 20 x 150 and 12 x 150: the 3000 x 1800 a 5:3 world is asked for at.
+        self.assertEqual(page.pixel_size(1600, 1200), (3000, 1800))
+
+    def test_orientation_leaves_a_custom_sheet_alone(self) -> None:
+        """Orientation turns a named sheet; a custom one is a statement."""
+        page = PageSpec(paper_name=PaperSize.CUSTOM_NAME, orientation="Landscape")
+        page = replace(page, custom_width_inches=12.0, custom_height_inches=20.0)
+        width, height = page.inches()
+        self.assertEqual((width, height), (12.0, 20.0))
+
+    def test_a_custom_sheet_is_clamped_to_something_drawable(self) -> None:
+        low, high = PageSpec.CUSTOM_INCH_RANGE
+        page = replace(
+            PageSpec(paper_name=PaperSize.CUSTOM_NAME),
+            custom_width_inches=0.0,
+            custom_height_inches=10_000.0,
+        )
+        self.assertEqual(page.paper.width_inches, low)
+        self.assertEqual(page.paper.height_inches, high)
+
+    def test_the_custom_aspect_is_reported_for_the_reader_to_check(self) -> None:
+        page = replace(
+            PageSpec(paper_name=PaperSize.CUSTOM_NAME),
+            custom_width_inches=20.0,
+            custom_height_inches=12.0,
+        )
+        self.assertEqual(page.custom_aspect_description, "1.667 : 1")
+
+    def test_custom_is_offered_in_the_menu(self) -> None:
+        self.assertIn(PaperSize.CUSTOM_NAME, PaperSize.names())
 
 
 if __name__ == "__main__":  # pragma: no cover

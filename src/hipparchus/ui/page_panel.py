@@ -54,6 +54,20 @@ class PagePanelMixin:
             *PaperSize.names(), command=lambda _: self._refresh_page_cost(),
         ).pack(side="left", fill="x", expand=True)
 
+        # The Custom sheet's two numbers. Shown always rather than hidden
+        # behind the Paper choice: a field that appears and disappears makes
+        # the panel jump, and these read as inert when another sheet is picked.
+        row = ttk.Frame(body)
+        row.pack(fill="x", pady=2)
+        ttk.Label(row, text="Custom in", width=11, font=theme.font("caption")).pack(side="left")
+        ttk.Entry(row, textvariable=self._custom_width_var, width=6).pack(side="left")
+        ttk.Label(row, text="x", font=theme.font("caption")).pack(side="left", padx=4)
+        ttk.Entry(row, textvariable=self._custom_height_var, width=6).pack(side="left")
+        self._custom_aspect_label = ttk.Label(row, text="", font=theme.font("caption"))
+        self._custom_aspect_label.pack(side="left", padx=6)
+        for var in (self._custom_width_var, self._custom_height_var):
+            var.trace_add("write", lambda *_: self._refresh_page_cost())
+
         row = ttk.Frame(body)
         row.pack(fill="x", pady=2)
         ttk.Label(row, text="Orientation", width=11, font=theme.font("caption")).pack(side="left")
@@ -161,10 +175,21 @@ class PagePanelMixin:
             dpi = int(float(self._paper_dpi_var.get()))
         except (TypeError, ValueError):
             dpi = Resolution.DEFAULT
+        # A half-typed number is not a sheet: a field mid-edit keeps the
+        # default rather than collapsing the page to nothing, and `PageSpec`
+        # clamps whatever survives to something drawable.
+        def _inches(var: object, fallback: float) -> float:
+            try:
+                return float(str(var.get()).strip())  # type: ignore[attr-defined]
+            except (TypeError, ValueError, AttributeError):
+                return fallback
+
         return PageSpec(
             paper_name=self._paper_preset_var.get(),
             orientation=self._paper_orientation_var.get(),
             dpi=dpi,
+            custom_width_inches=_inches(self._custom_width_var, 20.0),
+            custom_height_inches=_inches(self._custom_height_var, 12.0),
         )
 
     def _canvas_size(self) -> tuple[int, int]:
@@ -196,3 +221,9 @@ class PagePanelMixin:
         if spec.exceeds_bitmap_limit(*canvas):
             detail += " — too large for PNG; SVG and PDF have no pixels to run out of"
         self._page_cost_var.set(detail)
+        # The ratio, beside the two fields that make it, so a reader asking for
+        # 5:3 can see whether they got it without doing the division.
+        label = getattr(self, "_custom_aspect_label", None)
+        if label is not None:
+            aspect = spec.custom_aspect_description
+            label.configure(text=f"{aspect} · turns with neither orientation" if aspect else "")

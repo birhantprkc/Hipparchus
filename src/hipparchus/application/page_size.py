@@ -47,6 +47,22 @@ class PaperSize:
     def canvas() -> PaperSize:
         return PaperSize("Canvas", 0.0, 0.0)
 
+    CUSTOM_NAME = "Custom"
+
+    @property
+    def is_custom(self) -> bool:
+        """A sheet whose two numbers come from `PageSpec`, not from this table."""
+        return self.name == PaperSize.CUSTOM_NAME
+
+    @staticmethod
+    def custom_placeholder() -> PaperSize:
+        """Stands in the menu; the real dimensions live on the `PageSpec`.
+
+        20 x 12 so the default custom sheet is 5:3 — at 150 dpi that is
+        3000 x 1800, the aspect a whole-earth sheet is most often asked for.
+        """
+        return PaperSize(PaperSize.CUSTOM_NAME, 20.0, 12.0)
+
     @staticmethod
     def all() -> tuple[PaperSize, ...]:
         """The offered sheets: ISO and US paper for documents, then the three
@@ -54,6 +70,7 @@ class PaperSize:
         treats as a standard poster."""
         return (
             PaperSize.canvas(),
+            PaperSize.custom_placeholder(),
             PaperSize("Square", 20.0, 20.0),
             PaperSize("A4", 8.268, 11.693),
             PaperSize("A3", 11.693, 16.535),
@@ -126,12 +143,36 @@ class PageSpec:
     paper_name: str = "Canvas"
     orientation: str = "Landscape"
     dpi: int = Resolution.DEFAULT
+    #: The Custom sheet's two numbers, in inches. Read only when `paper_name`
+    #: is "Custom", and kept while another sheet is selected so coming back to
+    #: Custom finds what was last typed.
+    custom_width_inches: float = 20.0
+    custom_height_inches: float = 12.0
 
     ORIENTATIONS = ("Landscape", "Portrait")
+    #: The smallest and largest a custom edge may be. A sheet of zero is not a
+    #: sheet, and one of a thousand inches is a bitmap nothing can allocate.
+    CUSTOM_INCH_RANGE = (1.0, 200.0)
 
     @property
     def paper(self) -> PaperSize:
-        return PaperSize.named(self.paper_name)
+        named = PaperSize.named(self.paper_name)
+        if not named.is_custom:
+            return named
+        low, high = PageSpec.CUSTOM_INCH_RANGE
+        return PaperSize(
+            PaperSize.CUSTOM_NAME,
+            min(max(self.custom_width_inches, low), high),
+            min(max(self.custom_height_inches, low), high),
+        )
+
+    @property
+    def custom_aspect_description(self) -> str:
+        """The custom sheet's proportions, said as a ratio a reader can check."""
+        paper = self.paper
+        if not paper.is_custom or paper.height_inches <= 0:
+            return ""
+        return f"{paper.width_inches / paper.height_inches:.3f} : 1"
 
     def inches(self) -> tuple[float, float] | None:
         """The sheet in inches, turned to the chosen orientation.
@@ -144,6 +185,12 @@ class PageSpec:
         if paper.is_canvas:
             return None
         width, height = paper.width_inches, paper.height_inches
+        if paper.is_custom:
+            # Orientation turns a *named* sheet, because "A4" says nothing
+            # about which way up. A custom sheet is two numbers the reader
+            # typed: 20 x 12 means 20 wide, and silently turning it to 12 x 20
+            # would be overruling the only statement they made.
+            return (width, height)
         if self.orientation == "Landscape" and height > width:
             width, height = height, width
         elif self.orientation == "Portrait" and width > height:
