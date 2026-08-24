@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Literal
+from typing import Literal, Mapping
 
 
 QualityMode = Literal["preview", "export", "preview_fast", "preview_high", "export_clean", "export_print"]
@@ -102,6 +102,25 @@ QUALITY_LABELS: dict[str, str] = {profile.label: key for key, profile in QUALITY
 #: preview profile earns its place when someone iterating chooses it; it does
 #: not earn being the answer for someone who never looked.
 DEFAULT_QUALITY_KEY = "export_print"
+
+
+def sampling_override(
+    profile: QualityProfile, existing: Mapping[str, object]
+) -> dict[str, int]:
+    """The elevation sampling this profile asks for, as a provider override.
+
+    Here rather than at a call site because there is more than one: the window
+    fetches, and so does `scripts/render_gallery.py`, which walks the same path
+    with the widgets left out. Putting the floor in the window alone meant the
+    gallery kept sampling at 1200 while claiming Print Export — the exact split
+    this function exists to close.
+
+    Empty when "Samples across" was set by hand: that is an instruction, and a
+    floor must not overrule one.
+    """
+    if "target_pixels" in existing:
+        return {}
+    return {"target_pixels": profile.sampling_pixels}
 
 
 def quality_profile(value: str | None) -> QualityProfile:

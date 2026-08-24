@@ -3,6 +3,7 @@ from __future__ import annotations
 import unittest
 
 from hipparchus.application.quality import (
+    sampling_override,
     DEFAULT_QUALITY_KEY,
     QUALITY_PROFILES,
     quality_label_for,
@@ -65,6 +66,22 @@ class LabelLookupTests(unittest.TestCase):
         """256 tiles is 4096 px; past that the budget clips without saying so."""
         for profile in QUALITY_PROFILES.values():
             self.assertLessEqual(profile.sampling_pixels, 4096, profile.key)
+
+class SamplingOverrideTests(unittest.TestCase):
+    """The floor has more than one call site, so it lives in one place."""
+
+    def test_the_profile_supplies_the_sampling_when_nobody_set_it(self) -> None:
+        profile = QUALITY_PROFILES["export_print"]
+        self.assertEqual(
+            sampling_override(profile, {}), {"target_pixels": profile.sampling_pixels}
+        )
+
+    def test_a_hand_set_sampling_is_left_alone(self) -> None:
+        """"Samples across" is an instruction; a floor must not overrule one."""
+        self.assertEqual(
+            sampling_override(QUALITY_PROFILES["export_print"], {"target_pixels": 800}), {}
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

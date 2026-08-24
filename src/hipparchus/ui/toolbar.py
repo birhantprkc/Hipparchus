@@ -21,7 +21,7 @@ from tkinter import filedialog, messagebox, ttk
 
 from hipparchus.application import fetch_cost, geocoding
 from hipparchus.application.locator import describe_area
-from hipparchus.application.quality import quality_mode_key, quality_profile
+from hipparchus.application.quality import quality_mode_key, quality_profile, sampling_override
 from hipparchus.application.readiness import why_cannot_render
 from hipparchus.application.viewport import area_to_fetch, shaped_to_window
 from hipparchus.core.fetch_progress import CancellationToken, FetchReporter
@@ -315,10 +315,11 @@ class ToolbarMixin:
         #
         # A floor, not an override: "Samples across" in the sources panel is an
         # instruction, so a value the user actually changed is left alone.
-        if "target_pixels" not in self.source_stack.provider_overrides("terrain_tiles"):
-            self.controller.data_source_manager.apply_source_settings(
-                "terrain_tiles", {"target_pixels": selected_quality.sampling_pixels}
-            )
+        sampling = sampling_override(
+            selected_quality, self.source_stack.provider_overrides("terrain_tiles")
+        )
+        if sampling:
+            self.controller.data_source_manager.apply_source_settings("terrain_tiles", sampling)
 
         # A fresh token and reporter per fetch: cancelling one must not touch
         # the next.

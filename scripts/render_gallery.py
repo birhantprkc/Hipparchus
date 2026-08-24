@@ -32,6 +32,7 @@ from hipparchus.application.layer_inventory import BASE_FETCH_LAYERS
 from hipparchus.application.palette_sheet import recoloured
 from hipparchus.application.palettes import named as palette_named, names as palette_names
 from hipparchus.application.presets import ArtisticPreset, GeometryPipelineProfile, default_preset
+from hipparchus.application.quality import quality_profile, sampling_override
 from hipparchus.application.scene_builder import RenderSceneBuilder
 from hipparchus.application.source_stack import FetchPlan, SourceStack
 from hipparchus.core.config import ConfigLoader
@@ -170,6 +171,25 @@ PLATES: tuple[Plate, ...] = (
         sources=("terrain_tiles", "natural_earth"),
         quality="export_clean",
     ),
+    Plate(
+        slug="cyprus-country-box",
+        title="Cyprus: the island, relief and coastline",
+        # The Countries menu's own box, so this plate is what picking Cyprus
+        # there produces rather than a frame chosen for the picture. Three
+        # sides are the union of Natural Earth's "Cyprus" and "N. Cyprus"; the
+        # south is Cape Gata, which no kept entity reaches — see
+        # `scripts/generate_country_boxes.py`.
+        min_lon=32.27,
+        min_lat=34.56,
+        max_lon=34.59,
+        max_lat=35.69,
+        preset="Clean Atlas",
+        sources=("terrain_tiles", "natural_earth"),
+        # Print Export rather than Clean Export: this plate exists to show what
+        # the profile's own sampling does to a country-sized frame, which is
+        # the whole point of `sampling_pixels`.
+        quality="export_print",
+    ),
 )
 
 #: Where a Natural Earth download lands by the README's own instructions. A
@@ -244,7 +264,14 @@ def _prepare(
     for source_id, key, value in plate_spec.settings:
         stack.set_setting(source_id, key, value)
     for source_id in plate_spec.sources:
-        overrides = stack.provider_overrides(source_id)
+        overrides = dict(stack.provider_overrides(source_id))
+        if source_id == "terrain_tiles":
+            # The plate's quality decides how finely the ground is sampled,
+            # exactly as it does in the window. Without this a plate claiming
+            # Print Export was traced at the fast preview's 1200 samples.
+            overrides.update(
+                sampling_override(quality_profile(plate_spec.quality), overrides)
+            )
         if overrides:
             manager.apply_source_settings(source_id, overrides)
 
