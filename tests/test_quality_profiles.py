@@ -3,6 +3,8 @@ from __future__ import annotations
 import unittest
 
 from hipparchus.application.quality import (
+    DEFAULT_QUALITY_KEY,
+    QUALITY_PROFILES,
     quality_label_for,
     quality_menu_labels,
     quality_mode_key,
@@ -41,8 +43,28 @@ class LabelLookupTests(unittest.TestCase):
             self.assertIn(quality_label_for(quality_mode_key(label)), quality_menu_labels())
 
     def test_an_unknown_key_falls_back_rather_than_showing_a_blank(self) -> None:
-        self.assertEqual(quality_label_for("nonsense"), "Fast Preview")
-        self.assertEqual(quality_label_for(None), "Fast Preview")
+        # Against the default rather than a named profile: this is a test about
+        # falling back, not about which profile is default, and hard-coding the
+        # label made it fail when the default moved to Print Export.
+        fallback = QUALITY_PROFILES[DEFAULT_QUALITY_KEY].label
+        self.assertEqual(quality_label_for("nonsense"), fallback)
+        self.assertEqual(quality_label_for(None), fallback)
+
+    def test_the_default_samples_the_ground_more_finely_than_a_preview(self) -> None:
+        """Fidelity downstream cannot restore detail that was never sampled."""
+        self.assertGreater(
+            QUALITY_PROFILES[DEFAULT_QUALITY_KEY].sampling_pixels,
+            QUALITY_PROFILES["preview_fast"].sampling_pixels,
+        )
+
+    def test_sampling_never_goes_backwards_in_menu_order(self) -> None:
+        widths = [profile.sampling_pixels for profile in QUALITY_PROFILES.values()]
+        self.assertEqual(widths, sorted(widths))
+
+    def test_no_profile_asks_for_more_than_the_mosaic_can_give(self) -> None:
+        """256 tiles is 4096 px; past that the budget clips without saying so."""
+        for profile in QUALITY_PROFILES.values():
+            self.assertLessEqual(profile.sampling_pixels, 4096, profile.key)
 
 if __name__ == "__main__":
     unittest.main()

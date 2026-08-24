@@ -307,6 +307,19 @@ class ToolbarMixin:
             self._quality_var.get(),
         )
 
+        # How finely the ground is sampled is part of the quality profile, not
+        # a constant. Print Export used to trace contours at full fidelity from
+        # a mosaic sampled 1200 across -- print-grade geometry over
+        # preview-grade ground, worst on country-sized frames, where 1200
+        # samples is roughly a kilometre per cell.
+        #
+        # A floor, not an override: "Samples across" in the sources panel is an
+        # instruction, so a value the user actually changed is left alone.
+        if "target_pixels" not in self.source_stack.provider_overrides("terrain_tiles"):
+            self.controller.data_source_manager.apply_source_settings(
+                "terrain_tiles", {"target_pixels": selected_quality.sampling_pixels}
+            )
+
         # A fresh token and reporter per fetch: cancelling one must not touch
         # the next.
         self._fetch_cancel = CancellationToken()

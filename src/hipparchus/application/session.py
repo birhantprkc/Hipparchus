@@ -23,9 +23,10 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from hipparchus.application.palettes import PRESET_OWN
+from hipparchus.application.quality import DEFAULT_QUALITY_KEY
 
 DEFAULT_PRESET = "Hypsometric Relief"
-DEFAULT_QUALITY = "preview_fast"
+DEFAULT_QUALITY = DEFAULT_QUALITY_KEY
 
 
 @dataclass(frozen=True, slots=True)

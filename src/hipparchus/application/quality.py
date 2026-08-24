@@ -23,6 +23,19 @@ class QualityProfile:
     supersample: float
     svg_precision: int
     strict_diagnostics: bool = False
+    #: How wide to sample the elevation mosaic, in pixels across the area.
+    #:
+    #: The profile governed how the data was *drawn* and not how much of it
+    #: there was. Print Export traced its contours at ``simplify_scale=0`` from
+    #: a mosaic sampled 1200 across -- print-grade geometry over preview-grade
+    #: ground, and no fidelity downstream can put back detail never sampled.
+    #: It bites country-sized frames hardest: at 1200 samples that is roughly a
+    #: kilometre per cell, a coastline with its bays rounded off before any
+    #: drawing begins.
+    #:
+    #: A floor, not an override. "Samples across" in the sources panel is an
+    #: instruction and still wins.
+    sampling_pixels: int = 1200
 
 
 QUALITY_PROFILES: dict[str, QualityProfile] = {
@@ -47,6 +60,7 @@ QUALITY_PROFILES: dict[str, QualityProfile] = {
         geometry_cap_scale=1.0,
         supersample=1.5,
         svg_precision=3,
+        sampling_pixels=1600,
     ),
     "export_clean": QualityProfile(
         key="export_clean",
@@ -58,6 +72,7 @@ QUALITY_PROFILES: dict[str, QualityProfile] = {
         geometry_cap_scale=1.0,
         supersample=1.0,
         svg_precision=4,
+        sampling_pixels=2400,
     ),
     "export_print": QualityProfile(
         key="export_print",
@@ -69,6 +84,7 @@ QUALITY_PROFILES: dict[str, QualityProfile] = {
         geometry_cap_scale=1.0,
         supersample=1.0,
         svg_precision=6,
+        sampling_pixels=3200,
         strict_diagnostics=True,
     ),
 }
@@ -77,16 +93,27 @@ QUALITY_PROFILES: dict[str, QualityProfile] = {
 QUALITY_LABELS: dict[str, str] = {profile.label: key for key, profile in QUALITY_PROFILES.items()}
 
 
+#: Print Export, not the fast preview.
+#:
+#: Every map made without touching the control was drawn at the coarsest
+#: setting there is -- ``simplify_scale=1.0`` and a geometry cap of 55%. On a
+#: world frame that is a longest contour of 16,538 vertices where the data
+#: holds 264,608: 94% simplified away, with nothing on screen saying so. A
+#: preview profile earns its place when someone iterating chooses it; it does
+#: not earn being the answer for someone who never looked.
+DEFAULT_QUALITY_KEY = "export_print"
+
+
 def quality_profile(value: str | None) -> QualityProfile:
     """Return a normalized quality profile for legacy and new values."""
-    key = (value or "preview_fast").strip()
+    key = (value or DEFAULT_QUALITY_KEY).strip()
     if key in QUALITY_LABELS:
         key = QUALITY_LABELS[key]
     if key == "preview":
         key = "preview_fast"
     elif key == "export":
         key = "export_clean"
-    return QUALITY_PROFILES.get(key, QUALITY_PROFILES["preview_fast"])
+    return QUALITY_PROFILES.get(key, QUALITY_PROFILES[DEFAULT_QUALITY_KEY])
 
 
 def quality_mode_key(value: str | None) -> str:

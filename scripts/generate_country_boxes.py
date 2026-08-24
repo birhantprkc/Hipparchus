@@ -13,6 +13,10 @@ Two classes of country need a curated box rather than the raw geometry bounds:
 * **Distant territories** (France's Pacific and Indian-ocean holdings, the Dutch
   Caribbean, Norway's Bouvet Island, Chile's Easter Island). The raw box is
   correct but useless for "frame this country"; the mainland is what is wanted.
+* **Cyprus**, whose raw box frames two thirds of its own island, because the
+  north and the two Sovereign Base Areas are separate entities this generator
+  does not keep. A box that frames two thirds of an island is wrong as a map
+  even where it is right as a boundary.
 
 Run from the repository root with the Natural Earth 1:10m data present:
 
@@ -46,6 +50,14 @@ CURATED: dict[str, tuple[float, float, float, float]] = {
     "Netherlands": (3.3, 50.7, 7.2, 53.6),
     "Norway": (4.5, 57.9, 31.1, 71.2),
     "Chile": (-75.7, -56.0, -66.4, -17.5),
+    # A third class, with one member: a country whose raw bounds frame part of
+    # its own island. Natural Earth files the north of Cyprus as its own
+    # admin_0 entity and Akrotiri and Dhekelia as Sovereign Base Areas, none of
+    # which this generator keeps, so the raw "Cyprus" box stops at 34.1E /
+    # 35.19N and cuts off both the Karpas peninsula and the south coast. Three
+    # sides here are the union with "N. Cyprus"; 34.56 is Cape Gata, taken from
+    # the coastline because no kept entity reaches it.
+    "Cyprus": (32.27, 34.56, 34.59, 35.69),
 }
 
 # Natural Earth files a handful of island nations under "Seven seas (open

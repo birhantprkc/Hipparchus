@@ -74,7 +74,18 @@ COUNTRY_BOXES: tuple[tuple[str, str, float, float, float, float], ...] = (
     ('Brunei', 'Asia', 114.0, 4.02, 115.36, 5.06),
     ('Cambodia', 'Asia', 102.31, 10.42, 107.61, 14.7),
     ('China', 'Asia', 73.6, 15.78, 134.77, 53.57),
-    ('Cyprus', 'Asia', 32.27, 34.63, 34.1, 35.19),
+    # The island, not the Republic. Natural Earth files the north as its own
+    # admin_0 entity, so the generated box stopped at 34.1E / 35.19N and cut the
+    # Karpas peninsula off entirely -- picking Cyprus from the menu framed two
+    # thirds of an island. 'N. Cyprus' stays in the list for anyone who wants
+    # that frame on its own.
+    #
+    # Three sides are the union of those two entries. The south is not: Natural
+    # Earth files Akrotiri and Dhekelia as Sovereign Base Areas, which this
+    # table's generator drops along with every other non-sovereign entity, so
+    # no entry here reaches the island's real southern tip. 34.56 is Cape Gata,
+    # on the Akrotiri peninsula -- without it the coast runs off the frame.
+    ('Cyprus', 'Asia', 32.27, 34.56, 34.59, 35.69),
     ('Georgia', 'Asia', 39.99, 41.04, 46.69, 43.58),
     ('Hong Kong', 'Asia', 113.84, 22.18, 114.4, 22.56),
     ('India', 'Asia', 68.14, 6.75, 97.36, 35.5),

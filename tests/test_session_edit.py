@@ -80,7 +80,10 @@ class StyleTests(unittest.TestCase):
 
     def test_the_quality_is_named(self) -> None:
         before = Session()
-        after = before.with_changes(quality_key="export_print")
+        # Away from the default, whatever it is: setting a field to the value
+        # it already holds is not an edit, and this is a test about naming
+        # edits rather than about which profile is default.
+        after = before.with_changes(quality_key="preview_fast")
         self.assertEqual(describe(before, after).action, "Change Quality")
 
     def test_a_preset_that_brings_other_changes_is_still_one_action(self) -> None:
