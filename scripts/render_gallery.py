@@ -207,6 +207,22 @@ PLATES: tuple[Plate, ...] = (
         # was raised for: at 1200 samples the Cyclades are blobs.
         quality="export_print",
     ),
+    Plate(
+        slug="italy-country-box",
+        title="Italy: the Alps, the Apennines and two seas",
+        # The Countries menu's own box, raw from Natural Earth. A box is a
+        # rectangle and not a border, so this frame also holds Corsica,
+        # Sardinia, the Dalmatian coast, Cap Bon and a slice of the Alps that
+        # is Swiss and Austrian — correct for "frame Italy", and worth knowing
+        # before reading it as a map *of* Italy.
+        min_lon=6.6,
+        min_lat=35.49,
+        max_lon=18.52,
+        max_lat=47.09,
+        preset="Clean Atlas",
+        sources=("terrain_tiles", "natural_earth"),
+        quality="export_print",
+    ),
 )
 
 #: Where a Natural Earth download lands by the README's own instructions. A
