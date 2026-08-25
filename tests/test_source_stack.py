@@ -50,6 +50,37 @@ class CompositionTests(unittest.TestCase):
         self.assertEqual(plan.map_model_id, "osm_live")
         self.assertIn("terrain_tiles", plan.extra_provider_ids)
 
+    def test_dropping_the_streets_still_leaves_a_map_to_draw(self) -> None:
+        """One source that cannot answer must not cost the others their map.
+
+        OpenStreetMap takes the base whenever it is ticked, so an area past
+        what Overpass answers for made the whole render wait on it — and
+        somebody with Elevation ticked too, which draws a continent happily,
+        got nothing at all.
+        """
+        stack = SourceStack()
+        stack.set_enabled("terrain_tiles", True)
+        self.assertIn("overpass", stack.enabled_ids(), "the streets start on")
+
+        plan = stack.plan(excluding=frozenset({"overpass"}))
+        self.assertEqual(plan.map_model_id, "terrain_online", "elevation takes the base")
+        self.assertNotIn(
+            "overpass", plan.extra_provider_ids, "a source that cannot answer must not be asked"
+        )
+
+    def test_dropping_the_only_source_leaves_no_plan(self) -> None:
+        """With nothing else ticked there is genuinely nothing to draw, and the
+        caller has to be able to tell that from a usable plan."""
+        stack = SourceStack()
+        stack.set_enabled("terrain_tiles", False)
+        self.assertEqual(stack.enabled_ids(), ("overpass",))
+        self.assertIsNone(stack.plan(excluding=frozenset({"overpass"})))
+
+    def test_excluding_nothing_is_the_plan_unchanged(self) -> None:
+        stack = SourceStack()
+        stack.set_enabled("terrain_tiles", True)
+        self.assertEqual(stack.plan(), stack.plan(excluding=frozenset()))
+
     def test_a_source_on_its_own_supplies_the_base(self) -> None:
         stack = SourceStack()
         stack.set_enabled("overpass", False)

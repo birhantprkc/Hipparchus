@@ -254,7 +254,29 @@ class ToolbarMixin:
             (aoi.min_lon, aoi.min_lat, aoi.max_lon, aoi.max_lat),
             self.source_stack.enabled_ids(),
         )
-        if cost.worth_asking:
+        # One source that cannot answer must not cost the others their map.
+        # Past what Overpass returns for, drop it and draw with whatever else is
+        # ticked — Elevation and Natural Earth both draw a continent happily,
+        # and waiting on a request that never comes back is not a better
+        # answer than the map they would have made.
+        #
+        # Before the dialogue below rather than inside it: with something left
+        # to draw there is no question to put. The dialogue stays for the case
+        # this cannot help, which is OpenStreetMap ticked and nothing else.
+        oversized = frozenset(
+            source_id
+            for source_id in self.source_stack.enabled_ids()
+            if source_id in fetch_cost.UNBOUNDED_SOURCES
+        )
+        drawable_without = (
+            self.source_stack.plan(excluding=oversized) if cost.level == fetch_cost.BEYOND else None
+        )
+        if drawable_without is not None:
+            names = ", ".join(
+                fetch_cost.SOURCE_NAMES.get(source_id, source_id) for source_id in sorted(oversized)
+            )
+            self._status.note(f"Too large for {names}; drawing without it")
+        elif cost.worth_asking:
             if cost.suggest_natural_earth:
                 # Not a warning but an offer: the area is beyond OpenStreetMap,
                 # and Natural Earth is the source that draws it. Yes switches to
@@ -327,7 +349,9 @@ class ToolbarMixin:
         self._fetch_reporter = FetchReporter(on_change=self._queue_progress)
 
 
-        plan = self.source_stack.plan()
+        # The reduced plan when one was made above, so the sources that cannot
+        # answer for this area are not asked.
+        plan = drawable_without if drawable_without is not None else self.source_stack.plan()
         if plan is None:
             # Should be unreachable: the button is dead when this is true, and
             # says why. Kept as a guard rather than a dialogue, because the

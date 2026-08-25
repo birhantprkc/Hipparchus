@@ -356,7 +356,7 @@ class SourceStack:
         }
 
     # -- resolution ---------------------------------------------------------
-    def plan(self) -> FetchPlan | None:
+    def plan(self, excluding: frozenset[str] | set[str] = frozenset()) -> FetchPlan | None:
         """Resolve the ticked sources into a model plus extra providers.
 
         OpenStreetMap becomes the base whenever it is ticked, because its model
@@ -364,8 +364,16 @@ class SourceStack:
         ticked source supplies the base and everything else rides along. Nothing
         ticked means there is nothing to fetch, which the caller should treat as
         a prompt rather than an error.
+
+        ``excluding`` leaves sources out, which matters precisely because
+        OpenStreetMap takes the base: an area past what Overpass will answer
+        made the whole render wait on it, and someone with Elevation and
+        Natural Earth also ticked — both of which draw a continent happily —
+        got nothing at all. One source that cannot answer must not cost the
+        others their map, so the caller drops it and this hands the base to
+        whatever is left.
         """
-        enabled = self.enabled_ids()
+        enabled = [source_id for source_id in self.enabled_ids() if source_id not in excluding]
         if not enabled:
             return None
 
