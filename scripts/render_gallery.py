@@ -26,6 +26,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 import sys
 import time
+import traceback
 
 from hipparchus.application.fetch_cost import refusal
 from hipparchus.application.layer_inventory import BASE_FETCH_LAYERS
@@ -221,6 +222,31 @@ PLATES: tuple[Plate, ...] = (
         max_lat=47.09,
         preset="Clean Atlas",
         sources=("terrain_tiles", "natural_earth"),
+        quality="export_print",
+    ),
+    Plate(
+        slug="hong-kong-urban",
+        title="Hong Kong: the harbour, the hills and the streets",
+        # Victoria Harbour, not the whole SAR. Two reasons, and only one of
+        # them is about taste: the Countries menu's box is 2,439 km², which is
+        # past `fetch_cost.BEYOND_LIMIT_KM2` and refused outright — though the
+        # macOS twin fetched that same box from Overpass in 120 seconds, so the
+        # limit is stricter here than the service actually is. The other reason
+        # is that the whole SAR at one page reduces the harbour to a smudge,
+        # and the harbour is the map.
+        min_lon=114.08,
+        min_lat=22.22,
+        max_lon=114.30,
+        max_lat=22.38,
+        # Urban Structure rather than the atlas presets the country plates use.
+        # A city at this scale drawn with a relief preset is a data dump: every
+        # service road and building footprint at equal weight, saturating the
+        # sheet. The preset is what decides a street map is legible, not the
+        # data, and Hong Kong is the case that shows it.
+        preset="Urban Structure",
+        # Terrain as well as streets, because the hills are the reason the
+        # streets go where they do — a flat Hong Kong explains nothing.
+        sources=("overpass", "terrain_tiles"),
         quality="export_print",
     ),
 )
@@ -536,6 +562,10 @@ def main(argv: list[str] | None = None) -> int:
         except Exception as exc:  # noqa: BLE001 — a plate failing must not stop the rest
             failures += 1
             print(f"  FAILED {candidate.slug}: {type(exc).__name__}: {exc}", file=sys.stderr, flush=True)
+            # With the traceback: a plate that takes nine minutes to fail is a
+            # plate nobody can afford to re-run blind, and "GEOSException"
+            # without a line number says only that geometry was involved.
+            traceback.print_exc(file=sys.stderr)
     return 1 if failures else 0
 
 

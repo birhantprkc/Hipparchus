@@ -4,7 +4,15 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from shapely.geometry import LineString, MultiLineString, MultiPolygon, Polygon, box, shape
+from shapely.geometry import (
+    GeometryCollection,
+    LineString,
+    MultiLineString,
+    MultiPolygon,
+    Polygon,
+    box,
+    shape,
+)
 from shapely.geometry.base import BaseGeometry
 from shapely.ops import polygonize, unary_union
 
@@ -473,10 +481,21 @@ def _scene_boundary(layer_geometries: dict[str, list[BaseGeometry]], quality_mod
             return None
         return box(minx, miny, maxx, maxy)
 
-    unioned = unary_union(candidates)
-    if unioned.is_empty:
-        return None
-    hull = unioned.convex_hull
+    # The hull of a set is the hull of its points, so the union that used to
+    # stand in the middle here was both the expensive step and the fragile one.
+    # `unary_union` is an overlay, and an overlay throws on the invalid polygons
+    # OpenStreetMap is full of: a Hong Kong export died at
+    # ``TopologyException: side location conflict`` after nine minutes of
+    # fetching, in a call whose only purpose was to find a bounding hull.
+    #
+    # Reachable by default since Print Export became the default profile — the
+    # preview tiers skip this whole branch above once the candidates get dense,
+    # so the crash lived behind an export setting nobody had to choose.
+    #
+    # `convex_hull` reads coordinates. It cannot care whether a building
+    # self-intersects, and it does not have to resolve thousands of overlaps to
+    # answer a question about the outside.
+    hull = GeometryCollection(candidates).convex_hull
     return hull if not hull.is_empty else None
 
 
