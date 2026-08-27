@@ -724,6 +724,7 @@ class MainWindow(FramePanelMixin, PagePanelMixin, ToolbarMixin):
             ("export_svg", self._on_export_clicked),
             ("export_pdf", self._on_export_pdf),
             ("export_png", self._on_export_png),
+            ("export_geojson", self._on_export_geojson),
             ("zoom_in", lambda: self._zoom_view(1.5)),
             ("zoom_out", lambda: self._zoom_view(0.67)),
             ("fit_window", self._reset_view),

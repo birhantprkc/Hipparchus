@@ -135,10 +135,3 @@ def _renderer_for(scene: RenderScene | None):
     renderer.set_scene(scene)
     return renderer
 
-
-@dataclass(slots=True)
-class GeoJSONExporter:
-    """Placeholder GeoJSON exporter."""
-
-    def export(self, destination: Path) -> None:
-        _ = destination

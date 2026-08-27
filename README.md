@@ -850,6 +850,54 @@ SVG export features:
 - Diagnostics with path counts per layer.
 - Optional composition furniture: title block, scale bar, north arrow, simple legend, and paper-size presets.
 
+## GeoJSON Export: the scene as data
+
+The other three exports are **pictures**. The coordinates in them are page
+coordinates, and the ground they came from is gone by the time the file is
+written — a coastline, a depth band or a summit could leave only as a drawing,
+and a drawing cannot be measured, queried or joined to anything.
+
+`Export GeoJSON…` writes the same scene as RFC 7946 GeoJSON, every vertex
+unprojected back into longitude and latitude. The gallery script writes it too:
+
+```bash
+PYTHONPATH=src python3 scripts/render_gallery.py cyprus-country-box \
+    --natural-earth datasets/natural_earth_10m --geojson         # one collection
+PYTHONPATH=src python3 scripts/render_gallery.py cyprus-country-box \
+    --natural-earth datasets/natural_earth_10m --geojson-layers  # one file per layer
+```
+
+What a feature carries:
+
+- `hipparchus_layer` — a file that forgets which layer a line came from is a
+  heap of lines.
+- `fill`, `fill-opacity`, `stroke`, `stroke-width`, `stroke-opacity` —
+  simplestyle-spec, the one styling convention a GeoJSON file can carry that
+  other tools already read. Fills are read **per feature**, not off the layer
+  style, so a hypsometric ramp survives instead of flattening to one colour.
+- `name` and `place_type` for a place. A name that sits exactly on a mark lands
+  **on that mark** rather than beside it as a second, anonymous point: Cyprus
+  exported six cities as twelve points until this, half of them nameless.
+- `visible: false`, only when the layer is unticked, as the SVG writes
+  `display="none"`.
+
+The collection carries the requested `bbox` and, in the foreign member RFC 7946
+leaves for it, the same provenance the SVG puts in `data-hipparchus-*`: the
+render CRS, the elevation model, the attribution, and `not_for_navigation` where
+the sheet stands on soundings.
+
+Two details are silent when wrong, so both are tested. **Ring winding** follows
+RFC 7946 3.1.6 — exterior counter-clockwise, holes clockwise — because MapLibre
+does not ignore it, and a wrongly wound exterior there fills the world and knocks
+a hole where the island should be. **A vertex that will not unproject** takes its
+whole part with it rather than being dropped from the ring: a missing shape is
+visible, a shape short-cut across the gap is not.
+
+**What it cannot carry is attributes.** A `RenderScene` is the drawing: by the
+time a feature reaches a layer its OSM tags have been read, classified and
+discarded. What comes out is shape, layer and style — enough to draw, measure and
+filter, not enough to ask what a way was tagged.
+
 ## Presets
 
 Built-in presets live in:
@@ -967,7 +1015,7 @@ src/hipparchus/
   cache/             Disk cache, cache index, and housekeeping
   core/              App bootstrap, config, fetch progress, settings store
   data_sources/      Overpass provider, query builder, GeoJSON conversion, map models, local-source backends
-  export/            SVG, PDF and PNG export, export profiles, and SVG cleanup
+  export/            SVG, PDF, PNG and GeoJSON export, export profiles, and SVG cleanup
   geometry/          Projection, simplification, smoothing, and derived geometry tools
   plugins/           Plugin interfaces, loader, and builtin plugins
   rendering/         Render models, geometry adapter, and Skia renderer

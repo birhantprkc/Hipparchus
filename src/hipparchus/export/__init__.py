@@ -1,7 +1,8 @@
 """Export subsystem package."""
 
+from hipparchus.export.geojson import GeoJSONExporter, GeoJSONSummary
 from hipparchus.export.profiles import ExportDiagnostics, SVGExportProfile
-from hipparchus.export.service import GeoJSONExporter, PDFExporter, PNGExporter, SVGExporter
+from hipparchus.export.service import PDFExporter, PNGExporter, SVGExporter
 from hipparchus.export.svg_clean import CleanSVGExporter
 
 __all__ = [
@@ -9,6 +10,7 @@ __all__ = [
     "PDFExporter",
     "PNGExporter",
     "GeoJSONExporter",
+    "GeoJSONSummary",
     "CleanSVGExporter",
     "SVGExportProfile",
     "ExportDiagnostics",

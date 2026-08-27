@@ -26,6 +26,7 @@ from hipparchus.application.readiness import why_cannot_render
 from hipparchus.application.viewport import area_to_fetch, shaped_to_window
 from hipparchus.core.fetch_progress import CancellationToken, FetchReporter
 from hipparchus.data_sources.provider import BBoxQuery
+from hipparchus.export.geojson import GeoJSONExporter
 from hipparchus.export.profiles import SVGExportProfile
 from hipparchus.export.service import PDFExporter, PNGExporter, SVGExporter
 from hipparchus.ui import shortcuts, theme, tooltip
@@ -103,6 +104,7 @@ class ToolbarMixin:
         export_menu.add_command(label="SVG…", command=self._on_export_clicked)
         export_menu.add_command(label="PDF…", command=self._on_export_pdf)
         export_menu.add_command(label="PNG…", command=self._on_export_png)
+        export_menu.add_command(label="GeoJSON…", command=self._on_export_geojson)
         self._export_menu_button.configure(menu=export_menu)
 
     def _open_locator(self) -> None:
@@ -522,6 +524,46 @@ class ToolbarMixin:
             PNGExporter, ".png", [("PNG", "*.png"), ("All files", "*.*")], "PNG"
         )
 
+
+    def _on_export_geojson(self) -> None:
+        """The ground rather than the drawing.
+
+        The other three exports are pictures: the coordinates in them are page
+        coordinates, and the ground is gone by the time the file is written.
+        This one writes RFC 7946 GeoJSON — every vertex unprojected back into
+        longitude and latitude — for anything that measures, queries or joins
+        rather than draws. See `export/geojson.py`.
+
+        **No diagnostics sidecar.** What the SVG puts in a file beside it
+        travels inside this one, on the collection itself.
+        """
+        if self._current_scene is None:
+            self._status.set_message("There is no map to export yet.", error=True)
+            return
+
+        target = filedialog.asksaveasfilename(
+            title="Export GeoJSON",
+            defaultextension=".geojson",
+            filetypes=[("GeoJSON files", "*.geojson"), ("All files", "*.*")],
+        )
+        if not target:
+            return
+
+        self._set_busy("Writing GeoJSON…")
+        try:
+            summary = GeoJSONExporter().export(self._current_scene, Path(target))
+        except Exception as exc:  # noqa: BLE001
+            self._status.set_message(f"GeoJSON export failed: {exc}", error=True)
+            return
+        finally:
+            self._set_idle("Idle")
+
+        detail = f"{summary.features} features over {summary.layers} layers"
+        if summary.dropped:
+            # A part that would not unproject is a hole in the data rather than
+            # a rounding difference, so it is said out loud.
+            detail += f" · {summary.dropped} dropped"
+        self._finish_export(Path(target), detail)
     def _export_raster(self, exporter, suffix: str, filetypes, label: str) -> None:
         """One path for both, because they differ only in what a size means.
 

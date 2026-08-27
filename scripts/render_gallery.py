@@ -40,6 +40,7 @@ from hipparchus.core.config import ConfigLoader
 from hipparchus.core.fetch_progress import FetchReporter
 from hipparchus.data_sources.data_source_manager import DataSourceConfig, DataSourceManager
 from hipparchus.data_sources.provider import BBoxQuery
+from hipparchus.export.geojson import GeoJSONExporter
 from hipparchus.export.service import PNGExporter
 from hipparchus.rendering.models import RenderScene
 
@@ -450,6 +451,7 @@ def render(
     destination: Path,
     longest_edge: int,
     natural_earth: Path | None = None,
+    geojson: str | None = None,
 ) -> Path:
     started = time.monotonic()
     colours = plate_spec.palette or "the preset's own colours"
@@ -460,6 +462,20 @@ def render(
         raise ValueError(f"{plate_spec.slug}: the scene came back empty")
     width, height = plate_size(scene, longest_edge)
     PNGExporter(scene=scene, width=width, height=height).export(destination)
+    # The PNG is the drawing; this is the ground it was drawn from. Off unless
+    # asked for, because a gallery run wants sheets rather than datasets.
+    if geojson is not None:
+        data = destination.with_suffix(".geojson")
+        exporter = GeoJSONExporter()
+        summary = (
+            exporter.export_layers(scene, data)
+            if geojson == "layers"
+            else exporter.export(scene, data)
+        )
+        print(
+            f"  wrote {data} ({summary.features} features over {summary.layers} layers)",
+            flush=True,
+        )
     elapsed = time.monotonic() - started
     print(
         f"  wrote {destination} ({width}x{height}, {drawn} geometries, {elapsed:.0f}s)",
@@ -479,6 +495,17 @@ def argument_parser() -> argparse.ArgumentParser:
     parser.add_argument("--list", action="store_true", help="name the known plates and stop")
     parser.add_argument("--out-dir", type=Path, default=DEFAULT_OUTPUT_DIR)
     parser.add_argument("--size", type=int, default=DEFAULT_LONGEST_EDGE, help="longest edge in pixels")
+    parser.add_argument(
+        "--geojson", dest="geojson", action="store_const", const="file", default=None,
+        help=(
+            "also write the ground as GeoJSON beside the sheet, in lon/lat: "
+            "the drawing as data, which is what a GIS reads"
+        ),
+    )
+    parser.add_argument(
+        "--geojson-layers", dest="geojson", action="store_const", const="layers",
+        help="the same, one file per layer in a <plate>.geojson folder",
+    )
     parser.add_argument(
         "--palette", default=None,
         help=f"override the plate's colours. One of: {', '.join(palette_names())}",
@@ -558,7 +585,13 @@ def main(argv: list[str] | None = None) -> int:
     failures = 0
     for candidate in wanted:
         try:
-            render(candidate, args.out_dir / candidate.filename, args.size, natural_earth)
+            render(
+                candidate,
+                args.out_dir / candidate.filename,
+                args.size,
+                natural_earth,
+                geojson=args.geojson,
+            )
         except Exception as exc:  # noqa: BLE001 — a plate failing must not stop the rest
             failures += 1
             print(f"  FAILED {candidate.slug}: {type(exc).__name__}: {exc}", file=sys.stderr, flush=True)

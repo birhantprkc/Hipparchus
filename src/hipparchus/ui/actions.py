@@ -56,6 +56,9 @@ VERBS: tuple[Verb, ...] = (
     Verb("export_svg", "Export SVG…", "Map", "Cmd+E", separator_before=True),
     Verb("export_pdf", "Export PDF…", "Map", "Cmd+Shift+E"),
     Verb("export_png", "Export PNG…", "Map", "Cmd+Alt+E"),
+    # No accelerator: the three obvious Cmd+E combinations are taken, and a
+    # fourth would be a chord nobody guesses.
+    Verb("export_geojson", "Export GeoJSON…", "Map"),
     Verb("zoom_in", "Zoom In", "View", "Cmd++"),
     Verb("zoom_out", "Zoom Out", "View", "Cmd+-"),
     Verb("fit_window", "Fit to Window", "View", "Cmd+0"),
