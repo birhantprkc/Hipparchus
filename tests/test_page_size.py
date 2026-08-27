@@ -169,5 +169,48 @@ class CustomPaperTests(unittest.TestCase):
         self.assertIn(PaperSize.CUSTOM_NAME, PaperSize.names())
 
 
+class SheetArgumentTests(unittest.TestCase):
+    """What `--inches` does to a page, and what it refuses.
+
+    The Mac command line had two `--size` branches, one reading pixels and one
+    reading inches, and the second was unreachable — so a 5:3 poster asked for
+    there was silently a 20 x 12 *pixel* canvas. Nothing here shared that bug,
+    argparse refusing a duplicate flag outright, but the sheet had no way in
+    from a headless run at all. This is that way in, and these are the
+    assertions the Mac's dead branch cost it.
+    """
+
+    def test_inches_reach_the_page_as_a_custom_sheet(self) -> None:
+        inches = PageSpec.custom_inches("20x12")
+        self.assertIsNotNone(inches)
+        page = PageSpec(dpi=300).with_custom_size(*inches)
+
+        self.assertEqual(page.paper_name, PaperSize.CUSTOM_NAME)
+        self.assertEqual(page.custom_width_inches, 20.0)
+        self.assertEqual(page.custom_height_inches, 12.0)
+        # Inches, not pixels: at 300 dpi that is a 6000 x 3600 bitmap.
+        self.assertEqual(page.pixel_size(1600, 1200), (6000, 3600))
+
+    def test_the_separators_are_the_ones_people_type(self) -> None:
+        for text in ("20x12", "20X12", "5:3", "20,12"):
+            with self.subTest(text=text):
+                width, height = PageSpec.custom_inches(text)
+                self.assertAlmostEqual(width / height, 5.0 / 3.0)
+
+    def test_what_is_not_a_sheet_is_refused(self) -> None:
+        for text in ("", "20", "20x", "x12", "20x12x8", "0x12", "-20x12", "wide x tall"):
+            with self.subTest(text=text):
+                self.assertIsNone(PageSpec.custom_inches(text))
+
+    def test_the_rest_of_the_page_survives_the_change(self) -> None:
+        before = PageSpec(paper_name="A4", orientation="Portrait", dpi=150)
+        after = before.with_custom_size(24.0, 36.0)
+
+        self.assertEqual(after.paper_name, PaperSize.CUSTOM_NAME)
+        self.assertEqual(after.orientation, "Portrait")
+        self.assertEqual(after.dpi, 150)
+        self.assertEqual(before.paper_name, "A4", "the page asked from is unchanged")
+
+
 if __name__ == "__main__":  # pragma: no cover
     unittest.main()

@@ -23,7 +23,7 @@ decided without a widget, and none of it could be checked while it lived in one.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 
 @dataclass(frozen=True, slots=True)
@@ -239,6 +239,47 @@ class PageSpec:
 
     def exceeds_bitmap_limit(self, canvas_width: int, canvas_height: int) -> bool:
         return self.bitmap_cost(canvas_width, canvas_height)[0] > MAXIMUM_MEGAPIXELS
+
+    @staticmethod
+    def custom_inches(text: str) -> tuple[float, float] | None:
+        """Two inch numbers, said the way someone types them.
+
+        ``20x12``, ``5:3``, ``20,12``. `None` if that is not what the text is,
+        so the caller can say what it wanted rather than guessing at a sheet.
+
+        Ported from `PageSpec.customInches(parsing:)` on the Mac, where it
+        exists because the command line tool cannot be imported by a test. Here
+        it could have lived in the script, but the two are kept together so a
+        sheet asked for in one application is the same sheet in the other.
+        """
+        # Lowercased first: the separator is `x`, and somebody typing 20X12
+        # means the same sheet as somebody typing 20x12.
+        lowered = text.lower()
+        for separator in ("x", ":", ","):
+            lowered = lowered.replace(separator, " ")
+        parts = lowered.split()
+        if len(parts) != 2:
+            return None
+        try:
+            width, height = float(parts[0]), float(parts[1])
+        except ValueError:
+            return None
+        if width <= 0 or height <= 0:
+            return None
+        return (width, height)
+
+    def with_custom_size(self, width_inches: float, height_inches: float) -> PageSpec:
+        """The same page, on a sheet of exactly these inches.
+
+        A copy, this being a frozen dataclass — and the resolution comes along
+        untouched, since inches only become pixels once a dpi is applied.
+        """
+        return replace(
+            self,
+            paper_name=PaperSize.CUSTOM_NAME,
+            custom_width_inches=width_inches,
+            custom_height_inches=height_inches,
+        )
 
     def describe(self, canvas_width: int, canvas_height: int) -> str:
         """One line under the controls: the sheet, its pixels and what it costs.

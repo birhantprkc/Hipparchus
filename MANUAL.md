@@ -1200,12 +1200,14 @@ box, sources and style of each plate so a sheet can be re-made exactly:
 ```bash
 PYTHONPATH=src python3 scripts/render_gallery.py --list
 PYTHONPATH=src python3 scripts/render_gallery.py europe-natural-earth --size 2400
+PYTHONPATH=src python3 scripts/render_gallery.py santorini --inches 20x12 --dpi 300
 ```
 
 | Flag | What it does |
 |---|---|
 | `--list` | name the known plates and stop |
 | `--out-dir`, `--size` | where the PNG goes, and its longest edge |
+| `--inches WxH`, `--dpi N` | a sheet of exactly those inches instead — 20x12 is 5:3 — at that resolution. Exact, so it wins over `--size`, which shapes the canvas to the map |
 | `--palette` | override the plate's colours |
 | `--natural-earth PATH` | stack Natural Earth onto whatever the plate draws |
 | `--sources=LIST` | tick and untick per run: `--sources=-overpass,terrain_tiles` |

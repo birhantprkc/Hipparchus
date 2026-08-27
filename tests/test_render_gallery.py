@@ -22,6 +22,8 @@ from pathlib import Path
 import sys
 import unittest
 
+from hipparchus.application.page_size import PageSpec
+
 
 def _gallery():
     """The script, imported as a module.
@@ -145,6 +147,49 @@ class RefusalTests(unittest.TestCase):
         for plate in gallery.PLATES:
             with self.subTest(plate=plate.slug):
                 self.assertIsNone(refusal(plate.bbox, plate.sources))
+
+
+class SheetFlagTests(unittest.TestCase):
+    """`--inches` asks for a sheet; `--size` shapes a canvas to the map.
+
+    Two size flags on one command line is exactly the ambiguity that made the
+    Mac's `--size` unreadable — a bare `20x12` says nothing about which was
+    meant. They are kept apart by name here, and this is where the rule
+    between them is written down: `--inches` is exact, and wins.
+    """
+
+    def test_the_flag_is_typeable_and_reaches_a_sheet(self) -> None:
+        parsed = gallery.argument_parser().parse_args(["--inches", "20x12", "--dpi", "300"])
+        page = PageSpec(dpi=parsed.dpi).with_custom_size(*PageSpec.custom_inches(parsed.inches))
+        self.assertEqual(page.pixel_size(1600, 1200), (6000, 3600))
+
+    def test_asking_for_no_sheet_leaves_the_canvas_alone(self) -> None:
+        parsed = gallery.argument_parser().parse_args([])
+        self.assertIsNone(parsed.inches)
+        self.assertEqual(parsed.size, gallery.DEFAULT_LONGEST_EDGE)
+
+    def test_a_sheet_that_is_not_two_numbers_is_refused_before_any_fetch(self) -> None:
+        """Exit 2 and a message, not a traceback nine minutes into a fetch."""
+        self.assertEqual(gallery.main(["--inches", "wide-ish"]), 2)
+
+    def test_a_sheet_too_large_to_allocate_is_refused_before_any_fetch(self) -> None:
+        """200 x 200 inches at 600 dpi is 14 gigapixels. The refusal has to
+        come before the ground it would have been drawn from is fetched."""
+        self.assertEqual(gallery.main(["--inches", "200x200", "--dpi", "600"]), 2)
+
+    def test_the_sheet_is_what_the_png_is_sized_to(self) -> None:
+        """The one that matters: a page reaching `render` decides the pixels,
+        rather than the map's own proportions deciding them."""
+        page = PageSpec(dpi=150).with_custom_size(20.0, 12.0)
+        self.assertEqual(page.pixel_size(*gallery.plate_size(_SceneStub(), 2400)), (3000, 1800))
+
+
+class _SceneStub:
+    """A scene shaped like a wide strip, which `plate_size` reads for its
+    canvas. The sheet has to overrule that, and this is what it overrules."""
+
+    bbox = (0.0, 0.0, 4.0, 1.0)
+    layers = ()
 
 
 if __name__ == "__main__":

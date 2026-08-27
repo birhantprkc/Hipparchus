@@ -554,6 +554,20 @@ PYTHONPATH=src python3 scripts/render_gallery.py world-natural-earth --sources=-
 (The `=` is not decoration: argparse reads a value beginning with a dash as
 another flag and refuses the whole command line without it.)
 
+`--size` is a canvas shaped like the map, so a plate is not mostly margin.
+`--inches` is the other question — what will be printed — and the two are named
+apart because a bare `20x12` cannot say which was meant. The Mac application
+learned that the expensive way: it had one `--size` for both, the inch half
+unreachable, so a 5:3 poster came out a 20 x 12 pixel thumbnail.
+
+```bash
+PYTHONPATH=src python3 scripts/render_gallery.py santorini --inches 20x12 --dpi 300
+```
+
+That is 6000 x 3600, the same sheet the window's Custom paper gives. A sheet is
+exact, so it overrules `--size`; one too large to allocate is refused before
+anything is fetched rather than after the drawing fails.
+
 **A size warning is a question; a size refusal is not.** The window puts the
 cost of a large area in a dialog and lets somebody answer it. Nobody is
 watching a headless run, so the question falls away and only the statement is

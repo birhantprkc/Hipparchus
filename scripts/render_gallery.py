@@ -30,6 +30,7 @@ import traceback
 
 from hipparchus.application.fetch_cost import refusal
 from hipparchus.application.layer_inventory import BASE_FETCH_LAYERS
+from hipparchus.application.page_size import MAXIMUM_MEGAPIXELS, PageSpec, Resolution
 from hipparchus.application.palette_sheet import recoloured
 from hipparchus.application.palettes import named as palette_named, names as palette_names
 from hipparchus.application.presets import ArtisticPreset, GeometryPipelineProfile, default_preset
@@ -452,6 +453,7 @@ def render(
     longest_edge: int,
     natural_earth: Path | None = None,
     geojson: str | None = None,
+    page: PageSpec | None = None,
 ) -> Path:
     started = time.monotonic()
     colours = plate_spec.palette or "the preset's own colours"
@@ -461,6 +463,12 @@ def render(
     if drawn == 0:
         raise ValueError(f"{plate_spec.slug}: the scene came back empty")
     width, height = plate_size(scene, longest_edge)
+    # A sheet is exact. `--size` shapes the canvas to the map so a plate is not
+    # mostly margin; `--inches` is somebody saying what they will print, and
+    # reshaping that to suit the map would be answering a different question.
+    # The map fills the sheet as far as its own proportions allow.
+    if page is not None:
+        width, height = page.pixel_size(width, height)
     PNGExporter(scene=scene, width=width, height=height).export(destination)
     # The PNG is the drawing; this is the ground it was drawn from. Off unless
     # asked for, because a gallery run wants sheets rather than datasets.
@@ -495,6 +503,18 @@ def argument_parser() -> argparse.ArgumentParser:
     parser.add_argument("--list", action="store_true", help="name the known plates and stop")
     parser.add_argument("--out-dir", type=Path, default=DEFAULT_OUTPUT_DIR)
     parser.add_argument("--size", type=int, default=DEFAULT_LONGEST_EDGE, help="longest edge in pixels")
+    parser.add_argument(
+        "--inches", default=None, metavar="WxH",
+        help=(
+            "a sheet of exactly these inches, so any aspect can be asked for: "
+            "20x12 is 5:3, 24x12 is 2:1. Combines with --dpi to set the pixels, "
+            "and wins over --size, which shapes the canvas to the map instead"
+        ),
+    )
+    parser.add_argument(
+        "--dpi", type=int, default=Resolution.DEFAULT, metavar="N",
+        help=f"resolution for the sheet --inches asks for (default: {Resolution.DEFAULT})",
+    )
     parser.add_argument(
         "--geojson", dest="geojson", action="store_const", const="file", default=None,
         help=(
@@ -549,6 +569,36 @@ def main(argv: list[str] | None = None) -> int:
         print(f"unknown palette {args.palette!r}; one of: {', '.join(palette_names())}", file=sys.stderr)
         return 2
 
+    page = None
+    if args.inches is not None:
+        inches = PageSpec.custom_inches(args.inches)
+        if inches is None:
+            print(
+                f"--inches wants width x height in inches, like 20x12 or 5:3, "
+                f"not {args.inches!r}",
+                file=sys.stderr,
+            )
+            return 2
+        page = PageSpec(dpi=args.dpi).with_custom_size(*inches)
+        # The refusal has to come before the fetch, not after it. A sheet this
+        # size is minutes of drawing that ends in a failed allocation, and the
+        # ground it was drawn from would have been fetched first.
+        # The canvas passed here is ignored: it is the fallback for the Canvas
+        # sheet, and this is not one. A stated sheet is inches x dpi whatever
+        # shape the map turns out to be, which is why this can be asked before
+        # a single tile is fetched.
+        if page.exceeds_bitmap_limit(1, 1):
+            megapixels, megabytes = page.bitmap_cost(1, 1)
+            width, height = page.pixel_size(1, 1)
+            print(
+                f"{args.inches} at {args.dpi} dpi is {width} x {height} — "
+                f"{megapixels:.0f} MP, {megabytes / 1000:.1f} GB, past the "
+                f"{MAXIMUM_MEGAPIXELS:.0f} MP a bitmap export allows. Ask for "
+                f"fewer inches or a lower --dpi.",
+                file=sys.stderr,
+            )
+            return 2
+
     # Every change to what a plate is happens here, before anything reads the
     # result: `--natural-earth` below asks whether Natural Earth is wanted, and
     # a source ticked by `--sources` after that question had been answered
@@ -591,6 +641,7 @@ def main(argv: list[str] | None = None) -> int:
                 args.size,
                 natural_earth,
                 geojson=args.geojson,
+                page=page,
             )
         except Exception as exc:  # noqa: BLE001 — a plate failing must not stop the rest
             failures += 1
