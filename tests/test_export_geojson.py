@@ -236,8 +236,9 @@ class TheStyleTests(unittest.TestCase):
         self.assertIn(round(200 / 255, 3), opacities)
 
     def test_strokes_are_written_in_the_convention_other_tools_read(self) -> None:
-        """simplestyle-spec, because it is the one styling convention a GeoJSON
-        file can carry that other tools already read."""
+        """simplestyle-spec, the nearest thing GeoJSON has to a styling
+        convention. Whether a viewer draws it or merely carries it varies -- what
+        is tested here is that the file says it, the only half this end owns."""
         drawn = [
             feature["properties"]
             for feature in features(collection())

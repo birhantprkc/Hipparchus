@@ -872,9 +872,11 @@ What a feature carries:
 - `hipparchus_layer` — a file that forgets which layer a line came from is a
   heap of lines.
 - `fill`, `fill-opacity`, `stroke`, `stroke-width`, `stroke-opacity` —
-  simplestyle-spec, the one styling convention a GeoJSON file can carry that
-  other tools already read. Fills are read **per feature**, not off the layer
-  style, so a hypsometric ramp survives instead of flattening to one colour.
+  simplestyle-spec, the nearest thing GeoJSON has to a styling convention. Some
+  tools draw it — geojson.io, a GitHub gist. Others carry it as data and let you
+  style *by* it: GeoLibre draws its own default and puts the colour in the
+  feature popup. Fills are read **per feature**, not off the layer style, so a
+  hypsometric ramp survives instead of flattening to one colour.
 - `name` and `place_type` for a place. A name that sits exactly on a mark lands
   **on that mark** rather than beside it as a second, anonymous point: Cyprus
   exported six cities as twelve points until this, half of them nameless.
@@ -892,6 +894,13 @@ does not ignore it, and a wrongly wound exterior there fills the world and knock
 a hole where the island should be. **A vertex that will not unproject** takes its
 whole part with it rather than being dropped from the ring: a missing shape is
 visible, a shape short-cut across the gap is not.
+
+Opened in GeoLibre rather than only reasoned about: an elevation band with three
+holes, loaded into `web.geolibre.app`, framed itself over Troodos with the holes
+coming out as holes — the winding rule paying for itself, since a wrongly wound
+exterior there fills the viewport instead — and `hipparchus_layer` and the
+colours appeared in the feature popup. A places layer loaded as six features
+rather than twelve, which is the name-on-mark merge seen from the other side.
 
 **What it cannot carry is attributes.** A `RenderScene` is the drawing: by the
 time a feature reaches a layer its OSM tags have been read, classified and
