@@ -95,6 +95,8 @@ LAYER_LABELS: dict[str, str] = {
     "shops": "Shops",
     "landuse": "Land use",
     "coastline": "Coastline / sea",
+    "admin_boundaries": "Admin boundaries",
+    "ferry_routes": "Ferry routes",
     "roads": "Roads",
     "roads_motorway": "Motorways",
     "roads_trunk": "Trunk roads",
@@ -142,6 +144,9 @@ _GROUPS: dict[str, str] = {
     # navigation, and the not-for-navigation notice fires on both.
     "current_streamlines": "Sea marks",
     "coastline": "Water & land",
+    # A border partitions land; it is measured geography, not invented
+    # geometry, and must not fall into the "Derived" fallback.
+    "admin_boundaries": "Water & land",
     "water": "Water & land",
     "parks": "Water & land",
     "forests": "Water & land",
@@ -152,6 +157,8 @@ _GROUPS: dict[str, str] = {
     "barriers": "Built",
     "power": "Built",
     "railways": "Movement",
+    # A ferry route is transport, not water, and reads beside the railways.
+    "ferry_routes": "Movement",
     "satellite_tracks": "Movement",
     "satellite_footprints": "Movement",
     "earthquakes_shallow": "Movement",

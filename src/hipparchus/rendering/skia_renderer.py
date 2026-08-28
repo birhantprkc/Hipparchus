@@ -499,8 +499,17 @@ class SkiaRenderer:
         for layer in self.scene.iter_visible_layers():
             if sampled and remaining_budget <= 0:
                 break
-            stroke_color = layer.style.stroke_color.with_opacity(layer.style.opacity)
-            fill_color = layer.style.fill_color.with_opacity(layer.style.opacity)
+            # Opacity belongs to the layer, not to each part of it, so it is
+            # applied once by compositing the whole layer as a group below
+            # rather than folded into every colour here. Folded in, two
+            # overlapping parts of one layer blend against each other and the
+            # seam between them reads darker than either — which is how ten
+            # elevation bands, flattened into 248 loose polygons by the clip,
+            # turned a warm tan Cyprus into a pale grey one while the Swift
+            # port drew it correctly from identical colours. `<g opacity>` in
+            # SVG and PDF means the group; this now means the same thing.
+            stroke_color = layer.style.stroke_color
+            fill_color = layer.style.fill_color
 
             # Debug: log first visible layer
             if _first_layer and layer.geometries:
@@ -536,7 +545,7 @@ class SkiaRenderer:
             # Road casing paint (wider stroke drawn underneath)
             casing_paint = None
             if layer.style.casing_width > 0:
-                casing_color = layer.style.casing_color.with_opacity(layer.style.opacity)
+                casing_color = layer.style.casing_color
                 casing_paint = skia.Paint(
                     AntiAlias=True,
                     Style=skia.Paint.kStroke_Style,
@@ -568,7 +577,7 @@ class SkiaRenderer:
             fill_paints: dict[tuple[int, int, int, int], Any] = {}
 
             def _fill_paint_for(color: RGBAColor) -> Any:
-                shaded = color.with_opacity(layer.style.opacity)
+                shaded = color
                 key = (shaded.r, shaded.g, shaded.b, shaded.a)
                 cached = fill_paints.get(key)
                 if cached is None:
@@ -601,6 +610,16 @@ class SkiaRenderer:
             if layer.name in {"places", "shops", "amenities"} and not layer.geometries:
                 continue
 
+            # The layer is composited as one group at its own opacity, so its
+            # parts draw against each other at full strength and the finished
+            # layer is faded once. A fully opaque layer skips the offscreen
+            # surface entirely — most layers are opaque, and there is no reason
+            # to pay for a save layer that would composite unchanged.
+            alpha = max(0.0, min(1.0, layer.style.opacity))
+            grouped = alpha < 1.0
+            if grouped:
+                canvas.saveLayerAlpha(None, round(alpha * 255))
+
             # First pass: draw all casings (so they appear underneath all fills)
             if casing_paint is not None:
                 for geometry in selected:
@@ -624,6 +643,9 @@ class SkiaRenderer:
                         )
                     canvas.drawPath(path, paint)
                     drawn_paths += 1
+
+            if grouped:
+                canvas.restore()
         canvas.restore()
         return drawn_paths
 

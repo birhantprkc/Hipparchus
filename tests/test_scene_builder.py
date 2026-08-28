@@ -3,8 +3,10 @@ from __future__ import annotations
 from dataclasses import replace
 import unittest
 
+from hipparchus.application.layer_inventory import LAYER_LABELS, _GROUPS
 from hipparchus.application.presets import GeometryPipelineProfile, StyleProfile, default_preset
 from hipparchus.application.scene_builder import (
+    PREFERRED_LAYER_ORDER,
     RenderSceneBuilder,
     _ordered_layers,
     _raise_relief_over_the_built_environment,
@@ -298,6 +300,71 @@ class DrawOrderTests(unittest.TestCase):
         """
         plain = _ordered_layers({"coastline", "water", "parks", "buildings", "roads_primary"})
         self.assertEqual(plain, ["parks", "coastline", "water", "buildings", "roads_primary"])
+
+
+class EveryKnownLayerIsRankedTests(unittest.TestCase):
+    """A layer missing from the preferred order is not skipped — it is drawn last.
+
+    `_ordered_layers` appends everything it does not recognise, sorted by name,
+    after every layer it does. For a line layer that is untidy; for a *filled*
+    one it is destructive, because the fill paints over the finished sheet. Three
+    of the layers that were missing are fills — `depth_bands`, `seamark_areas`
+    and `sst_bands` — and `sst_bands` sorts last of all thirteen, so a sea
+    temperature sheet painted the whole map out at the final step.
+
+    The bug was found once before, in `night_lights`, and fixed only for
+    `night_lights`. This asserts the rule instead of the instance: every layer
+    the inventory knows about has a place in the order, so a new source is ranked
+    when it is added rather than when somebody renders a sheet and sees it.
+    """
+
+    def known_layers(self) -> set[str]:
+        return set(LAYER_LABELS) | set(_GROUPS)
+
+    def test_every_known_layer_has_a_rank(self) -> None:
+        missing = sorted(self.known_layers() - set(PREFERRED_LAYER_ORDER))
+        self.assertEqual(missing, [], f"drawn last, over everything: {missing}")
+
+    def test_the_order_ranks_nothing_the_inventory_has_never_heard_of(self) -> None:
+        """The other direction: a rank for a layer that does not exist is a typo."""
+        roads = {name for name in PREFERRED_LAYER_ORDER if name == "roads" or name.startswith("roads_")}
+        unknown = sorted(set(PREFERRED_LAYER_ORDER) - self.known_layers() - roads)
+        self.assertEqual(unknown, [], f"ranked but unknown to the inventory: {unknown}")
+
+    def test_no_layer_is_ranked_twice(self) -> None:
+        self.assertEqual(len(PREFERRED_LAYER_ORDER), len(set(PREFERRED_LAYER_ORDER)))
+
+    def test_the_filled_layers_are_drawn_under_the_linework(self) -> None:
+        """The rule this file already states, applied to the fills that were missing.
+
+        A band fill over the contours that describe the same ground paints them
+        out; that is why `elevation_bands` sits where it does, and a sea floor or
+        a temperature is no exception to it.
+        """
+        order = _ordered_layers({"depth_bands", "sst_bands", "bathymetry",
+                                 "terrain_contours", "sst_contours"})
+        for fill in ("depth_bands", "sst_bands"):
+            for line in ("bathymetry", "terrain_contours", "sst_contours"):
+                with self.subTest(fill=fill, line=line):
+                    self.assertLess(order.index(fill), order.index(line))
+
+    def test_sea_marks_are_drawn_over_the_built_environment(self) -> None:
+        """On a chart the marks are the subject; a buoy under a building is lost."""
+        order = _ordered_layers({"seamark_lights", "seamark_buoys", "buildings", "roads", "places"})
+        for mark in ("seamark_lights", "seamark_buoys"):
+            with self.subTest(mark=mark):
+                self.assertLess(order.index("buildings"), order.index(mark))
+                self.assertLess(order.index("roads"), order.index(mark))
+
+    def test_labels_still_come_last(self) -> None:
+        """The thirteen were all appended after the labels. None may stay there."""
+        order = _ordered_layers({"places", "summits", "depth_bands", "sst_bands",
+                                 "admin_boundaries", "ferry_routes", "night_lights",
+                                 "seamark_lights", "current_streamlines"})
+        for layer in ("depth_bands", "sst_bands", "admin_boundaries", "ferry_routes",
+                      "night_lights", "seamark_lights", "current_streamlines"):
+            with self.subTest(layer=layer):
+                self.assertLess(order.index(layer), order.index("places"))
 
 
 class ReliefOverBuildingsTests(unittest.TestCase):
