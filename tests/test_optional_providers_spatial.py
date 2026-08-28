@@ -13,6 +13,13 @@ from hipparchus.data_sources.optional_providers import (
 )
 from hipparchus.data_sources.provider import BBoxQuery
 
+try:
+    import rasterio  # noqa: F401
+
+    RASTERIO_AVAILABLE = True
+except Exception:  # noqa: BLE001
+    RASTERIO_AVAILABLE = False
+
 
 QUERY = (10.0, 20.0, 11.0, 21.0)
 
@@ -73,7 +80,14 @@ def _write_gradient_geotiff(path: Path) -> None:
         dst.write(data, 1)
 
 
+@unittest.skipUnless(RASTERIO_AVAILABLE, "rasterio not installed")
 class RasterValueLayerTests(unittest.TestCase):
+    """`rasterio` is an optional extra, and this is the only class here that
+    needs it — `_write_gradient_geotiff` imports it inside the function, so the
+    module loads fine and the failure arrives at call time instead. Guarded the
+    way `test_terrain_tiles` guards the same dependency, so a checkout without
+    the `maps` extra skips these rather than reporting three broken tests."""
+
     def setUp(self) -> None:
         self._tmp = tempfile.TemporaryDirectory()
         self.raster = Path(self._tmp.name) / "ramp.tif"
