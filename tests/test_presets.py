@@ -11,6 +11,8 @@ from hipparchus.application.presets import (
 from hipparchus.rendering.models import RGBAColor
 
 NIGHT_PRESET_NAME = "Night"
+CLEAN_ATLAS_PRESET_NAME = "Clean Atlas"
+TERRAIN_STUDY_PRESET_NAME = "Terrain Study"
 
 
 def _luminance(color: RGBAColor) -> float:
@@ -90,6 +92,56 @@ class NightPresetTests(unittest.TestCase):
         night = set(default_preset(NIGHT_PRESET_NAME).style_profile.layer_styles)
         default = set(default_preset(DEFAULT_PRESET_NAME).style_profile.layer_styles)
         self.assertEqual(default - night, set())
+
+
+class CleanAtlasContourTests(unittest.TestCase):
+    """Clean Atlas must name its contours rather than inherit a default.
+
+    It tints elevation bands, so a terrain source gives it 800-odd contour
+    lines over those fills -- by far its most numerous layer. Naming nothing
+    left them to ``resolve_style``'s last resort, a near-black 1.0-wide line
+    that greyed the tint out from on top. The Swift port fell back to a grey
+    hairline instead, so the same preset drew a visibly different sheet in
+    each app.
+    """
+
+    def test_clean_atlas_names_its_contours(self) -> None:
+        styles = default_preset(CLEAN_ATLAS_PRESET_NAME).style_profile.layer_styles
+        for layer in ("terrain_contours", "terrain_index_contours"):
+            with self.subTest(layer=layer):
+                self.assertIn(layer, styles)
+
+    def test_clean_atlas_contours_match_terrain_study(self) -> None:
+        """Both presets fill the same bands, so both take the same ink over them."""
+        clean = default_preset(CLEAN_ATLAS_PRESET_NAME).style_profile.layer_styles
+        study = default_preset(TERRAIN_STUDY_PRESET_NAME).style_profile.layer_styles
+        self.assertEqual(clean["elevation_bands"], study["elevation_bands"])
+        for layer in ("terrain_contours", "terrain_index_contours"):
+            with self.subTest(layer=layer):
+                self.assertEqual(clean[layer], study[layer])
+
+    def test_clean_atlas_contours_are_brown_not_black(self) -> None:
+        """The fallback's near-black is what greyed the hypsometric tint down."""
+        contours = default_preset(CLEAN_ATLAS_PRESET_NAME).style_profile.layer_styles["terrain_contours"]
+        self.assertGreater(contours.stroke_color.r, contours.stroke_color.b)
+        self.assertGreater(_luminance(contours.stroke_color), 60.0)
+        self.assertLess(contours.opacity, 1.0)
+
+    def test_clean_atlas_index_contours_carry_more_weight(self) -> None:
+        """Every fifth line reads as the one carrying the number."""
+        styles = default_preset(CLEAN_ATLAS_PRESET_NAME).style_profile.layer_styles
+        minor = styles["terrain_contours"]
+        index = styles["terrain_index_contours"]
+        self.assertGreater(index.stroke_width, minor.stroke_width)
+        self.assertGreater(index.opacity, minor.opacity)
+        self.assertLess(_luminance(index.stroke_color), _luminance(minor.stroke_color))
+
+    def test_contours_are_drawn_as_lines(self) -> None:
+        """``LayerStyle`` fills by default, and a filled contour is a blot."""
+        styles = default_preset(CLEAN_ATLAS_PRESET_NAME).style_profile.layer_styles
+        for layer in ("terrain_contours", "terrain_index_contours"):
+            with self.subTest(layer=layer):
+                self.assertFalse(styles[layer].fill_enabled)
 
 
 class ResolvePresetNameTests(unittest.TestCase):
