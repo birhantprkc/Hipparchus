@@ -503,7 +503,18 @@ def _decode_terrarium(png_bytes: bytes) -> np.ndarray:
     image = skia.Image.MakeFromEncoded(skia.Data.MakeWithCopy(png_bytes))
     if image is None:
         raise TerrainTileError("Elevation tile is not a decodable image")
-    pixels = np.asarray(image.toarray(), dtype=float)
+    # **The colour type is stated, not inherited.** `toarray()` defaults to
+    # `kUnknown_ColorType`, which leaves skia free to hand back the image's own
+    # native layout -- and `kN32` is BGRA on some platforms and RGBA on others.
+    # The three lines below read channel 0 as red, so a platform that answers
+    # BGRA decodes every elevation from the wrong byte: not an error, just a
+    # terrain model of somewhere that does not exist. It is what made this
+    # tile's round-trip test fail on every element under Linux CI while passing
+    # on macOS. `gibs_provider._luminance_grid` says the same thing for the same
+    # reason.
+    pixels = np.asarray(
+        image.toarray(colorType=skia.kRGBA_8888_ColorType), dtype=float
+    )
     if pixels.ndim != 3 or pixels.shape[2] < 3:
         raise TerrainTileError(f"Unexpected elevation tile shape: {pixels.shape}")
     return pixels[:, :, 0] * 256.0 + pixels[:, :, 1] + pixels[:, :, 2] / 256.0 - 32768.0
