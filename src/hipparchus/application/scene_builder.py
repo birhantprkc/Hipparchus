@@ -8,6 +8,7 @@ from shapely.geometry import (
     GeometryCollection,
     LineString,
     MultiLineString,
+    MultiPoint,
     MultiPolygon,
     Polygon,
     box,
@@ -740,65 +741,113 @@ def _label_anchor(geometry: BaseGeometry) -> tuple[float, float] | None:
     return (float(point.x), float(point.y))
 
 
+# Draw order: ground first, linework over it, labels last.
+#
+# A layer named here is drawn in this order; a layer *not* named here sorts
+# alphabetically after every layer that is, which for a fill means it paints
+# over the finished sheet. `EveryKnownLayerIsRankedTests` holds this list to the
+# layer inventory so a new source is ranked when it is added.
+PREFERRED_LAYER_ORDER: tuple[str, ...] = (
+    # Background layers (large areas)
+    "fields",
+    "forests",
+    "natural",
+    "landuse",
+    "parks",
+    # Relief sits above land cover and below the built environment, the way
+    # a printed topographic sheet stacks it.
+    "elevation_bands",
+    "terrain_hillshade",
+    # The sea goes *over* the relief, not under it. Elevation bands cover
+    # the sea as well as the land — the tiles carry the sea floor in the
+    # same band as the ground — and a hypsometric band fill is opaque, so
+    # drawing them afterwards paints the water out. The Auckland plate
+    # infers the Waitematā correctly from the coastline and then hides it
+    # under a land tint, which is what this ordering is for.
+    #
+    # This is where the port and this file disagree on purpose: the Swift
+    # `SceneBuilder.preferredLayerOrder` draws coastline and water first, with
+    # the ground cover. Everything below is ranked to match it; this pair is
+    # not, because the Waitematā is the reason.
+    "coastline",
+    "water",
+    # The sea's own mass, and an ocean scalar's fill: with the other fills, over
+    # the sea floor they describe and *under* every line. A fill ranked above
+    # the linework washes the isobaths out — the rule this file already applies
+    # to the land's bands, and neither a depth nor a temperature is an
+    # exception to it.
+    "depth_bands",
+    "sst_bands",
+    # Depth and contours describe the water, so they are drawn on it.
+    "bathymetry",
+    "terrain_contours",
+    "terrain_index_contours",
+    # Iso-lines of brightness sit with the relief they resemble. Unranked, they
+    # painted over every label — the instance of this bug that was found first
+    # and fixed alone.
+    "night_lights",
+    # The isotherms, though, sit above the depth linework: they are the subject
+    # when this source is on, and sparse enough not to crowd what they cross.
+    "sst_contours",
+    # Streamlines over everything the sea is made of, because when this source
+    # is on it is the subject; and under the marks, which are objects rather
+    # than a field.
+    "current_streamlines",
+    # Rules drawn as ground: restricted areas, traffic separation, fairways,
+    # and the harbours a vessel is heading for. Above the relief rather than
+    # under it, because a hypsometric band fill is opaque and would paint them
+    # out — the same lesson the inferred sea taught, learned once.
+    "seamark_areas",
+    "seamark_harbours",
+    # Buildings and structures
+    "buildings",
+    "barriers",
+    "power",
+    # Roads (from major to minor)
+    "roads_motorway",
+    "roads_trunk",
+    "roads_primary",
+    "roads_secondary",
+    "roads_tertiary",
+    "roads_residential",
+    "roads_service",
+    "roads_other",
+    "roads",
+    # Transport
+    "railways",
+    "ferry_routes",
+    # A border draws above the network it usually follows, below every label.
+    "admin_boundaries",
+    # Orbital geometry floats above the ground it passes over.
+    "satellite_footprints",
+    "satellite_tracks",
+    # Measured point phenomena sit above the base map.
+    "earthquakes_deep",
+    "earthquakes_intermediate",
+    "earthquakes_shallow",
+    # The marks themselves, nearly last: on a chart these are the subject, and a
+    # buoy hidden under a building has failed at the one thing it is for. Lights
+    # above the rest, being what the reader looks for first.
+    "seamark_hazards",
+    "seamark_beacons",
+    "seamark_buoys",
+    "seamark_lights",
+    # Labels on top (ordered by importance)
+    "summits",
+    "places",
+    "street_names",
+    "amenities",
+    "shops",
+    # Derived artistic layers
+    "voronoi_cells",
+    "delaunay_mesh",
+    "hex_grid",
+    "circle_packing",
+)
+
+
 def _ordered_layers(layer_names: set[str] | list[str] | tuple[str, ...]) -> list[str]:
-    preferred = [
-        # Background layers (large areas)
-        "fields",
-        "forests",
-        "natural",
-        "landuse",
-        "parks",
-        # Relief sits above land cover and below the built environment, the way
-        # a printed topographic sheet stacks it.
-        "elevation_bands",
-        "terrain_hillshade",
-        # The sea goes *over* the relief, not under it. Elevation bands cover
-        # the sea as well as the land — the tiles carry the sea floor in the
-        # same band as the ground — and a hypsometric band fill is opaque, so
-        # drawing them afterwards paints the water out. The Auckland plate
-        # infers the Waitematā correctly from the coastline and then hides it
-        # under a land tint, which is what this ordering is for.
-        "coastline",
-        "water",
-        # Depth and contours describe the water, so they are drawn on it.
-        "bathymetry",
-        "terrain_contours",
-        "terrain_index_contours",
-        # Buildings and structures
-        "buildings",
-        "barriers",
-        "power",
-        # Roads (from major to minor)
-        "roads_motorway",
-        "roads_trunk",
-        "roads_primary",
-        "roads_secondary",
-        "roads_tertiary",
-        "roads_residential",
-        "roads_service",
-        "roads_other",
-        "roads",
-        # Transport
-        "railways",
-        # Orbital geometry floats above the ground it passes over.
-        "satellite_footprints",
-        "satellite_tracks",
-        # Measured point phenomena sit above the base map.
-        "earthquakes_deep",
-        "earthquakes_intermediate",
-        "earthquakes_shallow",
-        # Labels on top (ordered by importance)
-        "summits",
-        "places",
-        "street_names",
-        "amenities",
-        "shops",
-        # Derived artistic layers
-        "voronoi_cells",
-        "delaunay_mesh",
-        "hex_grid",
-        "circle_packing",
-    ]
+    preferred = PREFERRED_LAYER_ORDER
     names = list(layer_names)
     order: list[str] = [name for name in preferred if name in names]
     rest = sorted([name for name in names if name not in preferred])
@@ -828,32 +877,86 @@ def _raise_relief_over_the_built_environment(layers: list[RenderLayer]) -> list[
     return reordered
 
 
-def _clip_geometries(geometries: list[BaseGeometry], clip_bbox: BaseGeometry) -> list[BaseGeometry]:
-    """Clip geometries to the bounding box to prevent rendering outside visible area.
+# The geometry types at each topological dimension, and the multi-part type to
+# rebuild a clipped collection with. Keyed by `geom_type` rather than by
+# Shapely's `dimension`, which is not an attribute of a geometry in Shapely 2.
+_TYPES_BY_DIMENSION: dict[int, tuple[tuple[str, ...], type[BaseGeometry]]] = {
+    0: (("Point", "MultiPoint"), MultiPoint),
+    1: (("LineString", "LinearRing", "MultiLineString"), MultiLineString),
+    2: (("Polygon", "MultiPolygon"), MultiPolygon),
+}
 
-    This ensures that geometries extending beyond the requested AOI are clipped
-    to fit within the visible canvas area.
+_DIMENSION_BY_TYPE: dict[str, int] = {
+    name: dimension
+    for dimension, (names, _multi) in _TYPES_BY_DIMENSION.items()
+    for name in names
+}
+
+
+def _clipped_to_source_dimension(result: BaseGeometry, source: BaseGeometry) -> BaseGeometry | None:
+    """The part of a clip result that is still the kind of thing that went in.
+
+    Cutting a polygon against a box can hand back a point or a line where the
+    two merely touch. Those are artefacts of the cut rather than content, and
+    drawing them puts specks and hairs along the frame edge.
+    """
+    if isinstance(source, GeometryCollection):
+        return result if not result.is_empty else None
+
+    dimension = _DIMENSION_BY_TYPE.get(source.geom_type)
+    entry = _TYPES_BY_DIMENSION.get(dimension) if dimension is not None else None
+    if entry is None:
+        return result if not result.is_empty else None
+    keep_types, multi_type = entry
+
+    if result.geom_type in keep_types:
+        return result
+    if not isinstance(result, GeometryCollection):
+        # A lower-dimensional sliver: the geometry only grazed the box.
+        return None
+
+    parts = [
+        part for part in result.geoms
+        if part.geom_type in keep_types and not part.is_empty
+    ]
+    if not parts:
+        return None
+    return parts[0] if len(parts) == 1 else multi_type(parts)
+
+
+def _clip_geometries(geometries: list[BaseGeometry], clip_bbox: BaseGeometry) -> list[BaseGeometry]:
+    """Clip geometries to the bounding box, **one geometry in, one geometry out**.
+
+    A multi-part geometry stays one geometry. That used to be the bug: this
+    flattened every MultiPolygon into its parts, so the ten elevation bands the
+    terrain provider emits — one feature per band, each a multipolygon of every
+    patch of ground at that height — arrived at the renderer as 248 loose
+    polygons.
+
+    That mattered because `skia_renderer` applies a layer's opacity by
+    compositing the layer as a group: 248 parts blended against each other where
+    ten did not, and Cyprus came out pale grey here while the Swift port, which
+    keeps its ten multipolygons, drew it warm tan from identical band colours.
+
+    Splitting also lost the band's identity — a hole in a multipolygon is a hole,
+    but two separate polygons are two shapes, and the even-odd fill that makes an
+    enclosed hollow read correctly only works within one geometry.
     """
     clipped: list[BaseGeometry] = []
     for geom in geometries:
         if geom.is_empty:
             continue
         try:
-            # Use intersection to clip the geometry to the bbox
             result = geom.intersection(clip_bbox)
-            # Handle GeometryCollection results - extract individual geometries
-            if result.is_empty:
-                continue
-            if hasattr(result, 'geoms'):
-                # It's a GeometryCollection or MultiGeometry
-                for g in result.geoms:
-                    if not g.is_empty:
-                        clipped.append(g)
-            else:
-                clipped.append(result)
         except Exception:
-            # If clipping fails, include the original geometry
+            # If clipping fails, include the original geometry.
             clipped.append(geom)
+            continue
+        if result.is_empty:
+            continue
+        kept = _clipped_to_source_dimension(result, geom)
+        if kept is not None and not kept.is_empty:
+            clipped.append(kept)
     return clipped
 
 

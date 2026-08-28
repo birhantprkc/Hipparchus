@@ -1,0 +1,63 @@
+name: Tests
+
+# The headless suite: everything that can be checked without a window.
+#
+# This repository had no CI at all until now, which is why two things went stale
+# without anyone finding out — a fixture and a documented count, both facts about
+# every commit that nothing checked. The GUI half stays out of it deliberately:
+# `tests/gui_support.require_gui` skips any test that would build a real window
+# unless HIPPARCHUS_GUI_TESTS is set, and a CI runner is the last place to set it.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tests:
+    name: pytest
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    strategy:
+      fail-fast: false
+      matrix:
+        # The floor stated in pyproject.toml, and the current release. A version
+        # range nobody exercises is a claim rather than a fact.
+        python-version: ["3.11", "3.13"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      # Tkinter is imported at module scope in the UI package, so it has to be
+      # present even though no test here opens a window. It ships with Python on
+      # macOS and Windows and is a separate OS package on Debian.
+      - name: Tkinter
+        run: sudo apt-get update && sudo apt-get install -y python3-tk
+
+      - name: Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
+
+      - name: Lint
+        run: python -m ruff check src tests scripts
+
+      - name: Run tests
+        run: python -m pytest
+
+      # The fixture is generated from the code it checks, so it can only catch a
+      # change nobody meant to make — but that is precisely what it is for, and a
+      # stale fixture makes the check meaningless. `--check` writes nothing.
+      - name: Palette fixture is not stale
+        run: python scripts/generate_palette_parity_fixture.py --check

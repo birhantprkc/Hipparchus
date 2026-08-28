@@ -1,6 +1,6 @@
 # Hipparchus File Structure
 
-**Version 0.8.0**
+**Version 0.9.0**
 
 This document describes the repository layout of Hipparchus, an online desktop
 vector cartography application. It complements the "Project Layout" section of
@@ -16,6 +16,7 @@ Hipparchus/
 ├── CHANGELOG.md               Notable changes, one heading per version
 ├── CLAUDE.md                  Notes for an agent working in this repository
 ├── LICENSE                   MIT License
+├── THIRD-PARTY-NOTICES.md    Every dependency's and data source's own terms
 ├── pyproject.toml            Package metadata, dependencies, pytest config
 ├── Dockerfile.gui              Container image for the GUI test suite
 ├── setup.sh                  One-command dependency setup (macOS / Linux)
@@ -24,6 +25,7 @@ Hipparchus/
 ├── run_hprs.ps1              Windows launcher (checks deps, then starts the GUI)
 ├── run_hprs_checked.sh       Launcher that runs preflight checks first
 ├── .gitignore                Ignored caches, datasets, exports, OS files
+├── .github/workflows/        CI: pytest on 3.11 and 3.13, ruff, fixture staleness
 ├── hipparchus/               Compatibility shim package (run from source)
 ├── src/hipparchus/           Application source package
 ├── tests/                    Unit tests
@@ -55,6 +57,7 @@ src/hipparchus/
 │   ├── controller.py         Central controller wiring requests to services
 │   ├── coordinate_import.py  Clipboard text to an area, refusing prose
 │   ├── country_boxes.py      Every country's box and continent, generated from Natural Earth
+│   ├── derived_styles.py     Styles for the layers no preset ever named, read off what it did choose
 │   ├── fetch_cost.py         What a fetch will cost, before it is made
 │   ├── geocoding.py          Place names to frames, clamped to map-sized
 │   ├── layer_inventory.py    What a rendered map contains, for the layer panel
@@ -176,7 +179,7 @@ src/hipparchus/
 
 ## Tests (`tests/`)
 
-87 pytest modules. The map half covers projection, smoothing,
+95 pytest modules. The map half covers projection, smoothing,
 simplification, scene building, rendering state, export and quality profiles,
 SVG, PDF and PNG export, caching, presets, the optional local-source providers
 and their bbox pre-filter, the Overpass provider, query and GeoJSON paths, and

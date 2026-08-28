@@ -5,6 +5,27 @@ from __future__ import annotations
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 
+from hipparchus.application.derived_styles import (
+    derived_admin_boundaries as derived_admin_boundaries,
+)
+from hipparchus.application.derived_styles import (
+    derived_contour_style as derived_contour_style,
+)
+from hipparchus.application.derived_styles import (
+    derived_hillshade as derived_hillshade,
+)
+from hipparchus.application.derived_styles import (
+    derived_ocean_style as derived_ocean_style,
+)
+from hipparchus.application.derived_styles import (
+    sheets_own_ink as _sheets_own_ink,
+)
+from hipparchus.application.derived_styles import (
+    sheets_own_water as _sheets_own_water,
+)
+from hipparchus.application.derived_styles import (
+    unstyled_fallback as unstyled_fallback,
+)
 from hipparchus.application.palettes import mix
 
 # Re-exported for the public preset API; consumers import QualityMode from here.
@@ -78,27 +99,6 @@ def preset_names() -> tuple[str, ...]:
 def _derived_luma(colour: RGBAColor) -> float:
     """Rec. 601 luma, the cheap standard answer to "is this light or dark"."""
     return (299 * colour.r + 587 * colour.g + 114 * colour.b) / 1000.0
-
-
-def _sheets_own_water(profile: StyleProfile) -> RGBAColor:
-    """The sea's own colour, however the preset stated it: a filled water layer
-    carries it as a fill, an outlined one as a stroke."""
-    water = profile.layer_styles.get("water")
-    if water is None:
-        return RGBAColor(150, 180, 200)
-    return water.fill_color if water.fill_enabled else water.stroke_color
-
-
-def _sheets_own_ink(profile: StyleProfile) -> RGBAColor:
-    """The darkest line the preset draws on the sea: the sub-sea contours if it
-    has them, the coastline if not."""
-    bathymetry = profile.layer_styles.get("bathymetry")
-    if bathymetry is not None:
-        return bathymetry.stroke_color
-    coastline = profile.layer_styles.get("coastline")
-    if coastline is not None:
-        return coastline.stroke_color
-    return RGBAColor(40, 60, 80)
 
 
 def derived_depth_bands(profile: StyleProfile) -> LayerStyle:
@@ -217,10 +217,20 @@ def resolve_style(profile: StyleProfile, layer_name: str) -> LayerStyle:
         return style
     if layer_name == "depth_bands":
         return derived_depth_bands(profile)
+    if layer_name == "terrain_hillshade":
+        return derived_hillshade(profile)
+    if layer_name == "admin_boundaries":
+        return derived_admin_boundaries(profile)
+    derived = derived_contour_style(profile, layer_name)
+    if derived is not None:
+        return derived
     derived = derived_seamark_style(profile, layer_name)
     if derived is not None:
         return derived
-    return LayerStyle()
+    derived = derived_ocean_style(profile, layer_name)
+    if derived is not None:
+        return derived
+    return unstyled_fallback()
 
 
 def resolve_preset_name(requested: str, available: Iterable[str], fallback: str) -> str:
@@ -540,7 +550,28 @@ def _base_styles() -> dict[str, LayerStyle]:
 
 
 def _osm_standard_styles() -> dict[str, LayerStyle]:
-    """Colors and widths matching OpenStreetMap's standard Mapnik/Carto style."""
+    """OpenStreetMap's standard Mapnik/Carto style, over the shared base.
+
+    **The base is underneath rather than replaced.** This table and
+    `_editorial_print_styles`, which builds on it, were the only two presets
+    written as a dict from scratch, so they never gained the layers
+    `_base_styles` has grown since -- the relief, the sea floor, the seismicity,
+    the orbital geometry, and the summit and street labels. Fifteen layers apiece
+    fell through to `resolve_style`'s last resort and drew as a grey hairline,
+    including `elevation_bands`, which is a *fill* and drew as nothing at all.
+
+    Nothing OSM Standard states changes: every key in
+    `_osm_standard_overrides` wins over the base, and
+    `OSMStandardKeepsItsOwnStyleTests` asserts exactly that. The only layers
+    affected are the ones that had no style to lose.
+    """
+    styles = _base_styles()
+    styles.update(_osm_standard_overrides())
+    return styles
+
+
+def _osm_standard_overrides() -> dict[str, LayerStyle]:
+    """What OSM Standard states for itself, on top of `_base_styles`."""
     return {
         # Roads with casings — OSM renders roads as casing (outline) + fill (inner)
         # Motorway: blue casing, blue fill
@@ -732,6 +763,16 @@ def _clean_atlas_styles() -> dict[str, LayerStyle]:
     styles["roads_residential"] = LayerStyle(stroke_width=1.8, fill_enabled=False, stroke_color=RGBAColor(248, 247, 242), casing_width=3.0, casing_color=RGBAColor(197, 193, 183), line_cap="round")
     styles["buildings"] = LayerStyle(stroke_width=0.45, fill_enabled=True, fill_color=RGBAColor(204, 199, 190), stroke_color=RGBAColor(171, 164, 152), opacity=0.98)
     styles["water"] = LayerStyle(stroke_width=0.25, fill_enabled=True, fill_color=RGBAColor(166, 207, 222), stroke_color=RGBAColor(120, 172, 191), opacity=1.0)
+    # Contours in the same brown Terrain Study uses, because the two presets
+    # tint the identical elevation bands and ink over a fill has to answer to
+    # the fill. Named rather than inherited: this preset's `_base_styles()` say
+    # nothing about contours, and on terrain ground they are its most numerous
+    # layer by an order of magnitude -- 800-odd lines drawn in `resolve_style`'s
+    # near-black last resort, which greyed the tint out from on top and made the
+    # same preset look like a different sheet in the Swift port, where the
+    # fallback is a grey hairline instead.
+    styles["terrain_contours"] = LayerStyle(stroke_width=0.7, fill_enabled=False, stroke_color=RGBAColor(120, 105, 81), opacity=0.55)
+    styles["terrain_index_contours"] = LayerStyle(stroke_width=1.15, fill_enabled=False, stroke_color=RGBAColor(96, 82, 60), opacity=0.8)
     return styles
 
 
