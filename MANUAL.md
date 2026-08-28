@@ -1,6 +1,6 @@
 # Hipparchus Manual
 
-**Version 0.8.0**
+**Version 0.9.0**
 
 This manual explains how to use Hipparchus as an online map creation app. It covers installation, launching, fetching map data, working with layers and presets, exporting SVG files, and solving common problems. It applies to macOS, Linux, and Windows.
 
@@ -32,6 +32,7 @@ Every command block that differs by platform shows both a macOS / Linux version 
 22. [File Reference](#22-file-reference)
 23. [Good Practices](#23-good-practices)
 24. [Limitations](#24-limitations)
+25. [Licence And Credits](#25-licence-and-credits)
 
 ## 1. Overview
 
@@ -795,6 +796,38 @@ deleted; the sixteen built-in ones cannot.
 
 Custom presets are saved to your user app data folder (`~/.hipparchus/presets.json`) so they persist between sessions. Override the location with `HIPPARCHUS_PRESETS_FILE`.
 
+### A layer no preset has named
+
+The sixteen style tables above are older than several of the layers the app can
+now draw. None of them says anything about the sea floor, the sea marks, the
+isotherms, the surface currents, the borders or the ferry routes; none names the
+hillshade; and eleven of the sixteen say nothing about contours.
+
+You do not have to do anything about this, and that is the point. **A layer a
+preset has not named is derived from what that preset already chose**, rather
+than drawn in a shared default:
+
+| layer | drawn from |
+|---|---|
+| depth bands, sea temperature bands | the sheet's own water and its darkest line on the sea |
+| isotherms, surface currents, ferry routes | the same, at line weights |
+| sea marks | the same, as S-57 chart symbols |
+| admin boundaries | the sheet's land, darkened toward its ink |
+| contours, index contours | the high end of its elevation ramp |
+| hillshade | the ground as actually drawn |
+
+Each derivation asks which way to push. `Night` pairs near-black paper with a
+pale hypsometric sheet, so its contours come out *darker*, not lighter — the
+ground under a contour is the band it sits on, not the paper behind it. A single
+chosen colour could not have served both `Night` and `Terrain Study`.
+
+A preset that *does* name a layer keeps what it names: `Clean Atlas` states its
+contour ink and is used as written. The derivation is the floor, not the ceiling.
+
+Before 0.9.0 these layers fell through to a bare default — a near-black line at
+1.0 wide, and filled — which drew 825 contours over a Cyprus sheet in a colour
+nobody had chosen and washed grey over any unrecognised polygon layer.
+
 ### Palettes: colour, separate from the style
 
 A preset is a whole sheet — geometry, weights and colour together — so "the same
@@ -1496,3 +1529,32 @@ Current limitations:
   clip to be practical (see section 7).
 - Non-Latin label rendering depends on the operating system providing a font
   that covers the script (see section 12).
+
+## 25. Licence And Credits
+
+Hipparchus is released under the **MIT License**, copyright (c) 2026 Charis
+Tsevis. See [LICENSE](LICENSE).
+
+That covers this repository's code. Three other things arrive with the
+application and carry their own terms, all set out in
+[THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md):
+
+- **The Python packages.** NumPy, SciPy, Shapely and skia-python are BSD
+  3-Clause. GEOS, which every polygon operation ultimately runs on, is LGPL-2.1
+  and arrives bundled inside Shapely's wheels.
+- **The bundled font.** Noto Sans, under the SIL Open Font License 1.1, shipped
+  unmodified with its `OFL.txt`.
+- **The map data.** OpenStreetMap is ODbL and **share-alike** — if you publish a
+  map made from it you must credit OpenStreetMap contributors, and a derived
+  *database* must itself be ODbL. A rendered picture only owes the credit; the
+  GeoJSON export is closer to a database, so treat it accordingly. EMODnet asks
+  for a line explicitly. NOAA, NASA and USGS material is public domain. Natural
+  Earth waives attribution and deserves it anyway.
+
+Every exported sheet carries the sources that **actually drew it**, derived from
+a registry rather than typed — so a map of Everest does not credit EMODnet, and a
+source nobody has registered is dropped rather than guessed at. An invented
+credit is worse than a missing one, because it is wrong on purpose.
+
+Sheets carrying depths, sea marks or currents also state that they are **not for
+navigation**: not a charted survey, and not corrected by Notices to Mariners.

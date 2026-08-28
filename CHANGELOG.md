@@ -2,6 +2,98 @@
 
 Notable changes to Hipparchus. Earlier history is in the git log.
 
+## 0.9.0
+
+0.6.0 gave the sea marks and the depth bands a style on every preset rather than
+only under a palette. This finishes that job for every other layer the sixteen
+style tables never named, and fixes the three bugs found by looking.
+
+### No layer falls back any more
+
+The style tables are older than half the layers the app can draw. None named the
+isotherms, the surface currents, the ferry routes or the borders; none named the
+hillshade; and eleven of the sixteen said nothing about contours. Every one of
+those landed on `resolve_style`'s last resort, which was a bare `LayerStyle()` —
+the dataclass default, not a decision: a near-black line at 1.0 wide, and
+*filled*, so an unrecognised polygon layer washed flat grey over whatever it
+covered.
+
+Each is now derived from what the preset already chose, in the new
+`application/derived_styles.py`. The sea's layers read the sheet's own water and
+its darkest line on the sea; a border reads its land; the contours read the high
+end of its elevation ramp, which is what makes them look like they belong to the
+relief. Each derivation asks which way to push: `Night` pairs near-black paper
+with a pale hypsometric sheet, so its contours go *darker*, because the ground
+under a contour is the band it sits on and not the paper behind it.
+
+An explicit entry always wins. A test asserts that no layer the layer inventory
+knows about can reach the fallback under any preset, so a new source fails the
+suite the day it is added rather than the day someone renders a sheet.
+
+`OSM Standard` and `Editorial Print` were the only presets written as a dict from
+scratch and had never gained what `_base_styles` grew since — fifteen layers
+apiece, `elevation_bands` among them. The shared base now sits underneath both;
+everything they state for themselves still wins.
+
+### The same preset draws the same map as the macOS app
+
+The two applications had each chosen a *different* fallback — a translucent grey
+hairline there, the near-black line here — so `Clean Atlas` over Cyprus came out
+warm on one and grey and busy on the other, from byte-identical band colours.
+The contour ink, the border, the band and depth geometry counts and the layer
+order now agree. `Clean Atlas` and `Soft Urban` also gain an explicit contour
+pair, in the brown `Terrain Study` uses over the identical elevation bands.
+
+### Thirteen layers were drawn last, over everything
+
+`_ordered_layers` ranked neither the depth bands, the six sea marks, the
+isotherms, the surface currents, the borders, the ferry routes nor the night
+lights — and a layer it does not rank sorts after every layer it does. Three of
+them are fills, and `sst_bands` sorted last of all, so a sea temperature sheet
+painted the whole map out at its final step. The order now covers every layer the
+inventory knows, asserted by a test in both applications; the deliberate
+difference from the port — sea drawn *over* relief, which is what keeps the
+Waitematā visible — is kept and documented.
+
+### The sea marks and the currents draw what the macOS app draws
+
+Sea marks, the restricted areas and the surface currents were written in the
+macOS application and ported here, and every one of them arrived slightly wrong.
+This file used one shared `mark_ink` where the origin chooses a colour per mark;
+it drew the beacons, buoys and hazards as **filled discs** where the origin draws
+outlines with haloes, which closes a light's flare into a blob and thickens a
+wreck's masts into a smudge; and it set a streamline base of 1.1 against the
+origin's 0.75 — which, since both applications multiply that base by the
+identical 0.45–2.2 `stroke_scale`, simply drew every current half again as heavy.
+
+Seven layers now carry the origin's values: `seamark_beacons`, `seamark_buoys`,
+`seamark_hazards`, `seamark_lights`, `seamark_harbours`, `seamark_areas` and
+`current_streamlines`. **Every palette changes**, so any sheet carrying marks or
+currents will look different — closer to the chart it was drawn from.
+
+**Neither repository could see the drift.** Both parity fixtures are generated
+from the implementation they check: this one from `palette_sheet` itself, the
+macOS one from the pack builder sitting beside its engine. Two faithful
+snapshots, neither looking at the other. The seven layers are now pinned as
+literals in both suites, each naming the other, so changing one side alone fails
+on both.
+
+One rounding trap fell out of pinning them. Python's `round()` is half-to-even;
+Swift's default `.rounded()` is half-away-from-zero, and the macOS
+`RGBAColor.mixed` — which every derived style over there is built from — was
+using it. A channel landing exactly on 40.5 came out a unit apart. It now rounds
+to even, as that repository's palette mix already did.
+
+### Layer opacity means the layer again
+
+Opacity was folded into every feature's alpha, so parts of one layer composited
+against each other rather than as one layer; and the bbox clip split every
+multipolygon into its parts, turning ten elevation bands into 248 loose polygons.
+Together those made Cyprus pale and grey. A clip now keeps one geometry as one
+geometry, discarding only the lower-dimensional slivers where a shape grazes the
+frame, and a layer is composited once as a group — the way `<g opacity>` already
+worked in the SVG and PDF exports.
+
 ## 0.8.0
 
 The world sheets 0.7.0 made possible had nowhere to point: the saved places

@@ -1,6 +1,6 @@
 # Hipparchus
 
-**Version 0.8.0**
+**Version 0.9.0**
 
 **Hipparchus is an online desktop vector cartography app for creating clean, editable maps from OpenStreetMap data and exporting them as Illustrator-friendly SVG files.**
 
@@ -15,6 +15,45 @@
   </tr>
 </table>
 
+## What's new in 0.9.0
+
+**This is the release where a preset stops leaving layers to chance.** The
+sixteen style tables are older than half the layers the app can draw, so the sea
+floor, the sea marks, the isotherms, the surface currents, the borders, the ferry
+routes, the relief shading and — on eleven of the sixteen presets — the contours
+all fell through to `resolve_style`'s last resort. That last resort was a bare
+`LayerStyle()`: the dataclass default, not a decision. It drew the most numerous
+layer on a terrain sheet, 825 contours over Cyprus, in a near-black nobody chose,
+greying the hypsometric tint down from on top — and being filled by default, it
+washed flat grey over any unrecognised polygon layer.
+
+Every one of those layers is now **derived from what the preset already chose**:
+the sea's from its water and its darkest line on the sea, a border from its land,
+the contours from the high end of its elevation ramp. `Night` pairs near-black
+paper with a pale sheet, so its contours correctly go *darker* — a single chosen
+colour could not have served both it and `Terrain Study`. A test now asserts that
+nothing the layer inventory knows about can reach the fallback under any preset.
+
+Three bugs fell out of having looked: thirteen layers were missing from the draw
+order and so were painted **last, over everything** — `sst_bands` sorted last of
+all, so a sea temperature sheet erased the map at its final step; layer opacity
+was folded into every feature's alpha instead of compositing the layer once; and
+the bbox clip split every multipolygon into its parts, turning ten elevation
+bands into 248. Together the last two are why Cyprus came out pale and grey here
+while the macOS app drew it warm from byte-identical colours. **The two
+applications now agree**, checked on real ground.
+
+The sea marks and the surface currents also **now draw what the macOS app
+draws**. They were written there and ported here, and had arrived subtly wrong:
+one shared ink where the origin picks a colour per mark, filled discs where it
+draws outlines with haloes, and streamlines half again too heavy. Every palette
+changes as a result. Neither repository's parity fixture could see it, because
+each is generated from the implementation it checks — so the seven layers are now
+pinned as literals in both suites, each naming the other.
+
+Full detail in [CHANGELOG.md](CHANGELOG.md) and
+[A layer no preset has named](#a-layer-no-preset-has-named).
+
 ## Introduction
 
 Hipparchus is named after the ancient Greek astronomer, geographer, and cartographer Hipparchus of Nicaea. The app follows that spirit: it is built for people who want to explore geography visually, compose map layers, and produce clean vector artwork rather than browse raster map tiles.
@@ -24,6 +63,32 @@ The application fetches live OpenStreetMap data through the Overpass API, render
 Hipparchus is a standalone map creation tool focused on live online data, clean rendering, and editable vector export.
 
 ## Features
+
+New in 0.9.0 — 0.6.0 gave the sea marks and depth bands a style on every preset;
+this finishes that job for every other layer the tables never named:
+
+- **No layer falls back any more.** The isotherms, the surface currents, the
+  ferry routes, the borders, the relief shading and — on eleven of the sixteen
+  presets — the contours were all landing on `resolve_style`'s last resort,
+  which was the bare dataclass default: a near-black line at 1.0 wide, and
+  filled. Each is now derived from what the preset already chose, and a test
+  asserts that nothing the layer inventory knows about can reach the fallback
+  under any preset. See [A layer no preset has named](#a-layer-no-preset-has-named).
+- **The same preset now draws the same map here and on macOS.** The two
+  applications had picked different fallbacks — a grey hairline there, the
+  near-black line here — so `Clean Atlas` over Cyprus came out warm on one and
+  grey on the other from byte-identical band colours. The contour ink, the
+  border, the band and depth geometry counts and the layer order now agree.
+- **Thirteen layers were drawn last, over everything.** `_ordered_layers` ranked
+  neither the depth bands, the sea marks, the isotherms, the borders, the ferry
+  routes nor the night lights, and an unranked layer sorts after every ranked
+  one. Three of them are fills, and `sst_bands` sorted last of all: a sea
+  temperature sheet painted the whole map out at the final step.
+- **Layer opacity means the layer again.** It was folded into every feature's
+  alpha, so parts of one layer blended against each other; and the clip split
+  every multipolygon into its parts, turning ten elevation bands into 248. Both
+  are fixed, and a layer is now composited once as a group, the way SVG and PDF
+  already did it.
 
 New in 0.8.0:
 
@@ -941,6 +1006,42 @@ Override the preset file location:
 HIPPARCHUS_PRESETS_FILE=/path/to/presets.json ./run_hprs.sh
 ```
 
+### A layer no preset has named
+
+The sixteen style tables are older than half the layers the app can draw. None
+of them says anything about the sea floor, the sea marks, the isotherms, the
+borders or the ferry routes, and eleven said nothing about contours — so each of
+those landed on `resolve_style`'s last resort, which was a bare `LayerStyle()`:
+the dataclass default, a near-black line at 1.0 wide, and *filled*.
+
+That is a non-decision rather than a neutral one. It drew the most numerous
+layer on a terrain sheet — 825 contours over Cyprus — in a colour nobody chose,
+and greyed the hypsometric tint down from on top. Filled by default, it also
+washed flat grey over any unrecognised polygon layer. The macOS port had long
+since chosen a deliberate translucent hairline instead, so the same preset drew a
+visibly different map in each application and the palettes were not the reason.
+
+A layer a preset has not named is now **derived from what that preset already
+chose**, in `application/derived_styles.py`:
+
+| layer | derived from |
+| --- | --- |
+| `depth_bands`, `sst_bands` | the sheet's water and its darkest line on the sea |
+| `sst_contours`, `current_streamlines`, `ferry_routes` | the same, at line weights |
+| `admin_boundaries` | the sheet's land, darkened toward its ink |
+| `terrain_contours`, `terrain_index_contours` | the high end of its elevation ramp |
+| `terrain_hillshade` | the ground as actually drawn, ported from the macOS app |
+
+Each derivation asks which way to push. `Night` pairs near-black paper with a
+pale hypsometric sheet, so its contours go *darker*, not lighter — the ground
+under a contour is the band it sits on, not the paper behind it. A single chosen
+colour could not serve both that and `Terrain Study`.
+
+An explicit entry always wins, so a preset whose ink was chosen by eye keeps it.
+A test asserts that no layer the layer inventory knows about can reach the
+fallback under any preset, so a new source fails the suite on the day it is added
+rather than on the day someone renders a sheet and looks at it.
+
 ## Palettes
 
 A preset is a whole sheet: geometry, weights and colour together. That makes
@@ -1126,4 +1227,25 @@ Before publishing changes:
 
 ## License
 
-Hipparchus is released under the MIT License. Copyright (c) 2026 Charis Tsevis. See [LICENSE](LICENSE) for the full text.
+Hipparchus is released under the **MIT License**. Copyright (c) 2026 Charis
+Tsevis. See [LICENSE](LICENSE) for the full text.
+
+That covers the code in this repository and nothing else. Three other things
+arrive with it and carry terms of their own:
+
+- **The Python packages.** NumPy, SciPy, Shapely and skia-python are all BSD
+  3-Clause. **GEOS is LGPL-2.1** and is what every polygon operation here
+  ultimately runs on — but it arrives *bundled inside Shapely's wheels* and is
+  loaded dynamically, so the obligation is discharged by Shapely's distribution
+  rather than by this repository. (The macOS application links GEOS statically
+  and therefore carries that obligation itself. The answer is not the same in
+  both repos.)
+- **The bundled font.** Noto Sans, under the SIL Open Font License 1.1, shipped
+  with its `OFL.txt` as the licence requires.
+- **The map data.** Not ours to license. OpenStreetMap is ODbL and share-alike;
+  EMODnet asks for a credit line explicitly; the NOAA, NASA and USGS material is
+  public domain; Natural Earth waives attribution and deserves it anyway. Each
+  exported sheet carries the sources that actually drew it, derived from a
+  registry a test holds to completeness rather than typed by hand.
+
+All of it is set out in [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
