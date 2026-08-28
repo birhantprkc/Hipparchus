@@ -210,6 +210,31 @@ class TerrariumDecodeTests(unittest.TestCase):
         self.assertAlmostEqual(decoded[0, 0], 0.0, places=2)
         self.assertAlmostEqual(decoded[0, 1], -430.0, places=2)
 
+    def test_the_channels_are_read_in_the_order_they_were_written(self) -> None:
+        """Red is red on every platform, not whatever the native layout says.
+
+        `Image.toarray()` defaults to `kUnknown_ColorType`, which lets skia
+        answer in the image's own layout -- and `kN32` is BGRA on some platforms
+        and RGBA on others. The decoder reads channel 0 as the high byte of the
+        elevation, so a BGRA answer decodes a real tile into a plausible-looking
+        model of nowhere. Under Linux CI this failed on 100% of elements while
+        passing on macOS.
+
+        An elevation whose red and blue bytes differ sharply is the whole test:
+        swap them and the value moves by kilometres rather than by rounding.
+        """
+        # 4096 m puts 16 in the red byte and 0 in blue; the pair is not
+        # symmetric, so a swap cannot go unnoticed.
+        elevations = np.array([[4096.0]])
+        decoded = _decode_terrarium(_terrarium_png(elevations))
+        self.assertAlmostEqual(decoded[0, 0], 4096.0, places=2)
+
+        # And the other direction: a value living mostly in the low byte.
+        low = np.array([[-32768.0 + 255.0 / 256.0]])
+        self.assertAlmostEqual(
+            _decode_terrarium(_terrarium_png(low))[0, 0], -32768.0 + 255.0 / 256.0, places=2
+        )
+
     def test_a_non_image_response_is_reported(self) -> None:
         with self.assertRaises(TerrainTileError):
             _decode_terrarium(b"<Error><Code>NoSuchKey</Code></Error>")

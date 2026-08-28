@@ -228,7 +228,15 @@ def _luminance_grid(png_bytes: bytes) -> np.ndarray:
     image = skia.Image.MakeFromEncoded(skia.Data.MakeWithCopy(png_bytes))
     if image is None:
         raise SatelliteImageryError("GIBS returned a response that is not a decodable image")
-    pixels = np.asarray(image.toarray(), dtype=float)
+    # Stated rather than inherited, as in `terrain_tiles._decode_terrarium`:
+    # `toarray()` defaults to `kUnknown_ColorType` and skia may then answer in
+    # the platform's native layout, which is BGRA on some. The luma weights
+    # below are Rec. 601 and are not symmetric -- red carries 0.299 and blue
+    # 0.114 -- so a swapped pair does not fail, it just makes the wrong picture
+    # dark in the wrong places.
+    pixels = np.asarray(
+        image.toarray(colorType=skia.kRGBA_8888_ColorType), dtype=float
+    )
     if pixels.ndim != 3 or pixels.shape[2] < 3:
         raise SatelliteImageryError(f"Unexpected image shape from GIBS: {pixels.shape}")
 

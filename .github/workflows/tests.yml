@@ -20,30 +20,31 @@ concurrency:
 
 jobs:
   tests:
-    name: pytest
-    # **macOS, not Linux, and that is a narrowing worth stating.**
-    #
-    # This is a desktop application developed and used on macOS, and its twin is
-    # a macOS app. Run on ubuntu, ten tests fail for reasons that are the
-    # runner's rather than the code's: the font-fallback tests ask the operating
-    # system for a face covering Japanese and Korean and a bare image has none,
-    # and the terrarium PNG round-trip comes back wrong in every element on that
-    # graphics stack. The same tests pass here and on any developer's Mac.
-    #
-    # Testing the platform the software is actually run on is worth more than a
-    # green tick on one it is not. Linux is a supported target in the README, so
-    # the ten failures are a real gap and not a non-issue — they want a runner
-    # with fonts installed and the skia behaviour understood, which is its own
-    # piece of work rather than a condition of every push.
-    runs-on: macos-latest
+    name: pytest (${{ matrix.os }}, ${{ matrix.python-version }})
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 25
 
     strategy:
       fail-fast: false
       matrix:
-        # The floor stated in pyproject.toml, and the current release. A version
-        # range nobody exercises is a claim rather than a fact.
-        python-version: ["3.11", "3.13"]
+        # **Both platforms, on purpose.** The README says Linux is supported, and
+        # a supported platform nobody runs the suite on is a hope rather than a
+        # claim. Running it there is what found the colour-type bug: skia hands
+        # back the image's native layout unless told otherwise, and that is BGRA
+        # on Linux, so every terrain tile decoded into a plausible model of
+        # nowhere. It passed on macOS for years.
+        #
+        # macOS is where the application is developed and where its twin is a
+        # native app, so it carries the version range; Linux runs the current
+        # release, which is enough to keep the platform honest without paying for
+        # four jobs.
+        include:
+          - os: ubuntu-latest
+            python-version: "3.13"
+          - os: macos-latest
+            python-version: "3.11"   # the floor pyproject.toml states
+          - os: macos-latest
+            python-version: "3.13"
 
     steps:
       - uses: actions/checkout@v4
@@ -53,11 +54,22 @@ jobs:
           python-version: ${{ matrix.python-version }}
           cache: pip
 
-      # Tkinter is imported at module scope in the UI package, so it has to be
-      # importable even though no test here opens a window. It ships with the
-      # Python that `setup-python` installs on macOS, so there is nothing to do.
-      # On Debian it is a separate package, and skia-python additionally needs
-      # libEGL and libGL there — see the note on the runner above.
+      # Three things Debian needs and macOS ships.
+      #
+      # Tkinter is imported at module scope in the UI package, so it has to load
+      # even though nothing here opens a window. skia-python links libEGL and
+      # libGL, and without them the import fails as `libEGL.so.1: cannot open
+      # shared object file` — which surfaces three retries later as a GIBS error
+      # rather than as anything about graphics drivers. And the label
+      # font-fallback tests ask the operating system for a face covering
+      # Japanese and Korean: the bundled Noto Sans carries Latin, Greek and
+      # Cyrillic only, and the fallback reaching the OS for everything else is
+      # the behaviour under test, so the OS has to have something to find.
+      - name: System libraries and fonts
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3-tk libegl1 libgl1 fonts-noto-cjk
 
       - name: Dependencies
         run: |
