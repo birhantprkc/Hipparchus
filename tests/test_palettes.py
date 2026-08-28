@@ -216,16 +216,22 @@ class RecolouringTests(unittest.TestCase):
 
 
 class ParityTests(unittest.TestCase):
-    """The derivation, against the script the macOS engine was ported from.
+    """Every palette's derivation, pinned so a change has to be *stated*.
 
-    Three implementations of one derivation — this, the Swift, and the build
-    script that froze the style packs into JSON — is two too many to let
-    disagree. The fixture is generated from the script, so a mix edited here
-    fails against the packs that are already shipped rather than quietly
-    producing a sheet that is nearly the same.
+    **This is a snapshot of this module, not a check against the other one.**
+    The fixture is generated from `palette_sheet.style_profile` itself, so it
+    catches a mix edited by accident — a tweak that shifts every sheet a little
+    otherwise looks exactly like no change at all — and it caught the
+    hillshade's line cap once, moot at zero stroke width and wrong anyway.
 
-    It caught exactly that once: the hillshade's line cap, moot at zero stroke
-    width and different anyway.
+    What it cannot catch is this module drifting from the Swift, because it
+    never reads the Swift. It did not: six sea marks and the currents went their
+    own way and stayed that way, because the macOS repository's own
+    `palette-parity.json` is equally self-referential — it compares the Swift
+    engine against the pack builder sitting beside it. Two snapshots, each
+    faithful, neither looking at the other.
+
+    `MarineParityWithTheMacOSAppTests` below is the part that looks across.
     """
 
     FIXTURE = Path(__file__).with_name("fixtures") / "palette_sheet_parity.json"
@@ -265,6 +271,92 @@ class ParityTests(unittest.TestCase):
                         self.assertEqual(
                             _channels(got.fill_color_high), _rgba(spec["fill_color_high"])
                         )
+
+
+class MarineParityWithTheMacOSAppTests(unittest.TestCase):
+    """The seven layers that drifted, pinned as literals against the twin.
+
+    Sea marks, the restricted areas and the surface currents were written in the
+    macOS application and ported here, and every one of them arrived slightly
+    wrong: one shared `mark_ink` here where the origin chose a colour per mark,
+    filled discs here where it drew outlines with halos, and a streamline base
+    of 1.1 against its 0.75 — which, since both applications multiply it by the
+    identical 0.45–2.2 `stroke_scale`, simply drew every current half again as
+    heavy.
+
+    Neither repository's parity fixture could see it: each is generated from the
+    implementation it checks. So these are literals. They are stated the same way
+    in the Swift `PaletteTests.testTheMarineLayerMatchesThePythonApplication`,
+    and changing one without the other fails on both sides.
+
+    Expressed as mixes of a palette's own four colours rather than as hex, so the
+    assertion says *what the rule is* and holds for all seventeen palettes rather
+    than for one sheet's arithmetic.
+    """
+
+    def marine(self, palette):
+        return style_profile(palette).layer_styles
+
+    def test_the_marks_take_a_colour_each_rather_than_one_shared_ink(self) -> None:
+        for palette in PALETTES:
+            styles = self.marine(palette)
+            ground, ink = palette.ground, palette.ink
+            water, land = palette.water, palette.land
+            with self.subTest(palette=palette.name):
+                self.assertEqual(styles["seamark_beacons"].stroke_color, mix(land, ink, 0.6))
+                self.assertEqual(styles["seamark_buoys"].stroke_color, mix(water, ink, 0.65))
+                self.assertEqual(styles["seamark_hazards"].stroke_color, ink)
+                self.assertEqual(styles["seamark_lights"].stroke_color, ink)
+                self.assertEqual(styles["seamark_harbours"].stroke_color, mix(land, ink, 0.45))
+                self.assertEqual(styles["seamark_areas"].stroke_color, mix(water, ink, 0.55))
+                del ground
+
+    def test_the_weights_are_the_origins(self) -> None:
+        expected = {
+            "seamark_beacons": 1.0,
+            "seamark_buoys": 0.9,
+            "seamark_hazards": 1.05,
+            "seamark_lights": 0.9,
+            "seamark_harbours": 0.8,
+            "seamark_areas": 0.7,
+            "current_streamlines": 0.75,
+        }
+        styles = self.marine(PALETTES[0])
+        for layer, width in expected.items():
+            with self.subTest(layer=layer):
+                self.assertAlmostEqual(styles[layer].stroke_width, width)
+
+    def test_the_point_marks_are_outlines_with_haloes_not_filled_discs(self) -> None:
+        """A can, a cardinal's cones and a wreck's masts carry their meaning in
+        the shape. Filling them closes the light's flare into a blob."""
+        for palette in PALETTES:
+            styles = self.marine(palette)
+            with self.subTest(palette=palette.name):
+                for layer in ("seamark_beacons", "seamark_buoys", "seamark_hazards"):
+                    halo = styles[layer].label_halo_color
+                    self.assertFalse(styles[layer].fill_enabled, f"{layer} is filled")
+                    # The sheet's own paper, laid down at the same 225 the twin
+                    # uses: a halo has to lift a symbol off the ground without
+                    # punching an opaque hole in it.
+                    self.assertEqual(_channels(halo)[:3], _channels(palette.ground)[:3])
+                    self.assertEqual(halo.a, 225)
+
+    def test_the_light_is_the_one_filled_mark(self) -> None:
+        """Its weight comes from its area rather than from its edge."""
+        for palette in PALETTES:
+            light = self.marine(palette)["seamark_lights"]
+            with self.subTest(palette=palette.name):
+                self.assertTrue(light.fill_enabled)
+                self.assertEqual(light.fill_color.a, 210)
+
+    def test_the_streamline_base_is_the_one_the_scale_multiplies(self) -> None:
+        """0.45x to 2.2x of it, in both applications, so the base has to agree."""
+        for palette in PALETTES:
+            style = self.marine(palette)["current_streamlines"]
+            with self.subTest(palette=palette.name):
+                self.assertAlmostEqual(style.stroke_width, 0.75)
+                self.assertEqual(style.stroke_color, mix(palette.water, palette.ink, 0.7))
+                self.assertEqual(style.line_cap, "round")
 
 
 if __name__ == "__main__":

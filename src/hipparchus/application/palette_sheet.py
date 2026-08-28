@@ -158,19 +158,39 @@ def style_profile(palette: Palette) -> StyleProfile:
     # the moment they became shapes those numbers closed the light flare into a
     # blob and thickened every mast into a smudge. Symbols are outlines, and
     # outlines want an outline's weight.
-    mark_ink = mix(water, ink, 0.62)
-    styles["seamark_lights"] = _style(
-        stroke=1.0, stroke_color=mark_ink, fill=mix(water, ground, 0.55), opacity=0.95
+    # **These are the macOS application's values, and this file used to disagree
+    # with it on every one of them.** Sea marks were written there first and
+    # ported here, so where the two differ the port is drift rather than a second
+    # opinion — and nothing checked it, because `palette-parity.json` compares
+    # the Swift engine against the pack builder in that same repository, not
+    # against this file. Six marks and the currents had quietly gone their own
+    # way: one shared `mark_ink` here against a colour chosen per mark there,
+    # filled discs here against outlines with halos there.
+    #
+    # The per-mark reasoning is the origin's and is kept with it: a beacon is
+    # fixed to the ground and drawn like it, a buoy is afloat and lighter on the
+    # page for it, a wreck exists to say "not here" and takes the ink undiluted,
+    # and a light is what a reader looks for first, so its flare is filled and
+    # its weight comes from its area rather than its edge.
+    #
+    # `HaloedMarkTests` pins these, and the Swift `PaletteTests` pins the same
+    # numbers from the other side.
+    styles["seamark_beacons"] = _style(
+        stroke=1.0, stroke_color=mix(land, ink, 0.6), halo=ground
     )
     styles["seamark_buoys"] = _style(
-        stroke=1.0, stroke_color=mark_ink, fill=mix(water, ground, 0.35), opacity=0.95
+        stroke=0.9, stroke_color=mix(water, ink, 0.65), halo=ground
     )
-    styles["seamark_beacons"] = _style(
-        stroke=1.0, stroke_color=mark_ink, fill=mix(water, ground, 0.45), opacity=0.95
+    styles["seamark_hazards"] = _style(
+        stroke=1.05, stroke_color=ink, opacity=0.95, halo=ground
     )
-    styles["seamark_hazards"] = _style(stroke=1.1, stroke_color=mix(water, ink, 0.78))
+    styles["seamark_lights"] = _style(
+        stroke=0.9, stroke_color=ink,
+        fill=mix(ground, ink, 0.15), fill_alpha=210, halo=ground,
+    )
     styles["seamark_harbours"] = _style(
-        stroke=0.7, stroke_color=mix(water, ink, 0.4), opacity=0.75
+        stroke=0.8, stroke_color=mix(land, ink, 0.45),
+        fill=mix(ground, land, 0.35), fill_alpha=70, opacity=0.85,
     )
     # Rules drawn as ground, so they sit under everything and read as an area
     # rather than as another object competing with the marks.
@@ -182,8 +202,8 @@ def style_profile(palette: Palette) -> StyleProfile:
     # matters, so the stroke carries most of the increase and the fill only
     # enough to tell inside from out.
     styles["seamark_areas"] = _style(
-        stroke=0.8, stroke_color=mix(water, ink, 0.52),
-        fill=mix(water, ink, 0.24), opacity=0.6,
+        stroke=0.7, stroke_color=mix(water, ink, 0.55),
+        fill=mix(water, ink, 0.3), fill_alpha=28, opacity=0.75,
     )
     # An ocean scalar -- sea surface temperature today, whatever ERDDAP is
     # pointed at next. Warm reads as the palette's land and cool as its water,
@@ -203,8 +223,14 @@ def style_profile(palette: Palette) -> StyleProfile:
     # chart is one competing claim too many. The weight varies per feature —
     # `stroke_scale` on each run — so this is the middle of the range rather
     # than the whole of it.
+    # A streamline is the one line on the sheet whose width means something, so
+    # this is the *base* a per-run `stroke_scale` multiplies — 0.45 to 2.2 of it,
+    # thin where the water is slack and heavy where it runs. Both applications
+    # scale by that identical range, so the 1.1 this file used to carry was not a
+    # second way of describing the same intent; it simply drew every streamline
+    # around 47% heavier than the app the feature was written in.
     styles["current_streamlines"] = _style(
-        stroke=1.1, stroke_color=mix(water, ink, 0.62), opacity=0.85, cap="round"
+        stroke=0.75, stroke_color=mix(water, ink, 0.7), opacity=0.85, cap="round"
     )
     styles["buildings"] = _style(
         stroke=0.35, stroke_color=mix(land, ink, 0.4), fill=land, opacity=0.95
