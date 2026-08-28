@@ -39,11 +39,22 @@ jobs:
           python-version: ${{ matrix.python-version }}
           cache: pip
 
+      # Two things this suite needs from the OS rather than from pip.
+      #
       # Tkinter is imported at module scope in the UI package, so it has to be
       # present even though no test here opens a window. It ships with Python on
-      # macOS and Windows and is a separate OS package on Debian.
-      - name: Tkinter
-        run: sudo apt-get update && sudo apt-get install -y python3-tk
+      # macOS and Windows and is a separate package on Debian.
+      #
+      # skia-python links libEGL and libGL, and a bare headless runner has
+      # neither: importing it fails with `libEGL.so.1: cannot open shared object
+      # file`, which surfaces as a GIBS provider error three retries later
+      # rather than as anything about graphics drivers. Nothing here opens a
+      # window or a GL context — the renderer draws to a surface in memory — but
+      # the library still has to load.
+      - name: System libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3-tk libegl1 libgl1
 
       - name: Dependencies
         run: |
