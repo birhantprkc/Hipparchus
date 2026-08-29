@@ -181,11 +181,28 @@ class SavedPlacesTests(MenuBarTestCase):
         self.assertNotIn(menubar.PLACES_LABEL, self.labels(menubar.submenu(bar, "Map")))
 
     def test_every_saved_place_is_listed(self) -> None:
+        """The featured run inline, then one entry per remaining group.
+
+        Against `places.groups()` rather than a number, because a count was what
+        this asserted before and a count is what went stale: it compared with
+        `len(PLACES)`, which stopped being the answer the moment 0.8.0 put
+        Regions and Countries below the featured run as cascades. Twenty-one
+        featured places and two cascades is twenty-three, and nothing said so
+        until somebody opened the menu.
+
+        Comparing the labels rather than their number also catches a menu that
+        reorders or drops one. It cannot catch `places.groups()` itself being
+        wrong -- that is `test_places` s job, and asserting it here would only
+        be this file agreeing with a module it already reads.
+        """
         from hipparchus.application import places
 
         bar = menubar.build(self.root, self.actions, on_place=lambda name: self.calls.append(name))
         labels = self.labels(menubar.places_menu(bar))
-        self.assertEqual(len(labels), len(places.PLACES))
+        groups = places.groups()
+        expected = [place.name for place in groups[0].places]
+        expected += [group.name for group in groups[1:]]
+        self.assertEqual(labels, expected)
 
     def test_the_first_nine_carry_a_number_key(self) -> None:
         bar = menubar.build(self.root, self.actions, on_place=lambda name: self.calls.append(name))
