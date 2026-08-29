@@ -497,10 +497,22 @@ class ToolbarOwesTests(SharesTheWindow):
         """One StringVar, read by both -- not two captions kept in step by hand."""
         self.assertEqual(self.window._area_readout.cget("textvariable"), str(self.window._minimap_caption))
 
-    def test_the_export_control_offers_all_three_formats(self) -> None:
+    def test_the_export_control_offers_every_format(self) -> None:
+        """Named for what it checks rather than for a number.
+
+        It used to say `all_three_formats` and assert three, and GeoJSON export
+        shipped without either being revisited -- so the toolbar offered four
+        and the only thing that disagreed was a test nothing runs.
+
+        The literal list stays literal on purpose. This is the one place that
+        pins the order a person reads down the Export button, and deriving it
+        from the toolbar would make it agree with whatever the toolbar does.
+        Adding a format is meant to fail here: that is the reminder to decide
+        where in the list it belongs.
+        """
         menu = self.root.nametowidget(self.window._export_menu_button.cget("menu"))
         labels = [menu.entrycget(index, "label") for index in range(menu.index("end") + 1)]
-        self.assertEqual(labels, ["SVG…", "PDF…", "PNG…"])
+        self.assertEqual(labels, ["SVG…", "PDF…", "PNG…", "GeoJSON…"])
 
     def test_every_export_menu_item_reaches_a_real_export(self) -> None:
         """A cancelled save sheet writes nothing, so this is safe to actually
