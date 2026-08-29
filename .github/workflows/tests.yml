@@ -76,8 +76,14 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -e ".[dev]"
 
+      # `.`, not `src tests scripts`, which is what this said and what left two
+      # tracked files outside every automated check: the root `hipparchus/`
+      # compatibility package that makes `python -m hipparchus` work from a
+      # checkout. `scripts/release_preflight.sh` has always linted `.`, so the
+      # gate and the runner were answering two different questions about the
+      # same repository -- and the runner's was the one people read.
       - name: Lint
-        run: python -m ruff check src tests scripts
+        run: python -m ruff check .
 
       - name: Run tests
         run: python -m pytest
